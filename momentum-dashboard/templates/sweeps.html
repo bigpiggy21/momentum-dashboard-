@@ -1601,16 +1601,24 @@ function renderChart(ticker, chartData, containerId){
   });
 
   // --- Clusterbomb-only markers ---
-  // Build a date->candle lookup. For hourly data, multiple candles share a day —
-  // we keep the last one (for positioning). For weekly data, we also build a
-  // week-level lookup so a CB on any day of the week finds the weekly candle.
-  var candleLookup = {};
-  var weekLookup = {};   // weekStartDate -> candle (for weekly timeframes)
+  // Build candle lookups. For daily/weekly, key by date string.
+  // For hourly, also build a timestamp-keyed lookup so we can match CBs
+  // to the correct intraday candle (not just the last candle of the day).
+  var isIntraday = (currentTimeframe === '1h' || currentTimeframe === '4h');
+  var candleLookup = {};     // dateString -> candle (daily: exact match, hourly: last candle of day)
+  var candleByTs = {};       // unixTimestamp -> candle (hourly only, for exact matching)
+  var candlesByDate = {};    // dateString -> [candle, candle, ...] (hourly only, all candles for that day)
+  var weekLookup = {};       // weekStartDate -> candle (for weekly timeframes)
   chartData.candles.forEach(function(c){
     var key = typeof c.time === 'number'
       ? new Date(c.time * 1000).toISOString().slice(0,10)
       : c.time;
     candleLookup[key] = c;
+    if(isIntraday && typeof c.time === 'number'){
+      candleByTs[c.time] = c;
+      if(!candlesByDate[key]) candlesByDate[key] = [];
+      candlesByDate[key].push(c);
+    }
   });
   // For weekly candles: map each day of each week to its weekly candle
   if(currentTimeframe === '1W'){
@@ -1638,18 +1646,28 @@ function renderChart(ticker, chartData, containerId){
     + (chartData.clusterbombs ? chartData.clusterbombs.length : 0) + ' CBs from API, '
     + Object.keys(cbDates).length + ' unique CB dates');
 
-  // Aggregate sweeps by date for VWAP price positioning
+  // Aggregate sweeps by date for VWAP price positioning + weighted avg time (for intraday)
   var sweepByDate = {};
   if(chartData.sweeps){
     chartData.sweeps.forEach(function(s){
       var d = s.date;
-      if(!sweepByDate[d]) sweepByDate[d] = {avgPrice:0, totalSize:0};
+      if(!sweepByDate[d]) sweepByDate[d] = {avgPrice:0, totalSize:0, avgTimeSec:0, totalNotional:0};
       sweepByDate[d].avgPrice += s.price * s.size;
       sweepByDate[d].totalSize += s.size;
+      // Weighted average time: convert HH:MM:SS to seconds, weight by notional
+      if(isIntraday && s.time){
+        var tp = s.time.split(':');
+        var secOfDay = (+tp[0])*3600 + (+tp[1]||0)*60 + (+tp[2]||0);
+        sweepByDate[d].avgTimeSec += secOfDay * (s.notional || 0);
+        sweepByDate[d].totalNotional += (s.notional || 0);
+      }
     });
     Object.keys(sweepByDate).forEach(function(d){
       var info = sweepByDate[d];
       info.vwap = info.totalSize > 0 ? info.avgPrice / info.totalSize : 0;
+      if(isIntraday && info.totalNotional > 0){
+        info.vwapTimeSec = info.avgTimeSec / info.totalNotional;  // avg second-of-day
+      }
     });
   }
 
@@ -1740,6 +1758,25 @@ function renderChart(ticker, chartData, containerId){
     var cb = cbDates[d];
     var candle = candleLookup[d] || weekLookup[d];
     var sweepInfo = sweepByDate[d];
+
+    // For intraday charts, find the correct hourly candle using VWAP-weighted time
+    if(isIntraday && sweepInfo && sweepInfo.vwapTimeSec && candlesByDate[d]){
+      var dayCandles = candlesByDate[d];
+      // Find the candle whose hour window contains the weighted avg sweep time
+      var bestCandle = null;
+      var bestDist = Infinity;
+      for(var ci = 0; ci < dayCandles.length; ci++){
+        var cTime = dayCandles[ci].time;
+        var cDate = new Date(cTime * 1000);
+        var cSec = cDate.getUTCHours() * 3600 + cDate.getUTCMinutes() * 60;
+        var dist = Math.abs(cSec - sweepInfo.vwapTimeSec);
+        if(dist < bestDist){
+          bestDist = dist;
+          bestCandle = dayCandles[ci];
+        }
+      }
+      if(bestCandle) candle = bestCandle;
+    }
 
     // Skip if no candle found at all (can't position marker)
     if(!candle && !sweepInfo) return;
