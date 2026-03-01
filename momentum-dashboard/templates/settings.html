@@ -56,6 +56,31 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 .backfill-btn:disabled{opacity:0.4;cursor:default;}
 .backfill-status{font-size:11px;color:#555;}
 
+/* Live Price Feed section */
+.live-price-section{margin-bottom:20px;padding:16px;background:#0e0e16;border:1px solid #1e1e2e;border-radius:8px;}
+.live-price-header{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.live-price-header h3{font-size:13px;color:#ccc;margin:0;display:flex;align-items:center;gap:6px;}
+.live-price-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+.live-price-dot.off{background:#555;}
+.live-price-dot.connecting{background:#f59e0b;animation:lpPulse 1.2s infinite;}
+.live-price-dot.connected{background:#22c55e;}
+.live-price-dot.error{background:#ef4444;}
+@keyframes lpPulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+.live-price-status-text{font-size:11px;color:#666;margin-left:auto;}
+.live-price-toggle{padding:4px 14px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid #334155;background:#1e293b;color:#aaa;}
+.live-price-toggle:hover{background:#334155;color:#fff;}
+.live-price-toggle.active{background:#22c55e;color:#000;border-color:#22c55e;}
+.live-price-toggle.active:hover{background:#16a34a;}
+.live-price-stats{display:flex;gap:16px;font-size:11px;color:#666;margin-bottom:10px;}
+.live-price-stats .val{color:#ccc;font-weight:600;}
+.live-price-settings{border-top:1px solid #1a1a24;padding-top:10px;margin-top:10px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
+.live-price-settings label{font-size:11px;color:#666;display:flex;align-items:center;gap:4px;}
+.live-price-settings input[type="number"]{width:44px;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;}
+.live-price-settings input[type="checkbox"]{accent-color:#f59e0b;}
+.live-price-save{padding:4px 14px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid #334155;background:#1e293b;color:#aaa;margin-left:auto;}
+.live-price-save:hover{background:#334155;color:#fff;}
+.live-price-save-status{font-size:10px;color:#555;}
+
 /* Architecture details */
 .arch-details{margin-top:24px;border-top:1px solid #2a2a3a;padding-top:16px;}
 .arch-details summary{cursor:pointer;color:#666;font-size:12px;font-weight:600;}
@@ -103,6 +128,28 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
          onkeydown="if(event.key==='Enter')triggerTickerBackfill()">
   <button class="backfill-btn" id="backfillBtn" onclick="triggerTickerBackfill()">Backfill</button>
   <span class="backfill-status" id="backfillStatus"></span>
+</div>
+
+<!-- Live Price Feed -->
+<div class="live-price-section" id="livePriceSection">
+  <div class="live-price-header">
+    <h3><span class="live-price-dot off" id="livePriceDot"></span> Live Price Feed</h3>
+    <span class="live-price-status-text" id="livePriceStatusText">Disconnected</span>
+    <button class="live-price-toggle" id="livePriceToggle" onclick="toggleLivePriceFeed()">Start</button>
+  </div>
+  <div class="live-price-stats" id="livePriceStats" style="display:none;">
+    <span>Msgs/s: <span class="val" id="lpMsgRate">0</span></span>
+    <span>Tickers: <span class="val" id="lpTickers">0</span></span>
+    <span>Total msgs: <span class="val" id="lpMsgTotal">0</span></span>
+    <span>Last flush: <span class="val" id="lpLastFlush">--</span></span>
+  </div>
+  <div class="live-price-settings">
+    <label><input type="checkbox" id="lpAutoStart"> Auto-start on server launch</label>
+    <label>Flush interval: <input type="number" id="lpFlushInterval" min="1" max="60" value="5"> min</label>
+    <label><input type="checkbox" id="lpFlushOnClose" checked> Flush on market close</label>
+    <button class="live-price-save" onclick="saveLivePriceConfig()">Save</button>
+    <span class="live-price-save-status" id="lpSaveStatus"></span>
+  </div>
 </div>
 
 <!-- Watchlist Schedule Table -->
@@ -412,6 +459,131 @@ fetch('/api/scheduler/ticker-backfill-status').then(function(r){return r.json();
     pollTickerBackfill();
   }
 });
+
+// ---------- Live Price Feed ----------
+var _lpPollTimer=null;
+var _lpRunning=false;
+
+function toggleLivePriceFeed(){
+  var btn=document.getElementById('livePriceToggle');
+  if(_lpRunning){
+    btn.disabled=true;
+    fetch('/api/scheduler/live-price/stop',{method:'POST'}).then(function(r){return r.json();}).then(function(){
+      btn.disabled=false;
+      pollLivePriceStatus();
+    }).catch(function(){btn.disabled=false;});
+  }else{
+    btn.disabled=true;
+    fetch('/api/scheduler/live-price/start',{method:'POST'}).then(function(r){return r.json();}).then(function(){
+      btn.disabled=false;
+      pollLivePriceStatus();
+      startLivePricePoll();
+    }).catch(function(){btn.disabled=false;});
+  }
+}
+
+function pollLivePriceStatus(){
+  fetch('/api/scheduler/live-price/status').then(function(r){return r.json();}).then(function(s){
+    updateLivePriceUI(s);
+  }).catch(function(){});
+}
+
+function updateLivePriceUI(s){
+  var dot=document.getElementById('livePriceDot');
+  var txt=document.getElementById('livePriceStatusText');
+  var btn=document.getElementById('livePriceToggle');
+  var stats=document.getElementById('livePriceStats');
+
+  _lpRunning=!!s.running;
+
+  // Dot color
+  dot.className='live-price-dot';
+  if(s.connected){
+    dot.classList.add('connected');
+    txt.textContent='Connected (15-min delayed)';
+    txt.style.color='#22c55e';
+  }else if(s.running&&!s.connected){
+    dot.classList.add('connecting');
+    txt.textContent=s.error?('Error: '+s.error.substring(0,40)):'Connecting...';
+    txt.style.color='#f59e0b';
+  }else{
+    dot.classList.add('off');
+    txt.textContent=s.error?('Error: '+s.error.substring(0,40)):'Disconnected';
+    txt.style.color='#666';
+  }
+
+  // Button
+  if(s.running){
+    btn.textContent='Stop';
+    btn.classList.add('active');
+  }else{
+    btn.textContent='Start';
+    btn.classList.remove('active');
+  }
+
+  // Stats
+  if(s.running||s.messages_received>0){
+    stats.style.display='flex';
+    document.getElementById('lpMsgRate').textContent=s.messages_per_sec||'0';
+    document.getElementById('lpTickers').textContent=(s.tickers_active||0).toLocaleString();
+    document.getElementById('lpMsgTotal').textContent=(s.messages_received||0).toLocaleString();
+    if(s.last_flush_at){
+      try{
+        var d=new Date(s.last_flush_at);
+        var diff=Math.round((Date.now()-d.getTime())/1000);
+        document.getElementById('lpLastFlush').textContent=diff<60?diff+'s ago':Math.round(diff/60)+'m ago';
+      }catch(e){document.getElementById('lpLastFlush').textContent='--';}
+    }else{
+      document.getElementById('lpLastFlush').textContent='--';
+    }
+  }else{
+    stats.style.display='none';
+  }
+
+  // Keep polling if running
+  if(s.running&&!_lpPollTimer){
+    startLivePricePoll();
+  }else if(!s.running&&_lpPollTimer){
+    stopLivePricePoll();
+  }
+}
+
+function startLivePricePoll(){
+  stopLivePricePoll();
+  _lpPollTimer=setInterval(pollLivePriceStatus,5000);
+}
+function stopLivePricePoll(){
+  if(_lpPollTimer){clearInterval(_lpPollTimer);_lpPollTimer=null;}
+}
+
+function loadLivePriceConfig(){
+  fetch('/api/scheduler/live-price/config').then(function(r){return r.json();}).then(function(cfg){
+    document.getElementById('lpAutoStart').checked=!!cfg.auto_start;
+    document.getElementById('lpFlushInterval').value=cfg.flush_interval_minutes||5;
+    document.getElementById('lpFlushOnClose').checked=cfg.flush_on_close!==false;
+  }).catch(function(){});
+}
+
+function saveLivePriceConfig(){
+  var cfg={
+    enabled:true,
+    auto_start:document.getElementById('lpAutoStart').checked,
+    ws_url:'wss://delayed.polygon.io/stocks',
+    flush_interval_minutes:parseInt(document.getElementById('lpFlushInterval').value)||5,
+    flush_on_close:document.getElementById('lpFlushOnClose').checked
+  };
+  fetch('/api/scheduler/live-price/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)
+  }).then(function(r){return r.json();}).then(function(r){
+    var st=document.getElementById('lpSaveStatus');
+    st.textContent=r.ok?'Saved!':'Error';
+    st.style.color=r.ok?'#22c55e':'#ef4444';
+    setTimeout(function(){st.textContent='';},3000);
+  });
+}
+
+// Init: check live price status + load config on page load
+pollLivePriceStatus();
+loadLivePriceConfig();
 
 // Load scheduler UI on page load
 refreshSchedulerUI();

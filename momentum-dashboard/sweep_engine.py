@@ -2144,11 +2144,91 @@ def get_sweep_chart_data(ticker, date_from=None, date_to=None, timeframe="1D",
 _TF_SUFFIX = {"1h": "hour", "4h": "hour", "1D": "day", "1W": "week"}
 
 
+def _merge_live_bars_into_df(df, ticker, timeframe, suffix):
+    """Merge live price bars from the running LivePriceDaemon into a DataFrame.
+
+    Appends today's in-memory bars (hourly/daily) from the live WebSocket feed
+    so charts display fresh intraday data without waiting for the next CSV flush.
+    Returns the modified DataFrame (or original if no live data available).
+    """
+    try:
+        from app import _live_price_daemon
+        if not _live_price_daemon:
+            return df
+        status = _live_price_daemon.get_status()
+        if not status.get("connected"):
+            return df
+    except (ImportError, AttributeError):
+        return df
+
+    live = _live_price_daemon.get_latest_bars(ticker)
+    if not live:
+        return df
+
+    trade_date = live.get("trade_date")
+    if not trade_date:
+        return df
+
+    today_start = pd.Timestamp(trade_date)
+    today_end = today_start + pd.Timedelta(days=1)
+
+    if timeframe in ("1h", "4h"):
+        # Merge hourly bars (completed hours + current partial hour)
+        hourly_bars = live.get("hourly", [])
+        current_hour = live.get("current_hour")
+        all_bars = list(hourly_bars)
+        if current_hour:
+            all_bars.append(current_hour)
+        if not all_bars:
+            return df
+
+        live_rows = []
+        for b in all_bars:
+            live_rows.append({
+                "timestamp": pd.Timestamp.utcfromtimestamp(b["t"]),
+                "open": b["o"], "high": b["h"], "low": b["l"],
+                "close": b["c"], "volume": b["v"],
+            })
+        live_df = pd.DataFrame(live_rows)
+
+        # Remove any existing rows for today from CSV data
+        if not df.empty:
+            df = df[(df["timestamp"] < today_start) | (df["timestamp"] >= today_end)]
+
+        df = pd.concat([df, live_df], ignore_index=True)
+        df = df.sort_values("timestamp").reset_index(drop=True)
+
+    elif timeframe == "1D":
+        # Merge today's running daily bar
+        daily = live.get("daily")
+        if not daily:
+            return df
+
+        live_row = pd.DataFrame([{
+            "timestamp": pd.Timestamp(trade_date),
+            "open": daily["o"], "high": daily["h"], "low": daily["l"],
+            "close": daily["c"], "volume": daily["v"],
+        }])
+
+        # Remove today's row from CSV data if present
+        if not df.empty:
+            df = df[df["timestamp"] < today_start]
+
+        df = pd.concat([df, live_row], ignore_index=True)
+        df = df.sort_values("timestamp").reset_index(drop=True)
+
+    # 1W: skip — weekly bar only makes sense after full week
+    return df
+
+
 def _load_price_candles(ticker, date_from=None, date_to=None, timeframe="1D"):
     """Load OHLC candles from the cache CSV for chart rendering.
 
     Supported timeframes: '1h', '4h', '1D', '1W'.
     For '4h' we load hourly bars and resample to 4-hour.
+
+    If the LivePriceDaemon is running, today's bars are merged from
+    in-memory live data for real-time freshness.
     """
     safe = ticker.replace("/", "_").replace(":", "_")
     suffix = _TF_SUFFIX.get(timeframe, "day")
@@ -2162,6 +2242,10 @@ def _load_price_candles(ticker, date_from=None, date_to=None, timeframe="1D"):
     try:
         df = pd.read_csv(path, parse_dates=["timestamp"])
         df = df.sort_values("timestamp").reset_index(drop=True)
+
+        # Merge live bars from WebSocket daemon (if running)
+        df = _merge_live_bars_into_df(df, ticker, timeframe, suffix)
+
         if date_from:
             df = df[df["timestamp"] >= pd.Timestamp(date_from)]
         if date_to:

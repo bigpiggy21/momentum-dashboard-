@@ -59,6 +59,10 @@ _ticker_backfill_lock = threading.Lock()
 _live_daemon = None
 _live_daemon_lock = threading.Lock()
 
+# Live price daemon instance (created on first start)
+_live_price_daemon = None
+_live_price_daemon_lock = threading.Lock()
+
 # Server-side tracker response cache (60s TTL)
 _tracker_cache = {}       # {cache_key: {"data": response_dict, "ts": float}}
 _TRACKER_CACHE_TTL = 60   # seconds
@@ -422,6 +426,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_scheduler_status()
         elif path == "/api/scheduler/ticker-backfill-status":
             self.serve_ticker_backfill_status()
+        elif path == "/api/scheduler/live-price/status":
+            self.serve_live_price_status()
+        elif path == "/api/scheduler/live-price/config":
+            self.serve_live_price_get_config()
         # ── TradingView UDF Datafeed Endpoints ──────────────────────
         elif path == "/api/tv/config":
             self.serve_tv_config()
@@ -492,6 +500,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_live_sweep_stop()
         elif path == "/api/sweeps/live/config":
             self.serve_live_sweep_save_config()
+        elif path == "/api/scheduler/live-price/start":
+            self.serve_live_price_start()
+        elif path == "/api/scheduler/live-price/stop":
+            self.serve_live_price_stop()
+        elif path == "/api/scheduler/live-price/config":
+            self.serve_live_price_save_config()
         else:
             self.send_response(404)
             self.end_headers()
@@ -2695,6 +2709,69 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_json({"ok": False, "error": str(e)})
 
+    # ------------------------------------------------------------------
+    # Live Price Feed endpoints
+    # ------------------------------------------------------------------
+
+    def serve_live_price_status(self):
+        """GET /api/scheduler/live-price/status — return live price daemon status."""
+        global _live_price_daemon
+        if _live_price_daemon:
+            self.send_json(_live_price_daemon.get_status())
+        else:
+            self.send_json({"running": False, "connected": False, "error": None})
+
+    def serve_live_price_start(self):
+        """POST /api/scheduler/live-price/start — start the live price daemon."""
+        global _live_price_daemon
+        try:
+            from live_price_daemon import LivePriceDaemon, load_live_price_config
+
+            with _live_price_daemon_lock:
+                if _live_price_daemon and _live_price_daemon.get_status().get("running"):
+                    self.send_json(_live_price_daemon.get_status())
+                    return
+
+                cfg = load_live_price_config()
+                _live_price_daemon = LivePriceDaemon(config=cfg)
+                _live_price_daemon.start()
+
+            # Brief wait for connection
+            time.sleep(0.5)
+            self.send_json(_live_price_daemon.get_status())
+        except Exception as e:
+            self.send_json({"ok": False, "error": str(e)})
+
+    def serve_live_price_stop(self):
+        """POST /api/scheduler/live-price/stop — stop the live price daemon."""
+        global _live_price_daemon
+        try:
+            with _live_price_daemon_lock:
+                if _live_price_daemon:
+                    _live_price_daemon.stop()
+            self.send_json({"ok": True, "running": False})
+        except Exception as e:
+            self.send_json({"ok": False, "error": str(e)})
+
+    def serve_live_price_get_config(self):
+        """GET /api/scheduler/live-price/config — return current live price feed config."""
+        from live_price_daemon import load_live_price_config
+        try:
+            self.send_json(load_live_price_config())
+        except Exception as e:
+            self.send_json({"error": str(e)})
+
+    def serve_live_price_save_config(self):
+        """POST /api/scheduler/live-price/config — save live price feed config."""
+        from live_price_daemon import save_live_price_config
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            save_live_price_config(body)
+            self.send_json({"ok": True})
+        except Exception as e:
+            self.send_json({"ok": False, "error": str(e)})
+
     def serve_sweep_detection_config(self):
         """GET /api/sweeps/detection-config — return current detection parameters."""
         from sweep_engine import get_detection_config
@@ -3316,6 +3393,18 @@ def main():
                 print("⚡ Live sweep scanner auto-started")
         except Exception as _e:
             print(f"⚠️  Live scanner auto-start skipped: {_e}")
+
+        # Auto-start live price daemon if configured
+        try:
+            from live_price_daemon import LivePriceDaemon, load_live_price_config
+            _price_cfg = load_live_price_config()
+            if _price_cfg.get("auto_start", False):
+                global _live_price_daemon
+                _live_price_daemon = LivePriceDaemon(config=_price_cfg)
+                _live_price_daemon.start()
+                print("📡 Live price feed auto-started")
+        except Exception as _e:
+            print(f"⚠️  Live price feed auto-start skipped: {_e}")
 
         start_server(args.port)
         return
