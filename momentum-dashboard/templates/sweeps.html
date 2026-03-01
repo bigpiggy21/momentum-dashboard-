@@ -1,0 +1,2840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TBD Technologies — Dark Pool Sweeps</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+<link rel="stylesheet" href="/static/header.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-serif;font-size:13px;color-scheme:dark;}
+/* Force all native form controls into dark mode */
+input,select,textarea,button{color-scheme:dark;}
+
+
+/* Row 2: Page Controls */
+.header-row2{background:#0c0c14;padding:8px 20px;border-bottom:1px solid #1e1e2e;display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;top:var(--row1-h,56px);z-index:101;}
+.header-row2 label{font-size:11px;color:#555;font-weight:500;}
+.header-row2 select,.header-row2 input[type="text"],.header-row2 input[type="date"],.header-row2 input[type="number"]{
+  background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:4px 8px;border-radius:4px;font-size:11px;height:26px;font-family:inherit;}
+.header-row2 input[type="text"]{width:100px;}
+.header-row2 input[type="number"]{width:80px;}
+.header-row2 input[type="date"]{width:130px;}
+.filter-divider{width:1px;height:20px;background:#2a2a3a;margin:0 6px;}
+.filter-toggle{font-size:10px;padding:3px 10px;border-radius:3px;cursor:pointer;font-weight:600;background:#1e293b;color:#aaa;border:1px solid #334155;height:24px;display:inline-flex;align-items:center;justify-content:center;}
+.filter-toggle:hover{background:#334155;color:#fff;}
+.filter-toggle.active{background:#334155;color:#f59e0b;border-color:#f59e0b;}
+
+/* Action buttons */
+.btn-action{background:#1e293b;color:#f59e0b;border:1px solid #f59e0b;padding:5px 14px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;height:28px;display:inline-flex;align-items:center;gap:4px;}
+.btn-action:hover{background:#334155;color:#fbbf24;}
+.btn-action:disabled{opacity:0.4;cursor:not-allowed;}
+.btn-secondary{background:#1e293b;color:#94a3b8;border:1px solid #334155;padding:5px 14px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;height:28px;display:inline-flex;align-items:center;gap:4px;}
+.btn-secondary:hover{background:#334155;color:#cbd5e1;border-color:#475569;}
+.btn-pine{background:#131620;color:#94a3b8;border:1px solid #334155;padding:5px 14px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600;letter-spacing:0.3px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;height:28px;}
+.btn-pine:hover{background:#1e293b;color:#cbd5e1;border-color:#475569;}
+
+/* Stats bar — compact inline inside left panel header */
+.stats-bar{background:transparent;padding:2px 0;display:grid;grid-template-columns:auto auto auto;gap:2px 16px;margin-left:auto;margin-right:4px;}
+.stat-item{display:flex;align-items:center;gap:4px;white-space:nowrap;justify-content:flex-end;}
+.stat-value{font-size:11px;font-weight:700;color:#fff;font-family:'Consolas',monospace;min-width:42px;text-align:right;}
+.stat-label{font-size:9px;color:#555;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;}
+.stat-value.accent{color:#f59e0b;}
+.stat-value.green{color:#22c55e;}
+.stat-value.red{color:#ef4444;}
+.stat-value.purple{color:#a78bfa;}
+
+/* ====================================================================
+   TWO-PANEL LAYOUT
+   ==================================================================== */
+.page-layout{display:flex;height:calc(100vh - var(--layout-top, 140px));}
+
+/* LEFT PANEL — Watchlist Tracker */
+.left-panel{
+  width:620px;flex-shrink:0;
+  border-right:1px solid #1e1e2e;
+  background:#0a0a10;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.left-panel-header{
+  padding:10px 14px 8px;
+  border-bottom:1px solid #1e1e2e;
+  display:flex;align-items:center;gap:12px;
+  flex-shrink:0;
+}
+.tracker-title{font-size:19px;font-weight:700;color:#fff;display:flex;align-items:center;gap:8px;white-space:nowrap;}
+.tracker-title .cb-icon{color:#f59e0b;font-size:22px;}
+.tracker-filter{display:flex;align-items:center;gap:4px;}
+.tracker-filter label{font-size:9px;color:#555;font-weight:600;}
+.tracker-filter input{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:2px 6px;border-radius:3px;font-size:10px;width:70px;height:22px;font-family:'Consolas',monospace;}
+
+/* Left panel tabs */
+.tracker-tab-bar{display:flex;border-bottom:1px solid #1e1e2e;flex-shrink:0;}
+.tracker-tab{flex:1;padding:8px 0;text-align:center;background:transparent;border:none;color:#666;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;}
+.tracker-tab:hover{color:#aaa;background:#0e0e16;}
+.tracker-tab.active{color:#f59e0b;border-bottom-color:#f59e0b;}
+.tracker-tab .tab-count{font-size:10px;background:#1e293b;color:#888;padding:1px 6px;border-radius:8px;margin-left:4px;font-weight:700;}
+.tracker-tab.active .tab-count{background:#f59e0b22;color:#f59e0b;}
+
+/* Tracker body (scrollable cards) */
+.tracker-body{flex:1;overflow-y:auto;padding:2px 0;}
+.tracker-card{padding:12px 16px;border-bottom:1px solid #111118;cursor:pointer;transition:background 0.15s;}
+.tracker-card:hover{background:#14141e;}
+.tracker-card.selected{background:#14141e;box-shadow:inset 3px 0 0 #f59e0b;}
+.tracker-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+.tracker-ticker{font-size:18px;font-weight:700;color:#fff;font-family:'Consolas',monospace;display:inline-flex;align-items:center;flex-wrap:wrap;gap:0;}
+.tracker-date{font-size:13px;color:#777;font-family:'Consolas',monospace;}
+.tracker-card-body{display:grid;grid-template-columns:0.7fr 1fr;gap:0;margin-top:6px;}
+.tracker-col-left{display:flex;flex-direction:column;gap:5px;padding-right:18px;border-right:1px solid #1a1a24;}
+.tracker-col-right{padding-left:18px;display:flex;flex-direction:column;justify-content:center;}
+.tracker-returns-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px 10px;}
+.tracker-price-row{grid-column:1/-1;display:flex;align-items:center;gap:6px;margin-top:8px;padding-top:0;font-size:12px;font-family:'Consolas',monospace;color:#888;}
+.tracker-price-row .price-val{color:#ccc;font-weight:600;}
+.tracker-price-row .price-arrow{color:#555;font-size:10px;}
+.tracker-stat-row{display:flex;align-items:baseline;gap:8px;}.tracker-stat-row .tracker-label{min-width:62px;flex-shrink:0;}
+.tracker-label{font-size:9px;color:#555;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}
+.tracker-value{font-size:13px;font-family:'Consolas',monospace;color:#ccc;}
+.tracker-value.up{color:#1a9a6c;}
+.tracker-value.down{color:#d63c44;}
+.tracker-value.amber{color:#f59e0b;}
+.tracker-bias{display:inline-flex;align-items:center;font-size:12px;font-weight:700;font-family:'Consolas',monospace;padding:1px 6px;border-radius:3px;margin-left:8px;line-height:1;}
+.tracker-bias.bullish{background:#064e3b;color:#34d399;}
+.tracker-bias.bearish{background:#450a0a;color:#f87171;}
+.tracker-pct{display:inline-flex;align-items:center;font-size:12px;font-weight:700;font-family:'Consolas',monospace;padding:1px 6px;border-radius:3px;margin-left:6px;line-height:1;}
+.tracker-pct.up{color:#34d399;background:#064e3b;}
+.tracker-pct.down{color:#f87171;background:#450a0a;}
+.tracker-price-inline{display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:11px;font-family:'Consolas',monospace;color:#888;line-height:1;}
+.tracker-price-inline .price-val{color:#ccc;font-weight:600;}
+.tracker-price-inline .price-arrow{color:#555;font-size:9px;}
+.tracker-days{font-size:11px;color:#777;margin-right:4px;font-family:'Consolas',monospace;line-height:1;}
+.tracker-empty{padding:24px;text-align:center;color:#555;font-size:14px;}
+.tracker-load-more{padding:12px;text-align:center;color:#888;font-size:12px;cursor:pointer;border:1px dashed #2a2a3a;border-radius:6px;margin:8px 4px;transition:all 0.2s;}
+.tracker-load-more:hover{color:#f59e0b;border-color:#f59e0b66;background:#14141e;}
+/* Star/favourite button on tracker cards */
+.tracker-star{background:none;border:none;cursor:pointer;font-size:18px;color:#555;padding:0 2px;transition:color 0.15s;line-height:1;}
+.tracker-star:hover{color:#f59e0b;}
+.tracker-star.starred{color:#f59e0b;}
+/* Remove from favourites button */
+.tracker-remove{background:none;border:none;cursor:pointer;font-size:14px;color:#555;padding:0 2px;transition:color 0.15s;}
+.tracker-remove:hover{color:#ef4444;}
+
+/* RIGHT PANEL — Ticker Research */
+.right-panel{
+  flex:1;min-width:0;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+
+/* Chart section */
+.chart-section{padding:8px 16px 0;flex-shrink:0;}
+.chart-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.chart-title{font-size:20px;font-weight:700;color:#fff;display:flex;align-items:center;gap:8px;flex:1;}
+.chart-controls{display:flex;gap:4px;align-items:center;}
+.chart-toolbar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;padding:4px 0;border-bottom:1px solid #1a1a24;}
+.chart-toolbar-left{display:flex;gap:3px;align-items:center;flex-wrap:wrap;}
+.chart-toolbar-right{display:flex;gap:3px;align-items:center;flex-shrink:0;}
+.chart-container{width:100%;height:480px;border:1px solid #1e1e2e;border-radius:6px;overflow:hidden;background:#0c0c14;position:relative;}
+.chart-empty{display:flex;align-items:center;justify-content:center;height:100%;color:#555;font-size:13px;text-align:center;}
+.cum-legend{position:absolute;top:8px;left:8px;z-index:10;font-size:12px;font-weight:600;color:#22c55e;pointer-events:none;display:none;font-family:'JetBrains Mono',monospace;text-shadow:0 0 4px rgba(0,0,0,0.8);}
+
+/* Maximize button */
+.chart-max-btn{background:#1e293b;color:#888;border:1px solid #334155;width:26px;height:26px;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;margin-left:6px;}
+.chart-max-btn:hover{background:#334155;color:#fff;}
+
+/* Chart settings row (legacy — now uses .chart-toolbar) */
+.chart-setting-btn{background:#14141e;color:#777;border:1px solid #1e1e2e;padding:3px 8px;border-radius:3px;font-size:10px;font-weight:600;cursor:pointer;height:24px;display:inline-flex;align-items:center;gap:3px;text-transform:uppercase;letter-spacing:0.3px;}
+.chart-setting-btn:hover{color:#ccc;background:#1a1a26;border-color:#2a2a3a;}
+.chart-setting-btn.active{color:#f59e0b;background:#1a1a26;border-color:#f59e0b44;}
+.tracker-type-filter{padding:6px 14px 8px;border-bottom:1px solid #1e1e2e;flex-shrink:0;display:flex;align-items:stretch;gap:6px;}
+.filter-col{display:flex;flex-direction:column;align-items:stretch;gap:4px;background:#0d0d14;border:1px solid #1a1a28;border-radius:5px;padding:4px 6px;}
+.filter-col .tracker-filter-btn{width:100%;justify-content:center;}
+.filter-col .filter-group{display:inline-flex;align-items:center;justify-content:center;gap:3px;white-space:nowrap;height:22px;}
+.filter-col-all .tracker-filter-btn{flex:1;}
+.filter-group-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;}
+.filter-input{width:56px;font-size:11px;font-weight:700;font-family:'Consolas',monospace;text-align:center;background:#14141e;padding:2px 6px;border-radius:4px;height:22px;border-width:1px;border-style:solid;-moz-appearance:textfield;}
+.filter-input::-webkit-outer-spin-button,.filter-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.filter-input:focus{outline:none;}
+.profile-select{background:#14141e;color:#888;border:1px solid #1e1e2e;font-size:10px;padding:2px 6px;border-radius:4px;height:24px;cursor:pointer;font-weight:600;}
+.profile-select:hover{border-color:#555;}
+.profile-save-btn{background:none;border:1px solid #1e1e2e;color:#888;font-size:12px;cursor:pointer;width:24px;height:24px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;padding:0;}
+.profile-save-btn:hover{color:#f59e0b;border-color:#f59e0b66;}
+.tracker-filter-btn{background:#14141e;color:#888;border:1px solid #1e1e2e;padding:4px 10px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;height:24px;display:inline-flex;align-items:center;text-transform:uppercase;letter-spacing:0.3px;white-space:nowrap;}
+.tracker-filter-btn:hover{color:#ccc;background:#1a1a26;}
+.tracker-filter-btn.active{background:#1a1a26;}
+.tracker-filter-btn.flt-all{border-color:#94a3b844;}.tracker-filter-btn.flt-all:hover{border-color:#94a3b8;}.tracker-filter-btn.flt-all.active{color:#e2e8f0;border-color:#94a3b8;}
+.tracker-filter-btn.flt-cb{border-color:#f59e0b44;}.tracker-filter-btn.flt-cb:hover{border-color:#f59e0b;}.tracker-filter-btn.flt-cb.active{color:#f59e0b;border-color:#f59e0b;}
+.tracker-filter-btn.flt-rare{border-color:#a78bfa44;}.tracker-filter-btn.flt-rare:hover{border-color:#a78bfa;}.tracker-filter-btn.flt-rare.active{color:#c4b5fd;border-color:#a78bfa;}
+.tracker-filter-btn.flt-monster{border-color:#f9731644;}.tracker-filter-btn.flt-monster:hover{border-color:#f97316;}.tracker-filter-btn.flt-monster.active{color:#fb923c;border-color:#f97316;}
+.chart-setting-sep{width:1px;height:14px;background:#1e1e2e;margin:0 2px;}
+
+/* Chart fullscreen overlay */
+.chart-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(8,8,13,0.97);z-index:200;display:none;flex-direction:column;padding:12px 16px;}
+.chart-overlay.visible{display:flex;}
+.chart-overlay-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:0 4px;}
+.chart-overlay-close{background:#1e293b;color:#f59e0b;border:1px solid #f59e0b;width:32px;height:32px;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;}
+.chart-overlay-close:hover{background:#334155;}
+.chart-overlay-body{flex:1;border:1px solid #1e1e2e;border-radius:6px;overflow:hidden;background:#0c0c14;}
+
+/* Data tables (compressed for right panel) */
+.data-section{padding:8px 16px 8px;flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;}
+.data-section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.tab-bar{display:flex;gap:2px;margin-bottom:4px;flex-shrink:0;}
+.tab-btn{background:#14141e;color:#888;border:1px solid #1e1e2e;padding:5px 12px;font-size:10px;font-weight:600;cursor:pointer;border-radius:4px 4px 0 0;}
+.tab-btn:hover{color:#fff;background:#1e1e2e;}
+.tab-btn.active{background:#1a1a26;border-bottom-color:#1a1a26;}
+.tab-btn.dtab-all.active{color:#e2e8f0;border-color:#94a3b8;border-bottom-color:#1a1a26;}
+.tab-btn.dtab-cb.active{color:#f59e0b;border-color:#f59e0b;border-bottom-color:#1a1a26;}
+.tab-btn.dtab-rare.active{color:#c4b5fd;border-color:#a78bfa;border-bottom-color:#1a1a26;}
+.tab-btn.dtab-monster.active{color:#fb923c;border-color:#f97316;border-bottom-color:#1a1a26;}
+.table-wrap{flex:1;overflow-y:auto;overflow-x:auto;border:1px solid #1e1e2e;border-radius:0 0 6px 6px;min-height:0;}
+table{width:100%;border-collapse:collapse;}
+th{background:#0e0e16;color:#666;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:6px 8px;text-align:left;position:sticky;top:0;z-index:1;border-bottom:1px solid #1e1e2e;cursor:pointer;user-select:none;white-space:nowrap;}
+th:hover{color:#f59e0b;}
+td{padding:5px 8px;border-bottom:1px solid #111118;font-size:10px;white-space:nowrap;}
+td.col-key{font-size:12px;}
+tr:hover td{background:#0e0e18;}
+tr.row-monster td{background:rgba(124,45,18,0.10);}
+tr.row-monster td:first-child{box-shadow:inset 3px 0 0 #f97316;}
+tr.row-monster:hover td{background:rgba(124,45,18,0.18);}
+tr.row-rare td{background:rgba(30,41,59,0.15);}
+tr.row-rare td:first-child{box-shadow:inset 3px 0 0 #a78bfa;}
+tr.row-rare:hover td{background:rgba(30,41,59,0.25);}
+tr.row-focused td{background:rgba(245,158,11,0.15) !important;}
+tr.row-focused td:first-child{box-shadow:inset 3px 0 0 #f59e0b !important;}
+.ticker{font-weight:700;color:#fff;font-family:'Consolas',monospace;font-size:10px;cursor:pointer;}
+.ticker:hover{color:#f59e0b;text-decoration:underline;}
+.mono{font-family:'Consolas',monospace;}
+.text-right{text-align:right;}
+.text-green{color:#22c55e;}
+.text-red{color:#ef4444;}
+.text-amber{color:#f59e0b;}
+.text-purple{color:#a78bfa;}
+.text-dim{color:#555;}
+
+/* Direction badges */
+.dir-badge{display:inline-block;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:0.5px;}
+.dir-buy{background:#064e3b;color:#34d399;border:1px solid #065f46;}
+.dir-sell{background:#450a0a;color:#f87171;border:1px solid #7f1d1d;}
+.dir-mixed{background:#1e293b;color:#94a3b8;border:1px solid #334155;}
+
+/* Notional formatting */
+.notional{font-family:'Consolas',monospace;font-weight:600;}
+.notional-huge{color:#f59e0b;font-size:12px;}
+.notional-large{color:#22c55e;}
+.notional-medium{color:#ccc;}
+
+/* Event type badges */
+.cb-badge{display:inline-block;background:#422006;color:#f59e0b;font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:0.5px;}
+.rare-flag{display:inline-flex;align-items:center;background:#4c1d95;color:#c4b5fd;font-size:12px;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;line-height:1;}
+.monster-flag{display:inline-flex;align-items:center;background:#7c2d12;color:#fb923c;font-size:12px;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;line-height:1;}
+td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;margin-left:3px;}
+
+/* Toast */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e293b;color:#f59e0b;border:1px solid #334155;padding:10px 20px;border-radius:6px;font-size:12px;z-index:9999;opacity:0;transition:opacity 0.3s;pointer-events:none;}
+.toast.show{opacity:1;}
+
+/* Loading */
+.loading{text-align:center;padding:30px;color:#555;font-size:12px;}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid #333;border-top-color:#f59e0b;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:6px;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.tracker-loading-overlay{position:absolute;inset:0;background:rgba(8,8,13,0.85);display:flex;align-items:center;justify-content:center;z-index:5;color:#888;font-size:12px;font-weight:500;gap:8px;pointer-events:none;}
+.tracker-body{position:relative;}
+.header-spinner{display:none;width:14px;height:14px;border:2px solid #333;border-top-color:#f59e0b;border-radius:50%;animation:spin 0.8s linear infinite;margin-left:6px;vertical-align:middle;flex-shrink:0;}
+
+/* Fetch progress */
+.fetch-progress{background:#14141e;border:1px solid #1e1e2e;border-radius:6px;padding:12px 16px;margin:8px 16px;}
+.fetch-progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.fetch-progress-title{font-size:11px;font-weight:600;color:#fff;}
+.fetch-progress-bar{height:3px;background:#1e1e2e;border-radius:2px;overflow:hidden;}
+.fetch-progress-fill{height:100%;background:linear-gradient(90deg,#f59e0b,#d97706);border-radius:2px;transition:width 0.3s;}
+.fetch-log{margin-top:4px;font-size:10px;color:#888;font-family:'Consolas',monospace;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.btn-cancel-fetch{background:#2a1215;color:#ef4444;border:1px solid #ef444466;padding:2px 10px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;height:22px;display:inline-flex;align-items:center;gap:3px;white-space:nowrap;}
+.btn-cancel-fetch:hover{background:#3a1a1e;border-color:#ef4444;}
+
+/* API access banner */
+.api-banner{display:none;background:#451a03;border-bottom:1px solid #92400e;padding:8px 20px;font-size:11px;color:#fbbf24;}
+
+/* ====================================================================
+   SETTINGS PANEL (slide-out from right)
+   ==================================================================== */
+.settings-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:199;display:none;}
+.settings-overlay.visible{display:block;}
+.settings-panel{
+  position:fixed;top:0;right:-400px;width:380px;height:100%;
+  background:#0c0c14;border-left:1px solid #1e1e2e;
+  z-index:200;display:flex;flex-direction:column;
+  transition:right 0.25s ease;overflow:hidden;
+  box-shadow:-4px 0 24px rgba(0,0,0,0.4);
+}
+.settings-panel.visible{right:0;}
+.settings-panel-header{
+  padding:14px 16px;border-bottom:1px solid #1e1e2e;
+  display:flex;justify-content:space-between;align-items:center;flex-shrink:0;
+}
+.settings-panel-title{font-size:14px;font-weight:700;color:#fff;display:flex;align-items:center;gap:6px;}
+.settings-close{background:#1e293b;color:#f59e0b;border:1px solid #f59e0b;width:28px;height:28px;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;}
+.settings-close:hover{background:#334155;}
+.settings-body{flex:1;overflow-y:auto;padding:16px;}
+.settings-section{margin-bottom:20px;}
+.settings-section-title{font-size:11px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.settings-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.settings-label{font-size:11px;color:#999;font-weight:500;}
+.settings-label-sub{font-size:9px;color:#555;margin-top:1px;}
+.settings-input{
+  background:#14141e;border:1px solid #2a2a3a;color:#ccc;
+  padding:5px 8px;border-radius:4px;font-size:11px;
+  font-family:'Consolas',monospace;width:100px;height:28px;text-align:right;
+}
+.settings-input:focus{border-color:#f59e0b;outline:none;}
+.settings-input-wide{width:140px;}
+.settings-divider{height:1px;background:#1e1e2e;margin:16px 0;}
+.settings-btn{
+  width:100%;padding:8px 0;border-radius:4px;font-size:11px;font-weight:700;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:all 0.15s;
+}
+.settings-btn-primary{background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;border:none;}
+.settings-btn-primary:hover{opacity:0.9;}
+.settings-btn-primary:disabled{opacity:0.4;cursor:not-allowed;}
+.settings-btn-secondary{background:#1e293b;color:#f59e0b;border:1px solid #f59e0b;}
+.settings-btn-secondary:hover{background:#334155;}
+.settings-result{
+  margin-top:8px;padding:8px 10px;border-radius:4px;font-size:11px;
+  font-family:'Consolas',monospace;display:none;
+}
+.settings-result.success{display:block;background:#064e3b;color:#34d399;border:1px solid #065f46;}
+.settings-result.error{display:block;background:#450a0a;color:#f87171;border:1px solid #7f1d1d;}
+.settings-result.info{display:block;background:#1e293b;color:#94a3b8;border:1px solid #334155;}
+.settings-status{
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:10px;font-weight:600;padding:3px 8px;border-radius:3px;
+}
+.settings-status.running{background:#064e3b;color:#34d399;}
+.settings-status.stopped{background:#1e293b;color:#666;}
+.detection-profile{animation:fadeIn 0.15s ease;}
+@keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+
+/* Configure button in header */
+.btn-configure{
+  background:#1a1510;color:#f59e0b;border:1px solid #f59e0b66;
+  padding:5px 14px;border-radius:4px;cursor:pointer;
+  font-size:11px;font-weight:600;letter-spacing:0.3px;
+  display:inline-flex;align-items:center;gap:5px;white-space:nowrap;height:28px;
+}
+.btn-configure:hover{background:#2a1f10;color:#fbbf24;border-color:#f59e0b;}
+
+/* Responsive */
+@media(max-width:1400px){
+  .left-panel{width:440px;}
+}
+@media(max-width:1200px){
+  .page-layout{flex-direction:column;height:auto;}
+  .left-panel{width:100%;max-height:400px;border-right:none;border-bottom:1px solid #1e1e2e;}
+  .chart-container{height:360px;}
+  .settings-panel{width:100%;}
+}
+</style>
+</head>
+<body>
+
+<!-- ROW 1: Global Navigation Bar (shared) -->
+<script>window._activePage='sweeps';</script>
+<div id="headerRow1"></div>
+<script src="/static/header.js"></script>
+
+<!-- Row 2: Controls -->
+<div class="header-row2">
+<label>Watchlist</label>
+<select id="watchlistSelect" style="width:120px;">
+<option value="">All</option>
+</select>
+<label>Sector</label>
+<select id="sectorSelect" onchange="applySectorFilter()" style="width:120px;">
+<option value="">— all —</option>
+</select>
+<div class="filter-divider"></div>
+<label>Ticker(s)</label>
+<input type="text" id="tickerInput" placeholder="e.g. NVDA, AAPL" value="" style="width:130px;text-transform:uppercase;font-size:12px;font-weight:600;" title="Single ticker for chart, or comma-separated for batch fetch">
+<span class="header-spinner" id="headerSpinner"></span>
+<div class="filter-divider"></div>
+<label>From</label>
+<input type="date" id="dateFrom" value="">
+<label>To</label>
+<input type="date" id="dateTo" value="">
+<div class="filter-divider"></div>
+<div id="periodBtns" style="display:inline-flex;gap:2px;">
+<button class="filter-toggle" onclick="setTrackerPeriod('week',this)">Week</button>
+<button class="filter-toggle" onclick="setTrackerPeriod('month',this)">Month</button>
+<button class="filter-toggle active" onclick="setTrackerPeriod('year',this)">YTD</button>
+<button class="filter-toggle" onclick="setTrackerPeriod('2y',this)">2Y</button>
+<button class="filter-toggle" onclick="setTrackerPeriod('3y',this)">3Y</button>
+<button class="filter-toggle" onclick="setTrackerPeriod('5y',this)">5Y</button>
+<button class="filter-toggle" onclick="setTrackerPeriod('all',this)">All</button>
+</div>
+<div class="filter-divider"></div>
+<button class="btn-configure" onclick="toggleSettingsPanel()" title="Detection settings &amp; scheduler">&#x2699; Configure</button>
+<button class="btn-action" id="btnFetch" onclick="fetchSweeps()">&#x1F4E1; Fetch</button>
+<button class="btn-secondary" onclick="loadAll()" title="Refresh all data">&#x21BB;</button>
+<div class="filter-divider"></div>
+<button class="btn-pine" id="btnPineScript" onclick="copyPineScript()" title="Copy universal Pine Script indicator (all tickers) to clipboard">&#x1F4CB; Pine Script</button>
+</div>
+
+<!-- Stats bar removed from here — moved inside left panel -->
+
+<!-- API access banner -->
+<div class="api-banner" id="apiBanner">
+<strong>&#x26A0; API Upgrade Required:</strong> <span id="apiBannerMsg"></span>
+<a href="https://massive.com/pricing" target="_blank" style="color:#f59e0b;margin-left:8px;font-weight:600;">Upgrade Plan &rarr;</a>
+</div>
+
+<!-- ====================================================================
+     TWO-PANEL LAYOUT
+     ==================================================================== -->
+<div class="page-layout">
+
+<!-- =================== LEFT PANEL: Watchlist Tracker =================== -->
+<div class="left-panel" id="leftPanel">
+  <div class="left-panel-header">
+    <div class="tracker-title"><span class="cb-icon">&#x1F4A3;</span> Darkpool Sweep Tracker</div>
+    <div class="stats-bar" id="statsBar">
+      <div class="stat-item"><div class="stat-label">Tickers</div><div class="stat-value" id="statTickers">—</div></div>
+      <div class="stat-item"><div class="stat-label">Sweeps</div><div class="stat-value accent" id="statSweeps">—</div></div>
+      <div class="stat-item"><div class="stat-label">Notional</div><div class="stat-value green" id="statNotional">—</div></div>
+      <div class="stat-item"><div class="stat-label">Clusterbombs</div><div class="stat-value purple" id="statCBs">—</div></div>
+      <div class="stat-item"><div class="stat-label">Rare</div><div class="stat-value text-amber" id="statRare">—</div></div>
+      <div class="stat-item"><div class="stat-label">Monster</div><div class="stat-value" style="color:#f97316;" id="statMonster">—</div></div>
+    </div>
+  </div>
+  <div class="tracker-tab-bar">
+    <button class="tracker-tab" id="tabFavs" onclick="switchTrackerTab('favs',this)">&#x2B50; Watchlist <span class="tab-count" id="favsCount">0</span></button>
+    <button class="tracker-tab active" id="tabStocks" onclick="switchTrackerTab('stocks',this)">&#x1F4C8; Tracker <span class="tab-count" id="stocksCount">0</span></button>
+  </div>
+  <div class="tracker-type-filter">
+    <div class="filter-col filter-col-all">
+      <button class="tracker-filter-btn flt-all active" id="filterAll" onclick="setTrackerTypeFilter('all',this)">All</button>
+    </div>
+    <div class="filter-col" data-type="clusterbomb">
+      <button class="tracker-filter-btn flt-cb" id="filterCB" onclick="setTrackerTypeFilter('clusterbomb',this)">Clusterbombs</button>
+      <div class="filter-group">
+        <span class="filter-group-label" style="color:#f59e0b;">$M</span>
+        <input type="number" class="filter-input" id="trackerMinTotal" value="38" min="1" title="CB min total notional ($M)" oninput="debouncedTrackerRefresh()" style="border-color:#f59e0b44;color:#f59e0b;">
+        <span class="filter-group-label" style="color:#f59e0b;">#</span>
+        <input type="number" class="filter-input" id="trackerMinSweeps" value="3" min="1" max="50" title="CB min sweep count" oninput="debouncedTrackerRefresh()" style="border-color:#f59e0b44;color:#f59e0b;">
+      </div>
+    </div>
+    <div class="filter-col" data-type="rare_sweep">
+      <button class="tracker-filter-btn flt-rare" id="filterRare" onclick="setTrackerTypeFilter('rare_sweep',this)">Rare Sweeps</button>
+      <div class="filter-group">
+        <span class="filter-group-label" style="color:#a78bfa;">$M</span>
+        <input type="number" class="filter-input" id="trackerRareMin" value="1" min="0" step="0.5" title="Rare min notional ($M)" oninput="debouncedTrackerRefresh()" style="border-color:#a78bfa44;color:#a78bfa;">
+        <span class="filter-group-label" style="color:#a78bfa;">Days</span>
+        <input type="number" class="filter-input" id="trackerRareDays" value="60" min="5" max="365" title="Rare min dormancy days" oninput="debouncedTrackerRefresh()" style="border-color:#a78bfa44;color:#a78bfa;">
+      </div>
+    </div>
+    <div class="filter-col" data-type="monster_sweep">
+      <button class="tracker-filter-btn flt-monster" id="filterMonster" onclick="setTrackerTypeFilter('monster_sweep',this)">Monsters</button>
+      <div class="filter-group">
+        <span class="filter-group-label" style="color:#f97316;">$M</span>
+        <input type="number" class="filter-input" id="trackerMonsterMin" value="100" min="1" title="Monster min notional ($M)" oninput="debouncedTrackerRefresh()" style="flex:1;border-color:#f9731644;color:#f97316;">
+      </div>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:4px;align-self:center;">
+      <select class="profile-select" id="profileSelect" onchange="applyFilterProfile(this.value)" title="Filter profiles">
+        <option value="Default">Default</option>
+      </select>
+      <button class="profile-save-btn" onclick="saveCurrentProfile()" title="Save current filters as profile">&#x1F4BE;</button>
+    </div>
+  </div>
+  <div class="tracker-body" id="trackerStocksBody">
+    <div class="tracker-empty">Loading stock tracker...</div>
+  </div>
+  <div class="tracker-body" id="trackerFavsBody" style="display:none;">
+    <div class="tracker-empty">No favourites yet. Click the &#x2B50; on any tracker card to add it.</div>
+  </div>
+</div>
+
+<!-- =================== RIGHT PANEL: Ticker Research =================== -->
+<div class="right-panel" id="rightPanel">
+
+  <!-- Fetch progress (inside right panel) -->
+  <div class="fetch-progress" id="fetchProgress" style="display:none;">
+    <div class="fetch-progress-header">
+      <div class="fetch-progress-title" id="fetchTitle">Fetching sweep data...</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="text-dim" id="fetchStatus"></div>
+        <button class="btn-cancel-fetch" id="btnCancelFetch" onclick="cancelFetch()" title="Cancel fetch">&#x2715; Cancel</button>
+      </div>
+    </div>
+    <div class="fetch-progress-bar"><div class="fetch-progress-fill" id="fetchFill" style="width:0%"></div></div>
+    <div class="fetch-log" id="fetchLog"></div>
+  </div>
+
+  <!-- Chart section -->
+  <div class="chart-section">
+    <div class="chart-header">
+      <div class="chart-title">
+        <span id="chartTickerLabel" style="font-size:22px;letter-spacing:-0.5px;">—</span>
+        <span id="tickerStatsStrip" style="display:none;margin-left:12px;font-size:11px;font-family:'Consolas',monospace;text-transform:uppercase;letter-spacing:0.5px;">
+          <span class="text-dim">Events</span>&nbsp;<span id="tsEvents" style="color:#fff;font-weight:600;">—</span>
+          <span style="margin-left:10px;"><span class="text-dim">Total $</span>&nbsp;<span id="tsNotional" style="color:#f59e0b;font-weight:600;">—</span></span>
+          <span style="margin-left:10px;"><span class="text-dim">Sweeps</span>&nbsp;<span id="tsSweeps" style="color:#fff;font-weight:600;">—</span></span>
+          <span style="margin-left:10px;"><span class="text-dim">Rare</span>&nbsp;<span id="tsRare" style="color:#c4b5fd;font-weight:600;">—</span></span>
+          <span style="margin-left:10px;"><span class="text-dim">Monster</span>&nbsp;<span id="tsMonster" style="color:#fb923c;font-weight:600;">—</span></span>
+        </span>
+      </div>
+    </div>
+    <div class="chart-toolbar" id="chartSettingsRow">
+      <div class="chart-toolbar-left">
+        <button class="chart-setting-btn active" id="btnScaleCycle" onclick="cycleScale()" title="Click to toggle Linear / Log">Linear</button>
+        <button class="chart-setting-btn" id="btnGridlines" onclick="toggleGridlines(this)" title="Toggle background gridlines">Grid</button>
+        <button class="chart-setting-btn active" id="btnStyleCycle" onclick="cycleStyle()" title="Click to cycle: Hollow → Filled → Line">Hollow</button>
+        <button class="chart-setting-btn active" id="btnColorCycle" onclick="cycleColors()" title="Click to cycle colour scheme">🟢🔴</button>
+        <button class="chart-setting-btn" id="btnCrosshairCycle" onclick="cycleCrosshair()" title="Click to toggle: Free / Magnet crosshair">Crosshair</button>
+        <div class="chart-setting-sep"></div>
+        <button class="chart-setting-btn" id="btnCumToggle" onclick="toggleCumulative(this)" style="color:#22c55e;border-color:#334155;" title="Toggle cumulative sweep notional line">Cumulative $</button>
+        <button class="chart-setting-btn active" id="btnVolCycle" onclick="cycleVol()" title="Click to cycle: Sweep Volume → Top 10 → Stock Volume">Sweep Volume</button>
+        <button class="chart-setting-btn active" id="btnBubbleCycle" onclick="cycleBubbles()" title="Click to cycle: All → Monsters → Rare → CBs → Off" style="color:#f59e0b;border-color:#f59e0b66;">Bubbles: All</button>
+        <div class="chart-setting-sep"></div>
+        <button class="chart-setting-btn" id="btn50SMA" onclick="toggle50SMA(this)" title="Toggle 50-day simple moving average" style="color:#0097a7;">50D</button>
+        <button class="chart-setting-btn" id="btn200SMA" onclick="toggle200SMA(this)" title="Toggle 200-day simple moving average" style="color:#b22833;">200D</button>
+        <button class="chart-setting-btn" id="btn30WMA" onclick="toggle30WMA(this)" title="Toggle 30-week weighted moving average" style="color:#f57c00;">30W</button>
+      </div>
+      <div class="chart-toolbar-right">
+        <button class="filter-toggle" onclick="setChartRange(1825,'1h',this)">1HR</button>
+        <button class="filter-toggle" onclick="setChartRange(1825,'4h',this)">4HR</button>
+        <button class="filter-toggle" onclick="setChartRange(3650,'1D',this)">D</button>
+        <button class="filter-toggle active" onclick="setChartRange(3650,'1W',this)">W</button>
+        <button class="chart-max-btn" id="btnSaveChart" onclick="saveChartPNG()" title="Copy chart to clipboard">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="1" width="8" height="10" rx="1"/><path d="M2 4v8a1 1 0 001 1h7"/></svg>
+        </button>
+        <button class="chart-max-btn" id="btnMaxChart" onclick="toggleChartMaximize()" title="Maximize chart (Esc to close)">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="chart-container" id="chartContainer">
+      <div class="chart-empty" id="chartPlaceholder">Select a ticker and fetch data to see sweep overlay chart</div>
+    </div>
+  </div>
+
+  <!-- Detail tables: type-filter tabs + events table + trade drill-down -->
+  <div class="data-section">
+    <div class="tab-bar" id="detailTabBar">
+      <span id="detailDateRange" style="font-size:9px;color:#555;font-weight:600;letter-spacing:0.3px;align-self:center;margin-right:4px;text-transform:uppercase;"></span>
+      <button class="tab-btn dtab-all active" onclick="switchDetailFilter('all',this)">All</button>
+      <button class="tab-btn dtab-cb" onclick="switchDetailFilter('clusterbomb',this)">Clusterbombs</button>
+      <button class="tab-btn dtab-rare" onclick="switchDetailFilter('rare_sweep',this)">Rare Sweeps</button>
+      <button class="tab-btn dtab-monster" onclick="switchDetailFilter('monster_sweep',this)">Monsters</button>
+    </div>
+
+    <!-- Events table (for _selectedTicker, filtered by type) -->
+    <div class="table-wrap" id="tabEvents">
+    <table>
+    <thead><tr>
+    <th>Date</th><th>Type</th><th>Rank</th><th>Total $</th>
+    <th>Sweeps</th><th>Avg</th><th>Current</th><th>% Gain</th>
+    <th>1W</th><th>1M</th><th>3M</th><th>6M</th><th>1Y</th><th>2Y</th>
+    </tr></thead>
+    <tbody id="eventsBody"><tr><td colspan="14" class="loading">Select a ticker to see events</td></tr></tbody>
+    </table>
+    </div>
+
+    <!-- Trade Detail (shown on drill-down, hidden by default) -->
+    <div class="table-wrap" id="tabDetail" style="display:none;">
+    <div style="padding:6px 10px;border-bottom:1px solid #1e1e2e;display:flex;align-items:center;gap:10px;">
+      <button class="tab-btn" onclick="exitDrillDown()" style="font-size:10px;padding:3px 10px;">&larr; Back</button>
+      <span id="drillDownLabel" class="mono text-dim" style="font-size:11px;"></span>
+    </div>
+    <table>
+    <thead><tr>
+    <th>Time</th><th>Price</th><th>Size</th><th>Notional</th><th>TRF</th><th>Conds</th>
+    </tr></thead>
+    <tbody id="detailBody"><tr><td colspan="6" class="loading">Click a row to see trades</td></tr></tbody>
+    </table>
+    </div>
+  </div>
+
+</div><!-- right-panel -->
+</div><!-- page-layout -->
+
+<!-- ====================================================================
+     CHART FULLSCREEN OVERLAY
+     ==================================================================== -->
+<div class="chart-overlay" id="chartOverlay">
+  <div class="chart-overlay-header">
+    <div class="chart-title">
+      <span id="overlayTickerLabel">—</span>
+      <span class="text-dim" style="font-size:11px;">Fullscreen chart</span>
+    </div>
+    <div style="display:flex;gap:4px;align-items:center;">
+      <button class="filter-toggle" onclick="setChartRange(1825,'1h',this)">1HR</button>
+      <button class="filter-toggle" onclick="setChartRange(1825,'4h',this)">4HR</button>
+      <button class="filter-toggle" onclick="setChartRange(3650,'1D',this)">D</button>
+      <button class="filter-toggle active" onclick="setChartRange(3650,'1W',this)">W</button>
+      <div style="width:1px;height:20px;background:#2a2a3a;margin:0 4px;"></div>
+      <button class="chart-setting-btn active" onclick="setChartScale('linear',this)">Linear</button>
+      <button class="chart-setting-btn" onclick="setChartScale('log',this)">Log</button>
+      <button class="chart-max-btn" onclick="saveChartPNG()" title="Copy chart to clipboard" style="margin-right:4px;">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="1" width="8" height="10" rx="1"/><path d="M2 4v8a1 1 0 001 1h7"/></svg>
+      </button>
+      <button class="chart-overlay-close" onclick="toggleChartMaximize()" title="Close fullscreen (Esc)">&#x2715;</button>
+    </div>
+  </div>
+  <div class="chart-overlay-body" id="chartOverlayContainer"></div>
+</div>
+
+<!-- ====================================================================
+     SETTINGS PANEL (slide-out)
+     ==================================================================== -->
+<div class="settings-overlay" id="settingsOverlay" onclick="toggleSettingsPanel()"></div>
+<div class="settings-panel" id="settingsPanel">
+  <div class="settings-panel-header">
+    <div class="settings-panel-title">&#x2699; Sweep Settings</div>
+    <button class="settings-close" onclick="toggleSettingsPanel()" title="Close settings">&#x2715;</button>
+  </div>
+  <div class="settings-body">
+
+    <!-- Section: Detection Parameters (Dual Profile) -->
+    <div class="settings-section">
+      <div class="settings-section-title">&#x1F4A3; Detection Parameters</div>
+
+
+      <!-- Stock profile -->
+      <div id="profileStock" class="detection-profile">
+        <div class="settings-row">
+          <div><div class="settings-label">Min Sweeps / Day</div><div class="settings-label-sub">Sweeps clustering in a single day</div></div>
+          <input type="number" class="settings-input" id="settMinSweepsStock" value="3" min="1" max="50">
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-label">Min $ / Sweep</div><div class="settings-label-sub">Each individual sweep must exceed</div></div>
+          <input type="text" class="settings-input settings-input-wide" id="settMinNotionalStock" value="1M" title="e.g. 500K, 1M, 5M">
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-label">Min Total / Day</div><div class="settings-label-sub">Combined notional threshold per day</div></div>
+          <input type="text" class="settings-input settings-input-wide" id="settMinTotalStock" value="10M" title="e.g. 10M, 38M, 50M">
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-label">Rarity Window</div><div class="settings-label-sub">Trading days with no prior sweeps = "rare"</div></div>
+          <input type="number" class="settings-input" id="settRarityDaysStock" value="60" min="5" max="365">
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-label">Rare Threshold</div><div class="settings-label-sub">Min notional to break dormancy</div></div>
+          <input type="text" class="settings-input settings-input-wide" id="settRareNotionalStock" value="1M" title="e.g. 500K, 1M, 5M">
+        </div>
+        <div class="settings-divider" style="margin:6px 0;"></div>
+        <div class="settings-row">
+          <div><div class="settings-label" style="color:#f97316;">Monster Threshold</div><div class="settings-label-sub">Single sweep notional for Monster</div></div>
+          <input type="text" class="settings-input settings-input-wide" id="settMonsterNotionalStock" value="100M" title="e.g. 50M, 100M, 200M">
+        </div>
+      </div>
+
+
+      <div class="settings-divider"></div>
+      <button class="settings-btn settings-btn-primary" id="btnRedetect" onclick="redetectClusterbombs()">
+        &#x1F50D; Re-detect All
+      </button>
+      <div class="settings-result" id="redetectResult"></div>
+      <div style="margin-top:8px;">
+        <button class="settings-btn settings-btn-secondary" onclick="saveDetectionConfig()" style="font-size:10px;">
+          &#x1F4BE; Save as Defaults
+        </button>
+      </div>
+    </div>
+
+    <!-- Section: Sweep Scheduler -->
+    <div class="settings-section">
+      <div class="settings-section-title">&#x23F0; Sweep Scheduler</div>
+      <div class="settings-row">
+        <div class="settings-label">Status</div>
+        <span class="settings-status stopped" id="sweepSchedulerStatus">&#x25CF; Not configured</span>
+      </div>
+      <div style="background:#14141e;border:1px solid #1e1e2e;border-radius:4px;padding:10px 12px;font-size:10px;color:#666;line-height:1.5;">
+        <strong style="color:#888;">Coming soon</strong> — The sweep scheduler will handle:
+        <ul style="margin:4px 0 0 14px;padding:0;">
+          <li>Live sweep tracking during market hours</li>
+          <li>Historical backfill for new tickers/watchlists</li>
+          <li>Automatic clusterbomb detection after each scan</li>
+        </ul>
+        <div style="margin-top:6px;color:#555;">Use the <strong>Fetch</strong> button to manually pull sweep data for now.</div>
+      </div>
+    </div>
+
+    <!-- Section: Database Info -->
+    <div class="settings-section">
+      <div class="settings-section-title">&#x1F4CA; Database Info</div>
+      <div id="settingsDbInfo" style="font-size:10px;color:#666;font-family:'Consolas',monospace;line-height:1.8;">
+        Loading...
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ====================================================================
+// STATE
+// ====================================================================
+var chartInstance = null;
+var candleSeries = null;
+var _volSeries = null;       // Volume histogram series reference
+var _volSweepData = [];      // DP sweep notional bars (full set)
+var _volStockData = [];      // Regular stock volume bars
+var currentChartDays = 3650;
+var currentTimeframe = '1W';
+var isChartMaximized = false;
+var _cumSeries = null;       // Cumulative DP notional line series
+var _cumVisible = false;     // Toggle state for cumulative overlay
+var _volMode = 'sweeps';     // 'sweeps' (DP notional) or 'stock' (regular volume)
+var _volTop10 = false;       // Filter histogram to top 10 ranked days only
+var _wmaSeries = null;       // 30-week WMA line series
+var _wmaVisible = false;     // Toggle state for 30WMA overlay
+var _sma50Series = null;     // 50-day SMA line series
+var _sma50Visible = false;   // Toggle state for 50D SMA
+var _sma200Series = null;    // 200-day SMA line series
+var _sma200Visible = false;  // Toggle state for 200D SMA
+var _gridVisible = false;    // Toggle state for background gridlines (default off)
+var _bubbleFilter = 'all';   // 'all' | 'monster' | 'rare' | 'cb' | 'off'
+
+// Cache last chart data for maximize/restore without re-fetch
+var _lastChartTicker = null;
+var _lastChartData = null;
+
+// Focus/highlight state for click-to-scroll
+var _pendingFocusDate = null;
+
+// Master-detail state: selected ticker for chart + detail table (decoupled from browse context)
+var _selectedTicker = null;
+var _detailTypeFilter = 'all';
+var _detailEvents = [];  // cached events for client-side type filtering
+var _markerSeries = null;
+var _markerList = [];
+var _textMarkerSeries = null;
+var _allDotData = [];        // Full unfiltered dot data/markers for bubble filter
+var _allDotMarkers = [];
+var _allTextData = [];
+var _allTextMarkers = [];
+var _highlightTimer = null;
+
+// Timeframe map: days -> default timeframe
+var tfMap = {30:'1h', 90:'4h', 180:'4h', 365:'1D', 1825:'1W'};
+
+// Chart style settings (persist in localStorage)
+var _chartScale = localStorage.getItem('sweep_chartScale') || 'linear';
+var _candleStyle = localStorage.getItem('sweep_candleStyle') || 'hollow';
+var _chartColorScheme = localStorage.getItem('sweep_chartColors') || 'default';
+
+// Colour palettes
+var COLOR_SCHEMES = {
+  'default':   {up:'#056656', down:'#b22833'},
+  'blue-red':  {up:'#3b82f6', down:'#ef4444'},
+  'amber':     {up:'#f59e0b', down:'#a78bfa'},
+};
+
+// Set default dates: 6 months back to today
+// Date defaults now set in INIT section via period selector buttons
+
+// ====================================================================
+// HELPERS
+// ====================================================================
+function fmt$(n){
+  if(n==null) return '—';
+  if(n>=1e9) return '$'+((n/1e9).toFixed(1))+'B';
+  if(n>=1e6) return '$'+((n/1e6).toFixed(1))+'M';
+  if(n>=1e3) return '$'+((n/1e3).toFixed(0))+'K';
+  return '$'+n.toFixed(0);
+}
+function fmtN(n,d){return n!=null?n.toLocaleString(undefined,{minimumFractionDigits:d||0,maximumFractionDigits:d||0}):'—';}
+function showToast(msg){
+  var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._timer);t._timer=setTimeout(function(){t.classList.remove('show');},4000);
+}
+function notionalClass(n){
+  if(n>=50e6) return 'notional notional-huge';
+  if(n>=10e6) return 'notional notional-large';
+  return 'notional notional-medium';
+}
+function dirBadge(d){
+  if(d==='buy') return '<span class="dir-badge dir-buy">BUY</span>';
+  if(d==='sell') return '<span class="dir-badge dir-sell">SELL</span>';
+  return '<span class="dir-badge dir-mixed">MIX</span>';
+}
+function parseMinInput(val){
+  val = (val||'').trim().toUpperCase();
+  if(val.endsWith('B')) return parseFloat(val) * 1e9;
+  if(val.endsWith('M')) return parseFloat(val) * 1e6;
+  if(val.endsWith('K')) return parseFloat(val) * 1e3;
+  return parseFloat(val) || 0;
+}
+// Global CB threshold — single source of truth from left panel tracker filter.
+// Controls stats bar, CB table, chart markers, AND tracker cards.
+function getCBThreshold(){
+  return (parseFloat(document.getElementById('trackerMinTotal').value) || 38) * 1e6;
+}
+// Debounced refresh — waits 600ms after last keystroke before reloading everything
+var _refreshTimer = null;
+function debouncedRefresh(){
+  clearTimeout(_refreshTimer);
+  _refreshTimer = setTimeout(loadAll, 600);
+}
+var _trackerTimer = null;
+function debouncedTrackerRefresh(){
+  // Changing the tracker threshold now refreshes EVERYTHING
+  clearTimeout(_trackerTimer);
+  _trackerTimer = setTimeout(function(){ loadAll(); }, 600);
+}
+
+// Pad single digit to 2 chars (e.g. 3 → "03")
+function pad2(n){ return n < 10 ? '0' + n : '' + n; }
+
+// Period quick-select — sets dateFrom and reloads
+function setTrackerPeriod(label, btn){
+  var now = new Date();
+  var from = '';
+  if(label === 'week'){
+    // Monday of this week
+    var day = now.getDay(); // 0=Sun
+    var diff = (day === 0 ? 6 : day - 1);
+    var mon = new Date(now);
+    mon.setDate(now.getDate() - diff);
+    from = mon.getFullYear() + '-' + pad2(mon.getMonth()+1) + '-' + pad2(mon.getDate());
+  } else if(label === 'month'){
+    from = now.getFullYear() + '-' + pad2(now.getMonth()+1) + '-01';
+  } else if(label === 'year'){
+    from = now.getFullYear() + '-01-01';
+  } else if(label === '2y'){
+    from = (now.getFullYear()-2) + '-' + pad2(now.getMonth()+1) + '-' + pad2(now.getDate());
+  } else if(label === '3y'){
+    from = (now.getFullYear()-3) + '-' + pad2(now.getMonth()+1) + '-' + pad2(now.getDate());
+  } else if(label === '5y'){
+    from = (now.getFullYear()-5) + '-' + pad2(now.getMonth()+1) + '-' + pad2(now.getDate());
+  } else if(label === 'all'){
+    // 10 years back — matches backfill_years config; works for both display and fetch
+    from = (now.getFullYear()-10) + '-' + pad2(now.getMonth()+1) + '-' + pad2(now.getDate());
+  }
+  document.getElementById('dateFrom').value = from;
+  // To always defaults to today
+  var now2 = new Date();
+  document.getElementById('dateTo').value = now2.getFullYear() + '-' + pad2(now2.getMonth()+1) + '-' + pad2(now2.getDate());
+  // Toggle active state
+  document.querySelectorAll('#periodBtns .filter-toggle').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  loadAll();
+}
+
+// Build common filter query string used by tracker + stats
+function buildFilterParams(){
+  var minTotal = getCBThreshold();
+  var tickers = getSelectedTickers();
+  var dateFrom = document.getElementById('dateFrom').value;
+  var dateTo = document.getElementById('dateTo').value;
+  var params = new URLSearchParams();
+  params.set('min_total', minTotal);
+  if(tickers.length > 0) params.set('tickers', tickers.join(','));
+  if(dateFrom) params.set('date_from', dateFrom);
+  if(dateTo) params.set('date_to', dateTo);
+  // Per-type display filters
+  var minSweeps = parseInt(document.getElementById('trackerMinSweeps').value) || 0;
+  if(minSweeps > 0) params.set('min_sweeps', minSweeps);
+  var monsterMin = (parseFloat(document.getElementById('trackerMonsterMin').value) || 0) * 1e6;
+  if(monsterMin > 0) params.set('monster_min', monsterMin);
+  var rareMin = (parseFloat(document.getElementById('trackerRareMin').value) || 0) * 1e6;
+  if(rareMin > 0) params.set('rare_min', rareMin);
+  var rareDays = parseInt(document.getElementById('trackerRareDays').value) || 0;
+  if(rareDays > 0) params.set('rare_days', rareDays);
+  return params;
+}
+
+// ====================================================================
+// DETAIL TABLE: type filter tabs + events + drill-down
+// ====================================================================
+function switchDetailFilter(filter, btn){
+  _detailTypeFilter = filter;
+  document.querySelectorAll('#detailTabBar .tab-btn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  renderDetailEvents();
+}
+
+function exitDrillDown(){
+  document.getElementById('tabEvents').style.display = '';
+  document.getElementById('tabDetail').style.display = 'none';
+  // Restore the filter tab bar
+  document.getElementById('detailTabBar').style.display = '';
+}
+
+function highlightSelectedCard(){
+  document.querySelectorAll('.tracker-card.selected').forEach(function(c){ c.classList.remove('selected'); });
+  if(!_selectedTicker) return;
+  document.querySelectorAll('.tracker-card[data-ticker="' + _selectedTicker + '"]').forEach(function(c){
+    c.classList.add('selected');
+  });
+}
+
+function loadDetailTable(){
+  if(!_selectedTicker) return;
+  var from = document.getElementById('dateFrom').value;
+  var to = document.getElementById('dateTo').value;
+  var cbMin = getCBThreshold();
+  var params = new URLSearchParams();
+  params.set('ticker', _selectedTicker);
+  if(from) params.set('date_from', from);
+  if(to) params.set('date_to', to);
+  params.set('min_total', cbMin);
+
+  document.getElementById('eventsBody').innerHTML = '<tr><td colspan="14" class="loading"><span class="spinner"></span> Loading...</td></tr>';
+  // Show events table, hide drill-down detail
+  document.getElementById('tabEvents').style.display = '';
+  document.getElementById('tabDetail').style.display = 'none';
+  document.getElementById('detailTabBar').style.display = '';
+
+  fetch('/api/sweeps/clusterbombs?' + params.toString())
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      _detailEvents = d.events || [];
+      renderDetailEvents();
+    })
+    .catch(function(e){
+      document.getElementById('eventsBody').innerHTML = '<tr><td colspan="14" class="text-red">Error: '+e+'</td></tr>';
+    });
+}
+
+function updateDetailDateLabel(){
+  var activeBtn = document.querySelector('#periodBtns .filter-toggle.active');
+  var label = activeBtn ? activeBtn.textContent.trim() : '';
+  var el = document.getElementById('detailDateRange');
+  if(el) el.textContent = label ? '\u25B8 ' + label : '';
+}
+
+function renderDetailEvents(){
+  updateDetailDateLabel();
+  var events = _detailEvents;
+  // Client-side type filter
+  // Filter by primary event_type. Monsters tab = standalone monster_sweep events only.
+  // A clusterbomb that also has is_monster=1 stays under Clusterbombs (with an M flag).
+  if(_detailTypeFilter !== 'all'){
+    events = events.filter(function(ev){
+      var et = ev.event_type || 'clusterbomb';
+      if(_detailTypeFilter === 'monster_sweep') return et === 'monster_sweep';
+      if(_detailTypeFilter === 'clusterbomb') return et === 'clusterbomb';
+      if(_detailTypeFilter === 'rare_sweep') return et === 'rare_sweep';
+      return true;
+    });
+  }
+
+  // Update tab counts — based on primary event_type, not is_monster flag
+  var allCount = _detailEvents.length;
+  var cbCount = _detailEvents.filter(function(ev){ return (ev.event_type||'clusterbomb')==='clusterbomb'; }).length;
+  var rareCount = _detailEvents.filter(function(ev){ return (ev.event_type||'clusterbomb')==='rare_sweep'; }).length;
+  var monsterCount = _detailEvents.filter(function(ev){ return (ev.event_type||'clusterbomb')==='monster_sweep'; }).length;
+  var tabs = document.querySelectorAll('#detailTabBar .tab-btn');
+  tabs[0].textContent = 'All (' + allCount + ')';
+  tabs[1].textContent = 'Clusterbombs (' + cbCount + ')';
+  tabs[2].textContent = 'Rare Sweeps (' + rareCount + ')';
+  tabs[3].textContent = 'Monsters (' + monsterCount + ')';
+
+  // Populate ticker stats strip (always from full _detailEvents, not filtered)
+  var strip = document.getElementById('tickerStatsStrip');
+  if(_selectedTicker && _detailEvents.length > 0){
+    var totalNotional = 0, totalSweeps = 0;
+    _detailEvents.forEach(function(ev){
+      totalNotional += (ev.total_notional || 0);
+      totalSweeps += (ev.sweep_count || 0);
+    });
+    document.getElementById('tsEvents').textContent = _detailEvents.length;
+    document.getElementById('tsNotional').textContent = fmt$(totalNotional);
+    document.getElementById('tsSweeps').textContent = totalSweeps.toLocaleString();
+    document.getElementById('tsRare').textContent = rareCount;
+    document.getElementById('tsMonster').textContent = monsterCount;
+    strip.style.display = '';
+  } else if(_selectedTicker){
+    document.getElementById('tsEvents').textContent = '0';
+    document.getElementById('tsNotional').textContent = '$0';
+    document.getElementById('tsSweeps').textContent = '0';
+    document.getElementById('tsRare').textContent = '0';
+    document.getElementById('tsMonster').textContent = '0';
+    strip.style.display = '';
+  } else {
+    strip.style.display = 'none';
+  }
+
+  var body = document.getElementById('eventsBody');
+  if(events.length === 0){
+    var msg = _detailEvents.length === 0 ? 'No events found for ' + (_selectedTicker||'this ticker') : 'No ' + _detailTypeFilter.replace('_',' ') + ' events';
+    body.innerHTML = '<tr><td colspan="14" class="text-dim" style="text-align:center;padding:20px;">' + msg + '</td></tr>';
+    return;
+  }
+
+  function fmtRetTd(v){
+    if(v==null) return '<td class="mono text-right text-dim">\u2014</td>';
+    var cls = v>=0 ? 'up' : 'down';
+    return '<td class="mono text-right"><span class="tracker-value '+cls+'">'+(v>=0?'+':'')+v.toFixed(1)+'%</span></td>';
+  }
+
+  var html = '';
+  events.forEach(function(ev){
+    var evType = ev.event_type || 'clusterbomb';
+    var isRareSweep = evType === 'rare_sweep';
+    var isStandaloneMonster = evType === 'monster_sweep';
+    var isMonster = ev.is_monster;
+    // Table type badges: CB is default (dim), rare/monster get colour badges
+    var typeTag = '';
+    if(isStandaloneMonster){
+      typeTag = '<span class="monster-flag">M</span>';
+    } else if(isRareSweep){
+      typeTag = '<span class="rare-flag">R</span>';
+      if(isMonster) typeTag += ' <span class="monster-flag">M</span>';
+    } else if(ev.is_rare){
+      typeTag = '<span class="rare-flag">R</span>';
+      if(isMonster) typeTag += ' <span class="monster-flag">M</span>';
+    } else {
+      typeTag = '<span class="text-dim" style="font-size:9px;">CB</span>';
+      if(isMonster) typeTag += ' <span class="monster-flag">M</span>';
+    }
+    var rankLabel = ev.rank ? '<span class="text-amber" style="font-weight:700;">#' + ev.rank + '</span><span class="text-dim"> / ' + ev.total_days + '</span>' : '<span class="text-dim">\u2014</span>';
+    var gainCls = (ev.pct_gain||0) >= 0 ? 'up' : 'down';
+    var gainStr = (ev.pct_gain!=null) ? '<span class="tracker-value '+gainCls+'">'+((ev.pct_gain>=0)?'+':'')+ev.pct_gain.toFixed(1)+'%</span>' : '<span class="text-dim">\u2014</span>';
+    var rowCls = isStandaloneMonster ? 'row-monster' : isMonster ? 'row-monster' : isRareSweep ? 'row-rare' : (ev.is_rare ? 'row-rare' : '');
+    html += '<tr class="' + rowCls + '" onclick="focusChartOnDate(\'' + ev.date + '\')" ondblclick="drillDown(\'' + ev.ticker + '\',\'' + ev.date + '\')" style="cursor:pointer">'
+      + '<td class="mono col-key">' + ev.date + '</td>'
+      + '<td>' + typeTag + '</td>'
+      + '<td class="mono col-key">' + rankLabel + '</td>'
+      + '<td class="mono text-right"><span class="' + notionalClass(ev.total_notional) + '">' + fmt$(ev.total_notional) + '</span></td>'
+      + '<td class="mono text-right col-key">' + ev.sweep_count + '</td>'
+      + '<td class="mono text-right col-key">$' + (ev.avg_price||0).toFixed(2) + '</td>'
+      + '<td class="mono text-right col-key">$' + (ev.current_price||0).toFixed(2) + '</td>'
+      + '<td class="mono text-right">' + gainStr + '</td>'
+      + fmtRetTd(ev.return_1w)
+      + fmtRetTd(ev.return_1m)
+      + fmtRetTd(ev.return_3m)
+      + fmtRetTd(ev.return_6m)
+      + fmtRetTd(ev.return_1y)
+      + fmtRetTd(ev.return_2y)
+      + '</tr>';
+  });
+  body.innerHTML = html;
+}
+
+// ====================================================================
+// LEFT PANEL: TRACKER TABS + FAVOURITES
+// ====================================================================
+// Favourites stored in localStorage as array of {ticker, date} keys
+var FAVS_KEY = 'sweep_favourites';
+function getFavourites(){
+  try { return JSON.parse(localStorage.getItem(FAVS_KEY) || '[]'); } catch(e){ return []; }
+}
+function saveFavourites(favs){
+  localStorage.setItem(FAVS_KEY, JSON.stringify(favs));
+}
+function isFavourite(ticker, date){
+  var favs = getFavourites();
+  return favs.some(function(f){ return f.ticker === ticker && f.date === date; });
+}
+function toggleFavourite(ticker, date, ev){
+  if(ev) ev.stopPropagation();
+  var favs = getFavourites();
+  var idx = favs.findIndex(function(f){ return f.ticker === ticker && f.date === date; });
+  if(idx >= 0){
+    favs.splice(idx, 1);
+  } else {
+    favs.push({ticker: ticker, date: date});
+  }
+  saveFavourites(favs);
+  // Refresh star states and favs tab
+  loadTrackerPanels();
+}
+function removeFavourite(ticker, date, ev){
+  if(ev) ev.stopPropagation();
+  var favs = getFavourites();
+  saveFavourites(favs.filter(function(f){ return !(f.ticker === ticker && f.date === date); }));
+  loadTrackerPanels();
+}
+
+function switchTrackerTab(tab, btn){
+  document.querySelectorAll('.tracker-tab').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  document.getElementById('trackerStocksBody').style.display = tab==='stocks'?'':'none';
+  document.getElementById('trackerFavsBody').style.display = tab==='favs'?'':'none';
+}
+
+// Cache all tracker events so favourites can look up enriched data
+var _allTrackerEvents = [];
+var _trackerTypeFilter = 'all'; // 'all', 'clusterbomb', 'rare_sweep'
+var _trackerOffset = 0;
+var _trackerTotal = 0;
+var _trackerPageSize = 200;
+
+function setTrackerTypeFilter(filter, btn){
+  _trackerTypeFilter = filter;
+  // Update button active states
+  document.querySelectorAll('.tracker-type-filter .tracker-filter-btn').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  // Toggle filter group visibility based on active type
+  toggleFilterGroupVisibility(filter);
+  // Re-render from cached events (no API call)
+  var filtered = filterByType(_allTrackerEvents);
+  document.getElementById('stocksCount').textContent = filtered.length + (_trackerTotal > _trackerOffset ? '+' : '');
+  renderTrackerCards('trackerStocksBody', filtered, false);
+  renderLoadMoreBtn();
+}
+
+function toggleFilterGroupVisibility(activeType){
+  // With square-column layout, all filter groups stay visible.
+  // Dim non-active columns so the active type is visually prominent.
+  document.querySelectorAll('.filter-col[data-type]').forEach(function(col){
+    if(activeType === 'all'){
+      col.style.opacity = '';
+    } else {
+      col.style.opacity = (col.getAttribute('data-type') === activeType) ? '' : '0.45';
+    }
+  });
+}
+
+// ====================================================================
+// FILTER PROFILES — localStorage persistence
+// ====================================================================
+var _PROFILE_KEY = 'sweep_filter_profiles';
+var _DEFAULT_PROFILE = {min_total:'38',min_sweeps:'3',monster_min:'100',rare_min:'1',rare_days:'60'};
+
+function getFilterProfiles(){
+  try {
+    var raw = localStorage.getItem(_PROFILE_KEY);
+    if(raw){ return JSON.parse(raw); }
+  } catch(e){}
+  return {'Default': Object.assign({}, _DEFAULT_PROFILE)};
+}
+
+function saveFilterProfiles(profiles){
+  localStorage.setItem(_PROFILE_KEY, JSON.stringify(profiles));
+}
+
+function loadFilterProfiles(){
+  var profiles = getFilterProfiles();
+  var sel = document.getElementById('profileSelect');
+  var current = sel.value || 'Default';
+  sel.innerHTML = '';
+  Object.keys(profiles).forEach(function(name){
+    var opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  });
+  // Restore selection
+  if(profiles[current]) sel.value = current;
+  else sel.value = 'Default';
+}
+
+function applyFilterProfile(name){
+  var profiles = getFilterProfiles();
+  var p = profiles[name] || _DEFAULT_PROFILE;
+  document.getElementById('trackerMinTotal').value = p.min_total || '38';
+  document.getElementById('trackerMinSweeps').value = p.min_sweeps || '3';
+  document.getElementById('trackerMonsterMin').value = p.monster_min || '100';
+  document.getElementById('trackerRareMin').value = p.rare_min || '1';
+  document.getElementById('trackerRareDays').value = p.rare_days || '60';
+  loadAll();
+}
+
+function getCurrentFilterValues(){
+  return {
+    min_total: document.getElementById('trackerMinTotal').value,
+    min_sweeps: document.getElementById('trackerMinSweeps').value,
+    monster_min: document.getElementById('trackerMonsterMin').value,
+    rare_min: document.getElementById('trackerRareMin').value,
+    rare_days: document.getElementById('trackerRareDays').value
+  };
+}
+
+function saveCurrentProfile(){
+  var name = prompt('Profile name:');
+  if(!name || !name.trim()) return;
+  name = name.trim();
+  var profiles = getFilterProfiles();
+  profiles[name] = getCurrentFilterValues();
+  saveFilterProfiles(profiles);
+  loadFilterProfiles();
+  document.getElementById('profileSelect').value = name;
+}
+
+function deleteProfile(name){
+  if(name === 'Default') return; // Can't delete default
+  var profiles = getFilterProfiles();
+  delete profiles[name];
+  saveFilterProfiles(profiles);
+  loadFilterProfiles();
+  applyFilterProfile('Default');
+}
+
+function filterByType(events){
+  if(_trackerTypeFilter === 'all') return events;
+  // Filter by primary event_type — monster_sweep = standalone monsters only
+  return events.filter(function(ev){ return (ev.event_type||'clusterbomb') === _trackerTypeFilter; });
+}
+
+function loadTrackerPanels(){
+  var fp = buildFilterParams();
+  _trackerOffset = 0;
+  _allTrackerEvents = [];
+  fp.set('limit', _trackerPageSize);
+  fp.set('offset', '0');
+  var url = '/api/sweeps/tracker?' + fp.toString();
+
+  fetch(url)
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var events = d.events || [];
+      _allTrackerEvents = events;
+      _trackerTotal = d.total || events.length;
+      _trackerOffset = events.length;
+      var filtered = filterByType(events);
+      document.getElementById('stocksCount').textContent = _trackerTotal;
+      renderTrackerCards('trackerStocksBody', filtered, false);
+      renderLoadMoreBtn();
+      hideLoading();
+    })
+    .catch(function(e){
+      console.error('Tracker error:', e);
+      document.getElementById('trackerStocksBody').innerHTML = '<div class="tracker-empty">Error loading tracker</div>';
+      hideLoading();
+    });
+}
+
+function loadMoreTracker(){
+  var fp = buildFilterParams();
+  fp.set('limit', _trackerPageSize);
+  fp.set('offset', _trackerOffset);
+  var btn = document.getElementById('loadMoreBtn');
+  if(btn) btn.textContent = 'Loading...';
+  fetch('/api/sweeps/tracker?' + fp.toString())
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var events = d.events || [];
+      _allTrackerEvents = _allTrackerEvents.concat(events);
+      _trackerOffset += events.length;
+      var filtered = filterByType(_allTrackerEvents);
+      renderTrackerCards('trackerStocksBody', filtered, false);
+      renderLoadMoreBtn();
+    })
+    .catch(function(e){ console.error('Load more error:', e); });
+}
+
+function renderLoadMoreBtn(){
+  var existing = document.getElementById('loadMoreBtn');
+  if(existing) existing.remove();
+  var remaining = _trackerTotal - _trackerOffset;
+  if(remaining <= 0) return;
+  var container = document.getElementById('trackerStocksBody');
+  if(!container) return;
+  var btn = document.createElement('div');
+  btn.id = 'loadMoreBtn';
+  btn.className = 'tracker-load-more';
+  if(_trackerTypeFilter === 'all'){
+    btn.textContent = 'Load More (' + remaining + ' remaining)';
+  } else {
+    btn.textContent = 'Load More';
+  }
+  btn.onclick = loadMoreTracker;
+  container.appendChild(btn);
+}
+
+function loadFavouritesTab(){
+  var favs = getFavourites();
+  if(favs.length === 0){
+    document.getElementById('favsCount').textContent = '0';
+    renderTrackerCards('trackerFavsBody', [], true);
+    return;
+  }
+  // Check which favourites are already in the loaded tracker events
+  var found = [], missingTickers = [];
+  favs.forEach(function(f){
+    var ev = _allTrackerEvents.find(function(e){ return e.ticker === f.ticker && e.date === f.date; });
+    if(ev) found.push(ev);
+    else if(missingTickers.indexOf(f.ticker) === -1) missingTickers.push(f.ticker);
+  });
+
+  if(missingTickers.length === 0){
+    // All favourites found locally — no API call needed
+    document.getElementById('favsCount').textContent = found.length;
+    renderTrackerCards('trackerFavsBody', found, true);
+    return;
+  }
+  // Fetch only missing tickers with min_total=0 (below-threshold favourites)
+  fetch('/api/sweeps/tracker?min_total=0&limit=0&tickers=' + missingTickers.join(','))
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var extra = (d.events || []).filter(function(ev){
+        return favs.some(function(f){ return f.ticker === ev.ticker && f.date === ev.date; });
+      });
+      var all = found.concat(extra);
+      document.getElementById('favsCount').textContent = all.length;
+      renderTrackerCards('trackerFavsBody', all, true);
+    })
+    .catch(function(e){
+      console.error('Favourites tab error:', e);
+      // Fallback: show whatever we found locally
+      document.getElementById('favsCount').textContent = found.length;
+      renderTrackerCards('trackerFavsBody', found, true);
+    });
+}
+
+function renderTrackerCards(containerId, events, showRemove){
+  var body = document.getElementById(containerId);
+  if(!events || events.length === 0){
+    var emptyMsg = containerId === 'trackerFavsBody'
+      ? 'No favourites yet. Click the &#x2B50; on any tracker card to add it.'
+      : _trackerTypeFilter === 'rare_sweep' ? 'No rare sweeps detected'
+      : _trackerTypeFilter === 'monster_sweep' ? 'No monster sweeps detected'
+      : _trackerTypeFilter === 'clusterbomb' ? 'No clusterbombs above threshold'
+      : 'No events above threshold';
+    body.innerHTML = '<div class="tracker-empty">' + emptyMsg + '</div>';
+    return;
+  }
+  var html = '';
+  events.forEach(function(ev){
+    var pctClass = ev.pct_gain >= 0 ? 'up' : 'down';
+    var pctSign = ev.pct_gain >= 0 ? '+' : '';
+    var biasClass = ev.bias === 'bullish' ? 'bullish' : 'bearish';
+    var biasLabel = ev.bias === 'bullish' ? 'BULL' : 'BEAR';
+    var evType = ev.event_type || 'clusterbomb';
+    var isRareSweep = evType === 'rare_sweep';
+    var isStandaloneMonster = evType === 'monster_sweep';
+    var isMonster = ev.is_monster;
+    var isRare = isRareSweep || ev.is_rare;
+    // Cards: CBs are default (no badge). Only show [R] for rare and [M] for monster.
+    var typeTag = '';
+    if(isRare) typeTag += ' <span class="rare-flag">R</span>';
+    if(isMonster) typeTag += ' <span class="monster-flag">M</span>';
+    var totalLabel = isStandaloneMonster ? 'Monster Total' : isRareSweep ? 'Sweep Total' : 'CB Total';
+    var totalColor = isStandaloneMonster ? 'style="color:#fb923c;"' : isRareSweep ? 'style="color:#c4b5fd;"' : '';
+    var cardBorder = isStandaloneMonster ? 'border-left:3px solid #f97316;' : isMonster ? 'border-left:3px solid #f97316;' : isRareSweep ? 'border-left:3px solid #a78bfa;' : 'border-left:3px solid #f59e0b44;';
+    var starred = isFavourite(ev.ticker, ev.date);
+    var starBtn = showRemove
+      ? '<button class="tracker-remove" onclick="removeFavourite(\'' + ev.ticker + '\',\'' + ev.date + '\',event)" title="Remove from favourites">&#x2715;</button>'
+      : '<button class="tracker-star' + (starred?' starred':'') + '" onclick="toggleFavourite(\'' + ev.ticker + '\',\'' + ev.date + '\',event)" title="' + (starred?'Remove from':'Add to') + ' favourites">' + (starred?'&#x2605;':'&#x2606;') + '</button>';
+    // Period return helper
+    function fmtRetCell(label,v){ if(v==null) return ''; var cls = v>=0?'up':'down'; return '<div><div class="tracker-label">'+label+'</div><span class="tracker-value '+cls+'" style="font-size:13px;">'+(v>=0?'+':'')+v.toFixed(1)+'%</span></div>'; }
+    html += '<div class="tracker-card' + (_selectedTicker === ev.ticker ? ' selected' : '') + '" data-ticker="' + ev.ticker + '" style="' + cardBorder + '" onclick="selectTrackerTicker(\'' + ev.ticker + '\')">'
+      // --- Header: TICKER [BULL/BEAR] [% Now] [Days Ago]     ★ date ---
+      + '<div class="tracker-card-head">'
+      + '<span class="tracker-ticker">' + ev.ticker
+      +   '<span class="tracker-pct ' + pctClass + '">' + pctSign + (ev.pct_gain||0).toFixed(1) + '%</span>'
+      +   typeTag
+      +   '<span class="tracker-price-inline"><span class="price-val">$' + (ev.avg_price||0).toFixed(2) + '</span><span class="price-arrow">\u2192</span><span class="price-val">$' + (ev.current_price||0).toFixed(2) + '</span></span>'
+      + '</span>'
+      + '<span class="tracker-date"><span class="tracker-days">' + ev.days_since + ' cal</span> ' + starBtn + ' ' + ev.date + '</span>'
+      + '</div>'
+      // --- Two-column body ---
+      + '<div class="tracker-card-body">'
+      // Left column: notional / sweep stats
+      + '<div class="tracker-col-left">'
+      + '<div class="tracker-stat-row"><span class="tracker-label">' + totalLabel + '</span><span class="tracker-value amber" ' + totalColor + '>' + fmt$(ev.total_notional) + '</span></div>'
+      + '<div class="tracker-stat-row"><span class="tracker-label">Sweeps</span><span class="tracker-value">' + ev.sweep_count + '</span></div>'
+      + '<div class="tracker-stat-row"><span class="tracker-label">Rank</span><span class="tracker-value amber">' + (ev.rank ? '#' + ev.rank + '/' + ev.total_days : '—') + '</span></div>'
+      + '</div>'
+      // Right column: returns grid (3×2: short periods top, long periods bottom)
+      + '<div class="tracker-col-right">'
+      + '<div class="tracker-returns-grid">'
+      + fmtRetCell('1W',ev.return_1w)
+      + fmtRetCell('1M',ev.return_1m)
+      + fmtRetCell('3M',ev.return_3m)
+      + fmtRetCell('6M',ev.return_6m)
+      + fmtRetCell('1Y',ev.return_1y)
+      + fmtRetCell('2Y',ev.return_2y)
+      + '</div>'
+      + '</div>'
+      + '</div>'
+      + '</div>';
+  });
+  body.innerHTML = html;
+}
+
+function selectTrackerTicker(ticker){
+  _selectedTicker = ticker;
+  highlightSelectedCard();
+  loadChart();
+  loadDetailTable();
+}
+
+// ====================================================================
+// LOADING INDICATORS
+// ====================================================================
+var _loadingCount = 0;
+function showLoading(){
+  _loadingCount++;
+  document.getElementById('headerSpinner').style.display = 'inline-block';
+  // Show overlay on active tracker body
+  ['trackerStocksBody','trackerFavsBody'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el && el.style.display !== 'none'){
+      // Remove any existing overlay first
+      var existing = el.querySelector('.tracker-loading-overlay');
+      if(!existing){
+        var overlay = document.createElement('div');
+        overlay.className = 'tracker-loading-overlay';
+        overlay.innerHTML = '<span class="spinner"></span> Loading tracker\u2026';
+        el.appendChild(overlay);
+      }
+    }
+  });
+}
+function hideLoading(){
+  _loadingCount = Math.max(0, _loadingCount - 1);
+  if(_loadingCount <= 0){
+    _loadingCount = 0;
+    document.getElementById('headerSpinner').style.display = 'none';
+    document.querySelectorAll('.tracker-loading-overlay').forEach(function(o){ o.remove(); });
+  }
+}
+
+// ====================================================================
+// LOAD DATA
+// ====================================================================
+function loadAll(){
+  showLoading();
+  loadStats();
+  loadTrackerPanels();
+  loadFavouritesTab();
+  // Refresh detail view only if a ticker is selected
+  if(_selectedTicker){
+    loadChart();
+    loadDetailTable();
+  }
+}
+
+function loadStats(){
+  var fp = buildFilterParams();
+  fetch('/api/sweeps/stats?' + fp.toString()).then(function(r){return r.json();}).then(function(d){
+    document.getElementById('statSweeps').textContent = fmtN(d.total_sweeps);
+    document.getElementById('statNotional').textContent = fmt$(d.total_notional);
+    document.getElementById('statTickers').textContent = fmtN(d.tickers_tracked);
+    document.getElementById('statCBs').textContent = fmtN(d.clusterbombs);
+    document.getElementById('statRare').textContent = fmtN(d.rare_clusterbombs);
+    document.getElementById('statMonster').textContent = fmtN(d.monster_sweeps || 0);
+    var rangeEl = document.getElementById('statRange');
+    if(rangeEl && d.date_range && d.date_range.from){
+      rangeEl.textContent = d.date_range.from + ' \u2192 ' + d.date_range.to;
+    }
+  }).catch(function(e){console.error('Stats error:',e);});
+}
+
+function drillDown(ticker, date){
+  // Show detail panel, hide events table + tab bar
+  document.getElementById('tabEvents').style.display = 'none';
+  document.getElementById('tabDetail').style.display = '';
+  document.getElementById('detailTabBar').style.display = 'none';
+  document.getElementById('drillDownLabel').textContent = ticker + ' \u2014 ' + date;
+  document.getElementById('detailBody').innerHTML = '<tr><td colspan="6" class="loading"><span class="spinner"></span> Loading trades...</td></tr>';
+
+  fetch('/api/sweeps/detail?ticker='+ticker+'&date='+date)
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var body = document.getElementById('detailBody');
+      if(!d.trades || d.trades.length === 0){
+        body.innerHTML = '<tr><td colspan="6" class="text-dim" style="text-align:center;padding:20px;">No trades for '+ticker+' on '+date+'</td></tr>';
+        return;
+      }
+      var html = '';
+      d.trades.forEach(function(t){
+        html += '<tr>'
+          + '<td class="mono">' + (t.time||'').slice(0,12) + '</td>'
+          + '<td class="mono text-right">$' + t.price.toFixed(2) + '</td>'
+          + '<td class="mono text-right">' + fmtN(t.size) + '</td>'
+          + '<td class="text-right"><span class="' + notionalClass(t.notional) + '">' + fmt$(t.notional) + '</span></td>'
+          + '<td class="mono text-dim">' + (t.trf_id||'—') + '</td>'
+          + '<td class="mono text-dim">' + (t.conditions||[]).join(',') + '</td>'
+          + '</tr>';
+      });
+      body.innerHTML = html;
+      showToast(d.trades.length + ' trades for ' + ticker + ' on ' + date);
+    })
+    .catch(function(e){
+      document.getElementById('detailBody').innerHTML = '<tr><td colspan="6" class="text-red">Error: '+e+'</td></tr>';
+    });
+
+  // Update chart to this ticker and scroll to the event date
+  if(_selectedTicker !== ticker){
+    _selectedTicker = ticker;
+    highlightSelectedCard();
+  }
+  _pendingFocusDate = date;
+  loadChart();
+}
+
+// ====================================================================
+// CHART (lightweight-charts candlestick + clusterbomb markers only)
+// ====================================================================
+function loadChart(){
+  var ticker = _selectedTicker;
+  if(!ticker) return;
+
+  document.getElementById('chartTickerLabel').textContent = ticker;
+  if(isChartMaximized) document.getElementById('overlayTickerLabel').textContent = ticker;
+
+  // Chart has its own date range based on currentChartDays — independent of the filter bar
+  var today = new Date();
+  var chartFrom = new Date(today);
+  chartFrom.setDate(chartFrom.getDate() - currentChartDays);
+  var from = currentChartDays > 0 ? chartFrom.toISOString().slice(0,10) : '';
+  var to = '';  // open-ended (up to latest available)
+
+  var cbMin = getCBThreshold();
+  var params = new URLSearchParams({ticker: ticker, timeframe: currentTimeframe, min_total: cbMin});
+  if(from) params.set('date_from', from);
+  if(to) params.set('date_to', to);
+
+  fetch('/api/sweeps/chart?' + params.toString())
+    .then(function(r){return r.json();})
+    .then(function(chartData){
+      _lastChartTicker = ticker;
+      _lastChartData = chartData;
+      var targetId = isChartMaximized ? 'chartOverlayContainer' : 'chartContainer';
+      renderChart(ticker, chartData, targetId);
+    })
+    .catch(function(e){
+      console.error('Chart load error:', e);
+      // Clear old chart so it doesn't show stale data from a previous ticker
+      _lastChartTicker = ticker;
+      _lastChartData = {};
+      var targetId = isChartMaximized ? 'chartOverlayContainer' : 'chartContainer';
+      renderChart(ticker, {}, targetId);
+    });
+}
+
+function renderChart(ticker, chartData, containerId){
+  containerId = containerId || 'chartContainer';
+  var container = document.getElementById(containerId);
+
+  // Clear previous
+  if(chartInstance){
+    chartInstance.remove();
+    chartInstance = null;
+  }
+  container.innerHTML = '';
+  // Re-inject cumulative legend overlay (cleared by innerHTML='')
+  var _cumLegDiv = document.createElement('div');
+  _cumLegDiv.className = 'cum-legend';
+  _cumLegDiv.id = 'cumLegend_' + containerId;
+  container.appendChild(_cumLegDiv);
+
+  var hasCandles = chartData.candles && chartData.candles.length > 0;
+
+  if(!hasCandles){
+    container.innerHTML = '<div class="chart-empty">No data for ' + ticker + '. Fetch sweep data first.</div>';
+    return;
+  }
+
+  // Resolve colour scheme
+  var cs = COLOR_SCHEMES[_chartColorScheme] || COLOR_SCHEMES['default'];
+  var upCol = cs.up;
+  var dnCol = cs.down;
+
+  chartInstance = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: container.clientHeight,
+    layout: {
+      background: {type:'solid', color:'#0c0c14'},
+      textColor: '#888',
+      fontSize: 11,
+    },
+    grid: {
+      vertLines: {visible: _gridVisible, color:'#1a1a26'},
+      horzLines: {visible: _gridVisible, color:'#1a1a26'},
+    },
+    crosshair: {
+      mode: _crosshairMode === 'magnet' ? LightweightCharts.CrosshairMode.Magnet : LightweightCharts.CrosshairMode.Normal,
+      vertLine: {color:'#f59e0b33', width:1, style:3},
+      horzLine: {color:'#f59e0b33', width:1, style:3},
+    },
+    timeScale: {
+      borderColor:'#1e1e2e',
+      timeVisible: (currentTimeframe === '1h' || currentTimeframe === '4h'),
+    },
+    rightPriceScale: {
+      borderColor:'#1e1e2e',
+      mode: _chartScale === 'log' ? 1 : 0,
+    },
+  });
+
+  // --- Price series (candle style driven by _candleStyle) ---
+  if(_candleStyle === 'line'){
+    candleSeries = chartInstance.addLineSeries({
+      color: upCol,
+      lineWidth: 2,
+      lastValueVisible: true,
+      priceLineVisible: false,
+    });
+    var lineData = chartData.candles.map(function(c){ return {time:c.time, value:c.close}; });
+    candleSeries.setData(lineData);
+  } else {
+    // Hollow or filled candlesticks
+    var isHollow = (_candleStyle === 'hollow');
+    candleSeries = chartInstance.addCandlestickSeries({
+      upColor: isHollow ? 'transparent' : upCol,
+      downColor: dnCol,
+      borderUpColor: upCol,
+      borderDownColor: dnCol,
+      wickUpColor: upCol,
+      wickDownColor: dnCol,
+    });
+    candleSeries.setData(chartData.candles);
+  }
+
+  // --- Volume Histogram (DP sweeps or stock vol — toggled via buttons) ---
+  _volSeries = chartInstance.addHistogramSeries({
+    priceFormat: {type:'custom', minMove:1, formatter: function(v){
+      return _volMode === 'sweeps' ? fmt$(v) : (v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v.toString());
+    }},
+    priceScaleId: 'vol',
+  });
+  chartInstance.priceScale('vol').applyOptions({
+    scaleMargins: {top:0.82, bottom:0},
+    visible: false,
+  });
+
+  // Build stock volume data (for toggle)
+  _volStockData = chartData.candles.map(function(c){
+    var up = c.close >= c.open;
+    return {time:c.time, value:c.volume||0, color: up ? upCol + '22' : dnCol + '22'};
+  });
+
+  // --- Clusterbomb-only markers ---
+  // Build a date->candle lookup. For hourly data, multiple candles share a day —
+  // we keep the last one (for positioning). For weekly data, we also build a
+  // week-level lookup so a CB on any day of the week finds the weekly candle.
+  var candleLookup = {};
+  var weekLookup = {};   // weekStartDate -> candle (for weekly timeframes)
+  chartData.candles.forEach(function(c){
+    var key = typeof c.time === 'number'
+      ? new Date(c.time * 1000).toISOString().slice(0,10)
+      : c.time;
+    candleLookup[key] = c;
+  });
+  // For weekly candles: map each day of each week to its weekly candle
+  if(currentTimeframe === '1W'){
+    chartData.candles.forEach(function(c){
+      var weekStart = typeof c.time === 'string' ? c.time : new Date(c.time*1000).toISOString().slice(0,10);
+      // Map Mon-Sun of this week to this candle
+      var ws = new Date(weekStart);
+      for(var di = 0; di < 7; di++){
+        var dd = new Date(ws);
+        dd.setDate(dd.getDate() + di);
+        var dk = dd.toISOString().slice(0,10);
+        weekLookup[dk] = c;
+      }
+    });
+  }
+
+  // Clusterbomb lookup
+  var cbDates = {};
+  if(chartData.clusterbombs){
+    chartData.clusterbombs.forEach(function(cb){
+      cbDates[cb.date] = cb;
+    });
+  }
+  console.log('[Chart] ' + ticker + ': ' + chartData.candles.length + ' candles, '
+    + (chartData.clusterbombs ? chartData.clusterbombs.length : 0) + ' CBs from API, '
+    + Object.keys(cbDates).length + ' unique CB dates');
+
+  // Aggregate sweeps by date for VWAP price positioning
+  var sweepByDate = {};
+  if(chartData.sweeps){
+    chartData.sweeps.forEach(function(s){
+      var d = s.date;
+      if(!sweepByDate[d]) sweepByDate[d] = {avgPrice:0, totalSize:0};
+      sweepByDate[d].avgPrice += s.price * s.size;
+      sweepByDate[d].totalSize += s.size;
+    });
+    Object.keys(sweepByDate).forEach(function(d){
+      var info = sweepByDate[d];
+      info.vwap = info.totalSize > 0 ? info.avgPrice / info.totalSize : 0;
+    });
+  }
+
+  // --- Populate DP sweep histogram bars (volSeries created earlier) ---
+  var sweepNotionalByDate = {};
+  if(chartData.sweeps){
+    chartData.sweeps.forEach(function(s){
+      var d = s.date;
+      if(!sweepNotionalByDate[d]) sweepNotionalByDate[d] = 0;
+      sweepNotionalByDate[d] += s.notional || 0;
+    });
+  }
+  var volData = [];
+  // For hourly timeframes, group notional onto the last candle of that date
+  var lastCandleByDate = {};
+  chartData.candles.forEach(function(c){
+    var dateKey = typeof c.time === 'number'
+      ? new Date(c.time * 1000).toISOString().slice(0,10)
+      : c.time;
+    lastCandleByDate[dateKey] = c.time;  // keep overwriting — last candle wins
+  });
+  Object.keys(sweepNotionalByDate).forEach(function(dateKey){
+    var notional = sweepNotionalByDate[dateKey];
+    if(!notional || notional <= 0) return;
+
+    // Find the chart time for this date
+    var timeVal = lastCandleByDate[dateKey];
+    // For weekly: check weekLookup
+    if(timeVal === undefined && weekLookup[dateKey]){
+      timeVal = weekLookup[dateKey].time;
+    }
+    if(timeVal === undefined) return;
+
+    // Colour by CB rank
+    var cb = cbDates[dateKey];
+    var barColor;
+    if(cb){
+      var r = cb.rank || 999;
+      var evType = cb.event_type || 'clusterbomb';
+      var isRare = evType === 'rare_sweep' || cb.is_rare;
+      var isMonster = cb.is_monster;
+      if(isMonster)    barColor = 'rgba(249, 115, 22, 0.75)';
+      else if(isRare)  barColor = 'rgba(167, 139, 250, 0.70)';
+      else if(r === 1) barColor = 'rgba(255, 215, 0, 0.85)';
+      else if(r === 2) barColor = 'rgba(251, 191, 36, 0.75)';
+      else if(r <= 5)  barColor = 'rgba(245, 178, 30, 0.65)';
+      else if(r <= 10) barColor = 'rgba(245, 158, 11, 0.55)';
+      else             barColor = 'rgba(245, 158, 11, 0.40)';
+    } else {
+      barColor = 'rgba(100, 116, 139, 0.30)';
+    }
+    volData.push({time: timeVal, value: notional, color: barColor, rank: cb ? (cb.rank||999) : 999});
+  });
+  // Deduplicate weekly: if multiple dates map to same weekly time, sum them
+  var volByTime = {};
+  volData.forEach(function(v){
+    var k = String(v.time);
+    if(!volByTime[k]) volByTime[k] = {time: v.time, value: 0, color: v.color, rank: v.rank};
+    volByTime[k].value += v.value;
+    // Keep the brightest colour + best rank (lowest rank CB wins)
+    if(v.rank < (volByTime[k].rank||999)){ volByTime[k].rank = v.rank; volByTime[k].color = v.color; }
+  });
+  var volFinal = Object.keys(volByTime).map(function(k){ return volByTime[k]; });
+  var sortFnTime = function(a,b){ return a.time < b.time ? -1 : a.time > b.time ? 1 : 0; };
+  volFinal.sort(sortFnTime);
+  _volSweepData = volFinal;
+
+  // Apply whichever mode is active
+  _applyVolData();
+
+  // Build markers — single circle at VWAP + combined text label below
+  // Series 1: Main circle bubble at VWAP price
+  var dotSeries = chartInstance.addLineSeries({
+    color: 'transparent', lineWidth: 0,
+    lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+  });
+  // Series 2: Text label below bubble (invisible shape, text only)
+  var textSeries = chartInstance.addLineSeries({
+    color: 'transparent', lineWidth: 0,
+    lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+  });
+
+  var dotData = [], dotMarkers = [];
+  var textData = [], textMarkers = [];
+  var cbDateKeys = Object.keys(cbDates).sort();
+
+  cbDateKeys.forEach(function(d){
+    var cb = cbDates[d];
+    var candle = candleLookup[d] || weekLookup[d];
+    var sweepInfo = sweepByDate[d];
+
+    // Skip if no candle found at all (can't position marker)
+    if(!candle && !sweepInfo) return;
+
+    // Use sweep VWAP if available, else candle midpoint, snapped to candle range
+    var markerPrice = 0;
+    if(sweepInfo && sweepInfo.vwap > 0){
+      markerPrice = sweepInfo.vwap;
+    } else if(candle){
+      markerPrice = (candle.high + candle.low) / 2;
+    }
+    if(candle){
+      markerPrice = Math.max(candle.low, Math.min(candle.high, markerPrice));
+    }
+
+    // Find the correct time value — must match chart's time type
+    var timeVal = d;
+    if(candle) timeVal = candle.time;
+    else if(typeof chartData.candles[0]?.time === 'number'){
+      var parts = d.split('-');
+      timeVal = Math.floor(new Date(+parts[0], +parts[1]-1, +parts[2], 12, 0, 0).getTime() / 1000);
+    }
+
+    var evType = cb.event_type || 'clusterbomb';
+    var isRare = evType === 'rare_sweep' || cb.is_rare;
+    var isMonsterEv = cb.is_monster;
+    var rank = cb.rank || 999;
+
+    // Dynamic bubble colour based on rank (gold for #1, uniform size otherwise)
+    var dotSize, dotColor, dotShape;
+    if(isMonsterEv){
+      dotSize = 8;
+      dotColor = 'rgba(249, 115, 22, 0.90)';   // bright orange
+      dotShape = 'circle';
+    } else if(isRare){
+      dotSize = 6;
+      dotColor = 'rgba(167, 139, 250, 0.75)';
+      dotShape = 'circle';
+    } else if(rank === 1){
+      dotSize = 9;
+      dotColor = 'rgba(255, 215, 0, 0.85)';    // gold — #1 day
+      dotShape = 'circle';
+    } else if(rank <= 3){
+      dotSize = 7;
+      dotColor = 'rgba(251, 191, 36, 0.75)';   // warm amber
+      dotShape = 'circle';
+    } else if(rank <= 10){
+      dotSize = 7;
+      dotColor = 'rgba(245, 158, 11, 0.70)';   // standard amber
+      dotShape = 'circle';
+    } else {
+      dotSize = 6;
+      dotColor = 'rgba(245, 158, 11, 0.60)';   // slightly faded
+      dotShape = 'circle';
+    }
+    var textColor = isMonsterEv ? '#fb923c' : isRare ? '#c4b5fd' : '#f59e0b';
+    // Tag for bubble filter: monster > rare > cb
+    var bubbleTag = isMonsterEv ? 'monster' : isRare ? 'rare' : 'cb';
+
+    // Main bubble at VWAP — dynamic size & shape
+    dotData.push({time: timeVal, value: markerPrice, _tag: bubbleTag});
+    dotMarkers.push({
+      time: timeVal, position: 'inBar', color: dotColor,
+      shape: dotShape, text: '', size: dotSize, _tag: bubbleTag,
+    });
+
+    // Combined text label below bubble: "$63.9M · ▸#1"
+    // Anchor at candle low (not VWAP) for more distance from the dot
+    var textAnchor = candle ? candle.low : markerPrice;
+    var label = fmt$(cb.total_notional);
+    if(cb.rank) label += '  ▸#' + cb.rank;
+    textData.push({time: timeVal, value: textAnchor, _tag: bubbleTag});
+    textMarkers.push({
+      time: timeVal, position: 'belowBar', color: textColor,
+      shape: 'circle', text: label, size: 0, _tag: bubbleTag,
+    });
+  });
+
+  console.log('[Chart] ' + dotMarkers.length + ' CB markers rendered (of ' + Object.keys(cbDates).length + ' CB dates)');
+
+  var sortFn = function(a,b){ return a.time < b.time ? -1 : a.time > b.time ? 1 : 0; };
+  dotData.sort(sortFn); dotMarkers.sort(sortFn);
+  textData.sort(sortFn); textMarkers.sort(sortFn);
+
+  // Store full unfiltered sets globally for bubble filter
+  _allDotData = dotData; _allDotMarkers = dotMarkers;
+  _allTextData = textData; _allTextMarkers = textMarkers;
+  _markerSeries = dotSeries;
+  _textMarkerSeries = textSeries;
+
+  // Apply current bubble filter (also sets _markerList for focus/highlight)
+  _applyBubbleFilter();
+
+  // --- Cumulative DP sweep notional line (toggled via Total Notional click) ---
+  _cumSeries = chartInstance.addLineSeries({
+    color: '#22c55e',
+    lineWidth: 2,
+    priceScaleId: 'cumulative',
+    lastValueVisible: true,
+    priceLineVisible: false,
+    crosshairMarkerVisible: true,
+    visible: _cumVisible,
+    priceFormat: {type:'custom', minMove:1, formatter: function(v){ return fmt$(v); }},
+  });
+  chartInstance.priceScale('cumulative').applyOptions({
+    scaleMargins: {top:0.03, bottom:0.18},  // Full price area — line runs bottom-left to top-right
+    visible: _cumVisible,
+    alignLabels: false,
+  });
+
+  if(chartData.cumulative_notional && chartData.cumulative_notional.length > 0){
+    // Build a date→cumulative value lookup for marker positioning
+    var cumLookup = {};
+    var cumData = [];
+    chartData.cumulative_notional.forEach(function(pt){
+      var candle = candleLookup[pt.date] || weekLookup[pt.date];
+      if(!candle) return;
+      var timeVal = candle.time;
+      // For weekly candles, multiple dates may map to same week — keep the latest cumulative value
+      cumLookup[timeVal] = pt.value;
+    });
+    // Deduplicate and sort
+    var cumTimes = Object.keys(cumLookup);
+    cumTimes.sort();
+    cumTimes.forEach(function(t){
+      // Detect if time is numeric (unix) or string (date)
+      var tv = isNaN(+t) ? t : +t;
+      cumData.push({time: tv, value: cumLookup[t]});
+    });
+    if(cumData.length > 0){
+      cumData.sort(sortFn);
+      _cumSeries.setData(cumData);
+    }
+  }
+
+  // --- 50-Day Simple Moving Average ---
+  _sma50Series = chartInstance.addLineSeries({
+    color: '#0097a7',
+    lineWidth: 1.5,
+    lineStyle: 0,
+    lastValueVisible: false,
+    priceLineVisible: false,
+    crosshairMarkerVisible: false,
+    visible: _sma50Visible,
+  });
+  if(chartData.candles && chartData.candles.length >= 50){
+    var sma50Data = _computeSMA(chartData.candles, 50);
+    if(sma50Data.length > 0){ sma50Data.sort(sortFn); _sma50Series.setData(sma50Data); }
+  }
+
+  // --- 200-Day Simple Moving Average ---
+  _sma200Series = chartInstance.addLineSeries({
+    color: '#b22833',
+    lineWidth: 1.5,
+    lineStyle: 0,
+    lastValueVisible: false,
+    priceLineVisible: false,
+    crosshairMarkerVisible: false,
+    visible: _sma200Visible,
+  });
+  if(chartData.candles && chartData.candles.length >= 200){
+    var sma200Data = _computeSMA(chartData.candles, 200);
+    if(sma200Data.length > 0){ sma200Data.sort(sortFn); _sma200Series.setData(sma200Data); }
+  }
+
+  // --- 30-Week Weighted Moving Average ---
+  _wmaSeries = chartInstance.addLineSeries({
+    color: '#f57c00',
+    lineWidth: 1.5,
+    lineStyle: 0,
+    lastValueVisible: false,
+    priceLineVisible: false,
+    crosshairMarkerVisible: false,
+    visible: _wmaVisible,
+  });
+  if(chartData.candles && chartData.candles.length >= 30){
+    var wmaData = _compute30WMA(chartData.candles);
+    if(wmaData.length > 0){
+      wmaData.sort(sortFn);
+      _wmaSeries.setData(wmaData);
+    }
+  }
+
+  // --- Crosshair legend (cumulative + volume on hover) ---
+  var cumLegendEl = document.getElementById('cumLegend_' + containerId);
+  chartInstance.subscribeCrosshairMove(function(param){
+    if(!cumLegendEl) return;
+    var parts = [];
+    if(_cumVisible && _cumSeries && param && param.time && param.seriesData.size > 0){
+      var cumVal = param.seriesData.get(_cumSeries);
+      if(cumVal && cumVal.value !== undefined) parts.push('Cumulative: ' + fmt$(cumVal.value));
+    }
+    if(_volSeries && param && param.time && param.seriesData.size > 0){
+      var volVal = param.seriesData.get(_volSeries);
+      if(volVal && volVal.value !== undefined && volVal.value > 0){
+        var volLabel = _volMode === 'sweeps' ? 'DP Vol: ' + fmt$(volVal.value) : 'Vol: ' + (volVal.value >= 1e6 ? (volVal.value/1e6).toFixed(1)+'M' : volVal.value >= 1e3 ? (volVal.value/1e3).toFixed(0)+'K' : volVal.value);
+        parts.push(volLabel);
+      }
+    }
+    if(parts.length > 0){
+      cumLegendEl.textContent = parts.join('  |  ');
+      cumLegendEl.style.display = 'block';
+    } else {
+      cumLegendEl.style.display = 'none';
+    }
+  });
+
+  // Handle resize
+  var ro = new ResizeObserver(function(){
+    if(chartInstance){
+      chartInstance.applyOptions({width:container.clientWidth, height:container.clientHeight});
+    }
+  });
+  ro.observe(container);
+
+  // If a pending focus date was set (e.g. from table click), scroll to it
+  if(_pendingFocusDate){
+    var fd = _pendingFocusDate;
+    _pendingFocusDate = null;
+    // Small delay to let chart finish layout
+    setTimeout(function(){ focusChartOnDate(fd); }, 120);
+  }
+}
+
+// ====================================================================
+// CHART RANGE + MAXIMIZE
+// ====================================================================
+function setChartRange(days, tf, btn){
+  currentChartDays = days;
+  currentTimeframe = tf;
+
+  // Update active state on whichever button group was clicked
+  var parent = btn.parentElement;
+  parent.querySelectorAll('.filter-toggle').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+
+  // Only reload the chart — don't touch the global filter bar
+  loadChart();
+}
+
+// ====================================================================
+// CUMULATIVE NOTIONAL TOGGLE
+// ====================================================================
+function toggleCumulative(btn){
+  _cumVisible = !_cumVisible;
+  if(_cumSeries){ _cumSeries.applyOptions({visible: _cumVisible}); }
+  if(chartInstance){ chartInstance.priceScale('cumulative').applyOptions({visible: _cumVisible}); }
+  if(btn) btn.classList.toggle('active', _cumVisible);
+  // Hide legend when cumulative is off
+  if(!_cumVisible){
+    document.querySelectorAll('.cum-legend').forEach(function(el){ el.style.display = 'none'; });
+  }
+}
+
+// VOLUME HISTOGRAM — mode toggle + top 10 filter
+// ====================================================================
+function _applyVolData(){
+  if(!_volSeries) return;
+  if(_volMode === 'stock'){
+    _volSeries.setData(_volStockData);
+  } else {
+    var data = _volSweepData;
+    if(_volTop10){
+      data = data.filter(function(v){ return v.rank && v.rank <= 10; });
+    }
+    _volSeries.setData(data);
+  }
+}
+
+// Vol cycle: DP Vol (sweeps) → Top 10 (sweeps filtered) → Stock Vol → DP Vol...
+var _volCycleStates = ['sweeps','top10','stock'];
+var _volCycleLabels = {'sweeps':'Sweep Volume','top10':'Top 10','stock':'Stock Volume'};
+var _volCycleIndex = 0; // default = sweeps
+
+function cycleVol(){
+  _volCycleIndex = (_volCycleIndex + 1) % _volCycleStates.length;
+  var state = _volCycleStates[_volCycleIndex];
+  _volMode = state === 'stock' ? 'stock' : 'sweeps';
+  _volTop10 = state === 'top10';
+  var btn = document.getElementById('btnVolCycle');
+  if(btn) btn.textContent = _volCycleLabels[state];
+  _applyVolData();
+}
+
+// BUBBLE FILTER — cycle which event types show markers on chart
+// ====================================================================
+var _bubbleCycle = ['all','monster','rare','cb','off'];
+var _bubbleLabels = {all:'Bubbles: All',monster:'Bubbles: Monsters',rare:'Bubbles: Rare',cb:'Bubbles: CBs',off:'Bubbles: Off'};
+var _bubbleColors = {all:'#f59e0b',monster:'#f97316',rare:'#a78bfa',cb:'#f59e0b',off:'#555'};
+
+function cycleBubbles(){
+  var idx = _bubbleCycle.indexOf(_bubbleFilter);
+  _bubbleFilter = _bubbleCycle[(idx + 1) % _bubbleCycle.length];
+  var btn = document.getElementById('btnBubbleCycle');
+  if(btn){
+    btn.textContent = _bubbleLabels[_bubbleFilter];
+    btn.style.color = _bubbleColors[_bubbleFilter];
+    btn.style.borderColor = _bubbleColors[_bubbleFilter] + '66';
+    btn.classList.toggle('active', _bubbleFilter !== 'off');
+  }
+  _applyBubbleFilter();
+}
+
+function _applyBubbleFilter(){
+  if(!_markerSeries || !_textMarkerSeries) return;
+  if(_bubbleFilter === 'off'){
+    _markerSeries.setData([]);
+    _markerSeries.setMarkers([]);
+    _textMarkerSeries.setData([]);
+    _textMarkerSeries.setMarkers([]);
+    _markerList = [];
+    return;
+  }
+  var fDot = [], fDotM = [], fTxt = [], fTxtM = [];
+  for(var i = 0; i < _allDotData.length; i++){
+    var tag = _allDotMarkers[i]._tag;
+    var pass = _bubbleFilter === 'all'
+      || (_bubbleFilter === 'monster' && tag === 'monster')
+      || (_bubbleFilter === 'rare' && tag === 'rare')
+      || (_bubbleFilter === 'cb' && tag === 'cb');
+    if(pass){
+      fDot.push(_allDotData[i]);
+      fDotM.push(_allDotMarkers[i]);
+      fTxt.push(_allTextData[i]);
+      fTxtM.push(_allTextMarkers[i]);
+    }
+  }
+  if(fDot.length > 0){
+    _markerSeries.setData(fDot);
+    _markerSeries.setMarkers(fDotM);
+  } else {
+    _markerSeries.setData([]);
+    _markerSeries.setMarkers([]);
+  }
+  if(fTxt.length > 0){
+    _textMarkerSeries.setData(fTxt);
+    _textMarkerSeries.setMarkers(fTxtM);
+  } else {
+    _textMarkerSeries.setData([]);
+    _textMarkerSeries.setMarkers([]);
+  }
+  _markerList = fDotM;
+}
+
+// 30-WEEK WEIGHTED MOVING AVERAGE
+// ====================================================================
+function toggle30WMA(btn){
+  _wmaVisible = !_wmaVisible;
+  if(btn) btn.classList.toggle('active', _wmaVisible);
+  if(_wmaSeries){
+    _wmaSeries.applyOptions({visible: _wmaVisible});
+  }
+}
+
+function _compute30WMA(candles){
+  // 30-period weighted moving average (weights: 1, 2, 3, ... 30)
+  var period = 30;
+  var result = [];
+  for(var i = period - 1; i < candles.length; i++){
+    var weightedSum = 0;
+    var weightTotal = 0;
+    for(var j = 0; j < period; j++){
+      var w = j + 1;
+      weightedSum += candles[i - period + 1 + j].close * w;
+      weightTotal += w;
+    }
+    result.push({time: candles[i].time, value: Math.round(weightedSum / weightTotal * 100) / 100});
+  }
+  return result;
+}
+
+function _computeSMA(candles, period){
+  var result = [];
+  for(var i = period - 1; i < candles.length; i++){
+    var sum = 0;
+    for(var j = 0; j < period; j++){
+      sum += candles[i - period + 1 + j].close;
+    }
+    result.push({time: candles[i].time, value: Math.round(sum / period * 100) / 100});
+  }
+  return result;
+}
+
+function toggle50SMA(btn){
+  _sma50Visible = !_sma50Visible;
+  if(btn) btn.classList.toggle('active', _sma50Visible);
+  if(_sma50Series){
+    _sma50Series.applyOptions({visible: _sma50Visible});
+  }
+}
+
+function toggle200SMA(btn){
+  _sma200Visible = !_sma200Visible;
+  if(btn) btn.classList.toggle('active', _sma200Visible);
+  if(_sma200Series){
+    _sma200Series.applyOptions({visible: _sma200Visible});
+  }
+}
+
+// GRIDLINES TOGGLE
+// ====================================================================
+function toggleGridlines(btn){
+  _gridVisible = !_gridVisible;
+  if(btn) btn.classList.toggle('active', _gridVisible);
+  if(chartInstance){
+    chartInstance.applyOptions({
+      grid: {
+        vertLines: {visible: _gridVisible, color: '#1e1e2e'},
+        horzLines: {visible: _gridVisible, color: '#1e1e2e'},
+      }
+    });
+  }
+}
+
+// CHART SETTINGS — scale, candle style, colours
+// ====================================================================
+// --- Cycle buttons: Scale, Style, Colours, Crosshair ---
+var _scaleOptions = ['linear','log'];
+var _styleOptions = ['hollow','filled','line'];
+var _colorOptions = ['default','blue-red','amber'];
+var _colorLabels  = {'default':'🟢🔴','blue-red':'🔵🔴','amber':'🟡🟣'};
+var _crosshairMode = localStorage.getItem('sweep_crosshairMode') || 'normal';
+
+function cycleScale(){
+  var idx = (_scaleOptions.indexOf(_chartScale) + 1) % _scaleOptions.length;
+  _chartScale = _scaleOptions[idx];
+  localStorage.setItem('sweep_chartScale', _chartScale);
+  var btn = document.getElementById('btnScaleCycle');
+  if(btn) btn.textContent = _chartScale === 'log' ? 'Log' : 'Linear';
+  if(chartInstance){
+    chartInstance.priceScale('right').applyOptions({ mode: _chartScale === 'log' ? 1 : 0 });
+  }
+}
+
+function cycleStyle(){
+  var idx = (_styleOptions.indexOf(_candleStyle) + 1) % _styleOptions.length;
+  _candleStyle = _styleOptions[idx];
+  localStorage.setItem('sweep_candleStyle', _candleStyle);
+  var btn = document.getElementById('btnStyleCycle');
+  if(btn) btn.textContent = _candleStyle.charAt(0).toUpperCase() + _candleStyle.slice(1);
+  if(_lastChartTicker && _lastChartData){
+    var targetId = isChartMaximized ? 'chartOverlayContainer' : 'chartContainer';
+    renderChart(_lastChartTicker, _lastChartData, targetId);
+  }
+}
+
+function cycleColors(){
+  var idx = (_colorOptions.indexOf(_chartColorScheme) + 1) % _colorOptions.length;
+  _chartColorScheme = _colorOptions[idx];
+  localStorage.setItem('sweep_chartColors', _chartColorScheme);
+  var btn = document.getElementById('btnColorCycle');
+  if(btn) btn.textContent = _colorLabels[_chartColorScheme];
+  if(_lastChartTicker && _lastChartData){
+    var targetId = isChartMaximized ? 'chartOverlayContainer' : 'chartContainer';
+    renderChart(_lastChartTicker, _lastChartData, targetId);
+  }
+}
+
+function cycleCrosshair(){
+  _crosshairMode = _crosshairMode === 'normal' ? 'magnet' : 'normal';
+  localStorage.setItem('sweep_crosshairMode', _crosshairMode);
+  var btn = document.getElementById('btnCrosshairCycle');
+  if(btn){
+    btn.textContent = _crosshairMode === 'magnet' ? 'Magnet' : 'Crosshair';
+    btn.classList.toggle('active', _crosshairMode === 'magnet');
+  }
+  if(chartInstance){
+    chartInstance.applyOptions({
+      crosshair: { mode: _crosshairMode === 'magnet' ? LightweightCharts.CrosshairMode.Magnet : LightweightCharts.CrosshairMode.Normal }
+    });
+  }
+}
+
+// Restore cycle button labels on page load
+(function(){
+  var sb = document.getElementById('btnScaleCycle');
+  if(sb) sb.textContent = _chartScale === 'log' ? 'Log' : 'Linear';
+  var stb = document.getElementById('btnStyleCycle');
+  if(stb) stb.textContent = _candleStyle.charAt(0).toUpperCase() + _candleStyle.slice(1);
+  var cb = document.getElementById('btnColorCycle');
+  if(cb) cb.textContent = _colorLabels[_chartColorScheme] || '🟢🔴';
+  var xb = document.getElementById('btnCrosshairCycle');
+  if(xb){
+    xb.textContent = _crosshairMode === 'magnet' ? 'Magnet' : 'Crosshair';
+    if(_crosshairMode === 'magnet') xb.classList.add('active');
+  }
+})();
+
+function saveChartPNG(){
+  if(!chartInstance){ showToast('No chart to save'); return; }
+  // Use Lightweight Charts built-in takeScreenshot() — correct DPI & compositing
+  var screenshotCanvas = chartInstance.takeScreenshot();
+  screenshotCanvas.toBlob(function(blob){
+    if(!blob){ showToast('Failed to capture chart'); return; }
+    navigator.clipboard.write([
+      new ClipboardItem({'image/png': blob})
+    ]).then(function(){
+      showToast('Chart copied to clipboard');
+    }).catch(function(err){
+      // Fallback: download if clipboard fails
+      var link = document.createElement('a');
+      var ticker = _lastChartTicker || 'chart';
+      var date = new Date().toISOString().slice(0,10);
+      link.download = ticker + '_sweeps_' + date + '.png';
+      link.href = screenshotCanvas.toDataURL('image/png');
+      link.click();
+      showToast('Clipboard failed — saved as file instead');
+    });
+  }, 'image/png');
+}
+
+function copyPineScript(){
+  // Universal multi-ticker indicator — works on any chart
+  showToast('Generating universal Pine Script...');
+  fetch('/api/sweeps/pinescript-all')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok){ showToast('Error: ' + (d.error || 'unknown')); return; }
+      navigator.clipboard.writeText(d.script).then(function(){
+        var s = d.stats;
+        var kb = (d.script_size / 1024).toFixed(1);
+        showToast(s.tickers + ' tickers copied (' + s.clusterbombs + ' CB, ' + s.monsters + ' M, ' + s.rare + ' R) — ' + kb + 'KB');
+      }).catch(function(){
+        var w = window.open('', '_blank');
+        w.document.write('<pre style="background:#1a1a2e;color:#d0d0d8;padding:20px;font-size:12px;white-space:pre-wrap;">'
+          + d.script.replace(/</g,'&lt;') + '</pre>');
+        showToast('Clipboard failed — opened in new tab');
+      });
+    })
+    .catch(function(e){ showToast('Failed: ' + e.message); });
+}
+
+function toggleChartMaximize(){
+  var overlay = document.getElementById('chartOverlay');
+  if(!isChartMaximized){
+    // Maximize
+    overlay.classList.add('visible');
+    document.getElementById('overlayTickerLabel').textContent =
+      document.getElementById('chartTickerLabel').textContent;
+    isChartMaximized = true;
+    if(_lastChartTicker && _lastChartData){
+      renderChart(_lastChartTicker, _lastChartData, 'chartOverlayContainer');
+    }
+  } else {
+    // Restore
+    overlay.classList.remove('visible');
+    isChartMaximized = false;
+    if(_lastChartTicker && _lastChartData){
+      renderChart(_lastChartTicker, _lastChartData, 'chartContainer');
+    }
+  }
+}
+
+// ESC key closes fullscreen or settings panel
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape'){
+    var settingsOpen = document.getElementById('settingsPanel').classList.contains('visible');
+    if(settingsOpen){
+      toggleSettingsPanel();
+    } else if(isChartMaximized){
+      toggleChartMaximize();
+    }
+  }
+});
+
+// ====================================================================
+// CHART FOCUS — scroll to date & highlight marker
+// ====================================================================
+function focusChartOnDate(dateStr){
+  if(!chartInstance) return;
+
+  // Highlight the clicked row in the events table
+  var eventsBody = document.getElementById('eventsBody');
+  if(eventsBody){
+    eventsBody.querySelectorAll('tr.row-focused').forEach(function(r){ r.classList.remove('row-focused'); });
+    eventsBody.querySelectorAll('tr').forEach(function(r){
+      // Match by first cell (date column)
+      var firstCell = r.querySelector('td');
+      if(firstCell && firstCell.textContent.trim() === dateStr) r.classList.add('row-focused');
+    });
+  }
+
+  // Build candle time lookup from cached data
+  var candleTimeLookup = {};
+  if(_lastChartData && _lastChartData.candles){
+    _lastChartData.candles.forEach(function(c){
+      var key = typeof c.time === 'number'
+        ? new Date(c.time * 1000).toISOString().slice(0,10)
+        : c.time;
+      candleTimeLookup[key] = c.time;
+    });
+  }
+
+  var targetTime = candleTimeLookup[dateStr];
+  if(!targetTime) return;
+
+  // Center chart around the target date
+  var ts = chartInstance.timeScale();
+  if(typeof targetTime === 'number'){
+    // Unix timestamps — pad 15 trading days (~21 calendar days) each side
+    var pad = 21 * 86400;
+    ts.setVisibleRange({from: targetTime - pad, to: targetTime + pad});
+  } else {
+    // String dates
+    var dt = new Date(dateStr);
+    var fromDt = new Date(dt); fromDt.setDate(fromDt.getDate() - 21);
+    var toDt = new Date(dt); toDt.setDate(toDt.getDate() + 21);
+    ts.setVisibleRange({
+      from: fromDt.toISOString().slice(0,10),
+      to: toDt.toISOString().slice(0,10)
+    });
+  }
+
+  // Find the matching marker and highlight it
+  if(_markerList && _markerList.length > 0){
+    var targetIdx = -1;
+    _markerList.forEach(function(m, i){
+      var mDate = typeof m.time === 'number'
+        ? new Date(m.time * 1000).toISOString().slice(0,10)
+        : m.time;
+      if(mDate === dateStr) targetIdx = i;
+    });
+
+    if(targetIdx >= 0 && _markerSeries){
+      // Save originals
+      var origColor = _markerList[targetIdx].color;
+      var origSize  = _markerList[targetIdx].size;
+
+      // Flash: bright white, larger
+      _markerList[targetIdx].color = '#ffffff';
+      _markerList[targetIdx].size  = 5;
+      _markerSeries.setMarkers(_markerList.slice());
+
+      // Clear any previous highlight timer
+      if(_highlightTimer) clearTimeout(_highlightTimer);
+
+      // Fade back after 2s
+      _highlightTimer = setTimeout(function(){
+        if(_markerList[targetIdx]){
+          _markerList[targetIdx].color = origColor;
+          _markerList[targetIdx].size  = origSize;
+          _markerSeries.setMarkers(_markerList.slice());
+        }
+        _highlightTimer = null;
+      }, 2000);
+    }
+  }
+}
+
+// ====================================================================
+// FETCH / DETECT ACTIONS
+// ====================================================================
+function cancelFetch(){
+  fetch('/api/sweeps/fetch-cancel', {method:'POST'})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      showToast('Cancel signal sent — fetch will stop shortly.');
+      var btn = document.getElementById('btnCancelFetch');
+      if(btn){ btn.disabled = true; btn.textContent = 'Cancelling...'; }
+    })
+    .catch(function(e){ showToast('Cancel failed: '+e); });
+}
+
+function fetchSweeps(){
+  var from = document.getElementById('dateFrom').value;
+  var to = document.getElementById('dateTo').value;
+
+  if(!from){
+    showToast('Set a start date');
+    return;
+  }
+
+  var tickers = getSelectedTickers();
+  if(tickers.length === 0){
+    showToast('Enter ticker(s) or select a watchlist');
+    return;
+  }
+
+  var startDt = new Date(from);
+  var endDt = to ? new Date(to) : new Date();
+  var tradingDays = 0;
+  var d = new Date(startDt);
+  while(d <= endDt){ if(d.getDay()!==0 && d.getDay()!==6) tradingDays++; d.setDate(d.getDate()+1); }
+  var est = estimateFetchTime(tickers, tradingDays);
+
+  document.getElementById('btnFetch').disabled = true;
+  document.getElementById('fetchProgress').style.display = '';
+  document.getElementById('fetchTitle').textContent = 'Fetching sweep data for ' + tickers.length + ' ticker(s)...';
+  document.getElementById('fetchFill').style.width = '10%';
+  document.getElementById('fetchLog').textContent = tickers.length + ' tickers \u00d7 ' + tradingDays + ' days. Est: ' + est + '\n';
+
+  fetch('/api/sweeps/fetch', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({tickers:tickers, start_date:from, end_date:to})
+  })
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.ok){
+      document.getElementById('fetchFill').style.width = '5%';
+      document.getElementById('fetchLog').textContent = d.message + '\n';
+      showToast(d.message);
+      pollFetchProgress();
+    } else {
+      showToast('Error: ' + d.error);
+      document.getElementById('btnFetch').disabled = false;
+      document.getElementById('fetchProgress').style.display = 'none';
+    }
+  })
+  .catch(function(e){
+    showToast('Fetch failed: '+e);
+    document.getElementById('btnFetch').disabled = false;
+    document.getElementById('fetchProgress').style.display = 'none';
+  });
+}
+
+var _pollTimer = null;
+function pollFetchProgress(){
+  _pollTimer = setTimeout(function(){
+    fetch('/api/sweeps/fetch-progress').then(function(r){return r.json();}).then(function(p){
+      var pct = p.total > 0 ? Math.round((p.completed / p.total) * 100) : 0;
+      var phase = p.phase || '';
+
+      // Update progress bar
+      document.getElementById('fetchFill').style.width = Math.min(pct, 99) + '%';
+
+      // Update title with phase info
+      if(phase === 'detecting'){
+        document.getElementById('fetchTitle').textContent = 'Detecting clusterbombs & rare sweeps...';
+        document.getElementById('fetchFill').style.width = '95%';
+      } else if(phase === 'fetching' && p.total > 0){
+        document.getElementById('fetchTitle').textContent =
+          'Fetching: ' + p.completed + ' / ' + p.total + ' (' + pct + '%)  —  ' +
+          p.sweeps_found + ' sweeps  ' + p.rate + '/s';
+      }
+
+      // Update status line
+      if(p.current_ticker){
+        document.getElementById('fetchStatus').textContent = p.current_ticker + ' ' + p.current_date;
+      }
+
+      // Show only the latest log line (single row)
+      var logEl = document.getElementById('fetchLog');
+      if(p.log_lines && p.log_lines.length > 0){
+        logEl.textContent = p.log_lines[p.log_lines.length - 1];
+      }
+
+      // Continue polling or finish
+      if(phase === 'done' || phase === 'error' || phase === 'cancelled'){
+        fetchDone(phase);
+      } else {
+        pollFetchProgress();
+      }
+    }).catch(function(){
+      // Retry on network error
+      pollFetchProgress();
+    });
+  }, 1500);
+}
+
+function fetchDone(phase){
+  _pollTimer = null;
+  document.getElementById('btnFetch').disabled = false;
+  document.getElementById('fetchFill').style.width = '100%';
+  // Reset cancel button
+  var cancelBtn = document.getElementById('btnCancelFetch');
+  if(cancelBtn){ cancelBtn.disabled = false; cancelBtn.innerHTML = '&#x2715; Cancel'; }
+
+  if(phase === 'error'){
+    document.getElementById('fetchTitle').textContent = 'Fetch encountered an error';
+  } else if(phase === 'cancelled'){
+    document.getElementById('fetchTitle').textContent = 'Fetch cancelled';
+  } else {
+    document.getElementById('fetchTitle').textContent = 'Complete!';
+  }
+  setTimeout(function(){
+    document.getElementById('fetchProgress').style.display = 'none';
+  }, 3000);
+  loadAll();
+}
+
+// detectClusterbombs removed — Fetch auto-detects after fetching sweep data
+
+// ====================================================================
+// KEYBOARD SHORTCUT
+// ====================================================================
+document.getElementById('tickerInput').addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){
+    var val = this.value.trim().toUpperCase();
+    // If single ticker typed, also select it for chart + detail
+    if(val && val.indexOf(',') === -1){
+      _selectedTicker = val;
+    }
+    loadAll();
+  }
+});
+
+// ====================================================================
+// WATCHLIST LOADING
+// ====================================================================
+var watchlistData = {};
+var watchlistGroups = {};  // name → [{name, tickers}]
+function loadWatchlists(){
+  fetch('/api/watchlists').then(function(r){return r.json();}).then(function(data){
+    var sel = document.getElementById('watchlistSelect');
+    data.forEach(function(wl){
+      watchlistData[wl.name] = [];
+      watchlistGroups[wl.name] = [];
+      wl.groups.forEach(function(g){
+        var groupTickers = [];
+        g.tickers.forEach(function(t){
+          if(watchlistData[wl.name].indexOf(t.display) === -1){
+            watchlistData[wl.name].push(t.display);
+          }
+          if(groupTickers.indexOf(t.display) === -1){
+            groupTickers.push(t.display);
+          }
+        });
+        watchlistGroups[wl.name].push({name: g.name, tickers: groupTickers});
+      });
+      var opt = document.createElement('option');
+      opt.value = wl.name;
+      opt.textContent = wl.name + ' (' + watchlistData[wl.name].length + ')';
+      sel.appendChild(opt);
+    });
+    // Default to SP500 if available
+    if(watchlistData['SP500'] && !sel.value){
+      sel.value = 'SP500';
+      updateSectorDropdown('SP500');
+    }
+  });
+}
+
+function updateSectorDropdown(wlName){
+  var sel = document.getElementById('sectorSelect');
+  // Clear all except the first "— all —" option
+  while(sel.options.length > 1) sel.remove(1);
+  sel.value = '';
+
+  var groups = wlName ? watchlistGroups[wlName] : null;
+  if(groups && groups.length > 0){
+    // Use watchlist groups
+    _sectorData = groups.map(function(g){ return {name: g.name, tickers: g.tickers, count: g.tickers.length}; });
+    _sectorData.forEach(function(s){
+      var opt = document.createElement('option');
+      opt.value = s.name;
+      opt.textContent = s.name + ' (' + s.count + ')';
+      sel.appendChild(opt);
+    });
+  } else {
+    // Fall back to hardcoded sector groups from API
+    loadSectors();
+  }
+}
+
+function getSelectedTickers(){
+  // Ticker input takes priority — if user typed something, use that
+  var raw = document.getElementById('tickerInput').value.trim().toUpperCase();
+  if(raw) return raw.split(',').map(function(t){return t.trim();}).filter(Boolean);
+  // Otherwise fall back to watchlist dropdown
+  var wl = document.getElementById('watchlistSelect').value;
+  if(wl && watchlistData[wl]) return watchlistData[wl];
+  return [];
+}
+
+function estimateFetchTime(tickers, days){
+  var tickerDays = tickers.length * days;
+  var totalCalls = tickerDays * 5;
+  var seconds = totalCalls * 0.8;
+  if(seconds < 60) return Math.ceil(seconds) + 's';
+  if(seconds < 3600) return Math.ceil(seconds/60) + ' min';
+  return (seconds/3600).toFixed(1) + ' hours';
+}
+
+// ====================================================================
+// API ACCESS CHECK
+// ====================================================================
+function checkApiAccess(){
+  fetch('/api/sweeps/api-check').then(function(r){return r.json();}).then(function(d){
+    if(!d.has_access){
+      document.getElementById('apiBanner').style.display = '';
+      document.getElementById('apiBannerMsg').textContent = d.message;
+      document.getElementById('btnFetch').title = d.message;
+    }
+  }).catch(function(){});
+}
+
+// ====================================================================
+// SETTINGS PANEL
+// ====================================================================
+function toggleSettingsPanel(){
+  var panel = document.getElementById('settingsPanel');
+  var overlay = document.getElementById('settingsOverlay');
+  var isOpen = panel.classList.contains('visible');
+  if(isOpen){
+    panel.classList.remove('visible');
+    overlay.classList.remove('visible');
+  } else {
+    panel.classList.add('visible');
+    overlay.classList.add('visible');
+    loadDetectionConfig();
+    loadSettingsDbInfo();
+  }
+}
+
+function loadDetectionConfig(){
+  fetch('/api/sweeps/detection-config')
+    .then(function(r){return r.json();})
+    .then(function(cfg){
+      var s = cfg.stock || {};
+      document.getElementById('settMinSweepsStock').value = s.min_sweeps || 3;
+      document.getElementById('settMinNotionalStock').value = fmtSettingVal(s.min_notional || 1000000);
+      document.getElementById('settMinTotalStock').value = fmtSettingVal(s.min_total || 10000000);
+      document.getElementById('settRarityDaysStock').value = s.rarity_days || 60;
+      if(document.getElementById('settRareNotionalStock'))
+        document.getElementById('settRareNotionalStock').value = fmtSettingVal(s.rare_min_notional || 1000000);
+      if(document.getElementById('settMonsterNotionalStock'))
+        document.getElementById('settMonsterNotionalStock').value = fmtSettingVal(s.monster_min_notional || 100000000);
+    })
+    .catch(function(e){ console.error('Load detection config error:', e); });
+}
+
+function fmtSettingVal(n){
+  if(n >= 1e9) return (n/1e9) + 'B';
+  if(n >= 1e6) return (n/1e6) + 'M';
+  if(n >= 1e3) return (n/1e3) + 'K';
+  return n.toString();
+}
+
+function getDetectionParams(){
+  return {
+    stock: {
+      min_sweeps: parseInt(document.getElementById('settMinSweepsStock').value) || 3,
+      min_notional: parseMinInput(document.getElementById('settMinNotionalStock').value) || 1000000,
+      min_total: parseMinInput(document.getElementById('settMinTotalStock').value) || 10000000,
+      rarity_days: parseInt(document.getElementById('settRarityDaysStock').value) || 60,
+      rare_min_notional: parseMinInput(document.getElementById('settRareNotionalStock').value) || 1000000,
+      monster_min_notional: parseMinInput(document.getElementById('settMonsterNotionalStock').value) || 100000000,
+    },
+  };
+}
+
+function redetectClusterbombs(){
+  var btn = document.getElementById('btnRedetect');
+  var result = document.getElementById('redetectResult');
+  var params = getDetectionParams();
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Re-detecting...';
+  result.className = 'settings-result';
+  result.style.display = 'none';
+
+  fetch('/api/sweeps/redetect', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(params)
+  })
+  .then(function(r){return r.json();})
+  .then(function(d){
+    btn.disabled = false;
+    btn.innerHTML = '&#x1F50D; Re-detect All';
+    if(d.ok){
+      result.className = 'settings-result success';
+      result.textContent = d.message;
+      result.style.display = 'block';
+      showToast(d.message);
+      loadAll();
+    } else {
+      result.className = 'settings-result error';
+      result.textContent = 'Error: ' + (d.error || 'Unknown');
+      result.style.display = 'block';
+    }
+  })
+  .catch(function(e){
+    btn.disabled = false;
+    btn.innerHTML = '&#x1F50D; Re-detect All';
+    result.className = 'settings-result error';
+    result.textContent = 'Error: ' + e;
+    result.style.display = 'block';
+  });
+}
+
+function saveDetectionConfig(){
+  var params = getDetectionParams();
+  fetch('/api/sweeps/detection-config', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(params)
+  })
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.ok){
+      showToast('Detection defaults saved');
+    } else {
+      showToast('Error saving config: ' + (d.error || 'Unknown'));
+    }
+  })
+  .catch(function(e){ showToast('Error: ' + e); });
+}
+
+function loadSettingsDbInfo(){
+  fetch('/api/sweeps/stats')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var info = document.getElementById('settingsDbInfo');
+      var html = '';
+      html += '<div>Sweeps: <strong style="color:#ccc;">' + fmtN(d.total_sweeps) + '</strong></div>';
+      html += '<div>Notional: <strong style="color:#22c55e;">' + fmt$(d.total_notional) + '</strong></div>';
+      html += '<div>Tickers: <strong style="color:#ccc;">' + fmtN(d.tickers_tracked) + '</strong></div>';
+      if(d.date_range && d.date_range.from){
+        html += '<div>Date Range: <strong style="color:#ccc;">' + d.date_range.from + ' \u2192 ' + d.date_range.to + '</strong></div>';
+      }
+      info.innerHTML = html;
+    })
+    .catch(function(e){
+      document.getElementById('settingsDbInfo').textContent = 'Error loading stats';
+    });
+}
+
+// ====================================================================
+// SECTOR FILTER
+// ====================================================================
+var _sectorData = [];
+function loadSectors(){
+  fetch('/api/sweeps/sectors').then(function(r){return r.json();}).then(function(sectors){
+    _sectorData = sectors;
+    var sel = document.getElementById('sectorSelect');
+    // Clear existing (except "— all —") before repopulating
+    while(sel.options.length > 1) sel.remove(1);
+    sectors.forEach(function(s){
+      var opt = document.createElement('option');
+      opt.value = s.name;
+      opt.textContent = s.name + ' (' + s.count + ')';
+      sel.appendChild(opt);
+    });
+  }).catch(function(e){ console.error('Sector load error:', e); });
+}
+function applySectorFilter(){
+  var name = document.getElementById('sectorSelect').value;
+  if(!name) return;
+  var sec = _sectorData.find(function(s){ return s.name === name; });
+  if(sec){
+    document.getElementById('tickerInput').value = sec.tickers.join(',');
+    document.getElementById('watchlistSelect').value = '';
+    loadAll();
+  }
+}
+
+// ====================================================================
+// INIT
+// ====================================================================
+
+// Measure header heights for sticky offsets + page-layout calc
+(function setStickyOffsets(){
+  var r1 = document.querySelector('.header-row1');
+  var r2 = document.querySelector('.header-row2');
+  if(r1){
+    var h1 = r1.offsetHeight;
+    document.documentElement.style.setProperty('--row1-h', h1 + 'px');
+    var h2 = r2 ? r2.offsetHeight : 0;
+    document.documentElement.style.setProperty('--layout-top', (h1 + h2) + 'px');
+  }
+})();
+
+checkApiAccess();
+loadWatchlists();
+loadSectors();
+
+// Default period: YTD, To = today
+(function(){
+  var now = new Date();
+  document.getElementById('dateFrom').value = now.getFullYear() + '-01-01';
+  document.getElementById('dateTo').value = now.getFullYear() + '-' + pad2(now.getMonth()+1) + '-' + pad2(now.getDate());
+})();
+
+// Cumulative toggle is now via the "Cumulative $" button next to chart subtitle
+
+// Wire filter changes to reload
+document.getElementById('watchlistSelect').addEventListener('change', function(){
+  document.getElementById('tickerInput').value = '';
+  updateSectorDropdown(this.value);
+  loadAll();
+});
+document.getElementById('dateFrom').addEventListener('change', function(){
+  // Clear quick-select active state when user manually edits date
+  document.querySelectorAll('#periodBtns .filter-toggle').forEach(function(b){b.classList.remove('active');});
+  loadAll();
+});
+document.getElementById('dateTo').addEventListener('change', function(){
+  document.querySelectorAll('#periodBtns .filter-toggle').forEach(function(b){b.classList.remove('active');});
+  loadAll();
+});
+
+loadFilterProfiles();
+loadAll();
+</script>
+</body>
+</html>

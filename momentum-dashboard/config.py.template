@@ -1,0 +1,10 @@
+"""
+Configuration for the Momentum Dashboard
+Copy this to config.py and set your API key.
+"""
+
+import os
+
+# === API CONFIGURATION ===
+MASSIVE_API_KEY = os.environ.get("MASSIVE_API_KEY", "YOUR_API_KEY_HERE")
+MASSIVE_BASE_URL = "https://api.massive.com/v2"

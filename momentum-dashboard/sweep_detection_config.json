@@ -1,0 +1,10 @@
+{
+  "stock": {
+    "min_sweeps": 3,
+    "min_notional": 3000000,
+    "min_total": 38000000,
+    "rarity_days": 60,
+    "rare_min_notional": 1000000,
+    "monster_min_notional": 100000000
+  }
+}

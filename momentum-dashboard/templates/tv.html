@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TBD Technologies — TradingView Chart</title>
+<link rel="stylesheet" href="/static/header.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-serif;font-size:13px;}
+::-webkit-scrollbar{width:8px;height:8px;}
+::-webkit-scrollbar-track{background:#0a0a10;}
+::-webkit-scrollbar-thumb{background:#2a2a3a;border-radius:4px;}
+::-webkit-scrollbar-thumb:hover{background:#3a3a4a;}
+*{scrollbar-width:thin;scrollbar-color:#2a2a3a #0a0a10;}
+
+#tv_chart_container{
+  height:calc(100vh - 48px);
+  width:100%;
+  background:#0c0c14;
+}
+
+/* Setup instructions (shown if library missing) */
+.tv-setup{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:calc(100vh - 48px);color:#888;text-align:center;padding:40px;
+}
+.tv-setup h2{color:#f59e0b;font-size:22px;margin-bottom:16px;}
+.tv-setup p{font-size:13px;line-height:1.8;max-width:600px;margin-bottom:12px;}
+.tv-setup code{
+  background:#1a1a2e;color:#f59e0b;padding:2px 8px;border-radius:4px;
+  font-family:'Consolas',monospace;font-size:12px;
+}
+.tv-setup .step{
+  background:#0f0f1a;border:1px solid #1e293b;border-radius:8px;
+  padding:16px 24px;margin:8px 0;width:100%;max-width:620px;text-align:left;
+}
+.tv-setup .step-num{color:#f59e0b;font-weight:700;margin-right:8px;}
+.tv-setup a{color:#60a5fa;text-decoration:none;}
+.tv-setup a:hover{text-decoration:underline;}
+</style>
+</head>
+<body>
+
+<div id="tv_chart_container"></div>
+
+<!-- TradingView library + UDF datafeed bundle -->
+<script src="/static/charting_library/charting_library.standalone.js" onerror="window._tvLibMissing=true"></script>
+<script src="/static/charting_library/datafeeds/udf/dist/bundle.js" onerror="window._tvLibMissing=true"></script>
+
+<script>
+(function(){
+  var container = document.getElementById('tv_chart_container');
+
+  // If library failed to load, show setup instructions
+  if(window._tvLibMissing || typeof TradingView === 'undefined'){
+    container.innerHTML = '<div class="tv-setup">'
+      + '<h2>📈 TradingView Advanced Charts</h2>'
+      + '<p>The TradingView charting library needs to be installed before this page will work. '
+      + 'The backend data feed is already configured and ready.</p>'
+      + '<div class="step"><span class="step-num">1.</span> Request access to the TradingView charting library at '
+      + '<a href="https://www.tradingview.com/advanced-charts/" target="_blank">tradingview.com/advanced-charts</a></div>'
+      + '<div class="step"><span class="step-num">2.</span> Clone or download the <code>charting_library</code> package from their GitHub repo</div>'
+      + '<div class="step"><span class="step-num">3.</span> Copy the <code>charting_library/</code> folder into:<br>'
+      + '<code style="margin-top:6px;display:inline-block;">momentum-dashboard/static/charting_library/</code></div>'
+      + '<div class="step"><span class="step-num">4.</span> Ensure these files exist:<br>'
+      + '<code style="margin-top:6px;display:inline-block;">static/charting_library/charting_library.standalone.js</code><br>'
+      + '<code style="margin-top:4px;display:inline-block;">static/charting_library/datafeeds/udf/dist/bundle.js</code></div>'
+      + '<div class="step"><span class="step-num">5.</span> Reload this page — the chart will connect to your local sweep data automatically</div>'
+      + '<p style="margin-top:16px;color:#555;font-size:11px;">The UDF data feed serves OHLCV candles, sweep marks (clusterbombs, monsters, rare sweeps), '
+      + 'and timescale marks from your local SQLite database.</p>'
+      + '</div>';
+    return;
+  }
+
+  // Parse URL params for initial symbol
+  var params = new URLSearchParams(window.location.search);
+  var initialSymbol = (params.get('symbol') || params.get('ticker') || 'NVDA').toUpperCase();
+
+  // Initialise the TradingView widget with UDF datafeed
+  var widget = new TradingView.widget({
+    container:        'tv_chart_container',
+    datafeed:         new Datafeeds.UDFCompatibleDatafeed('/api/tv'),
+    library_path:     '/static/charting_library/',
+    locale:           'en',
+    symbol:           initialSymbol,
+    interval:         'D',
+    fullscreen:       false,
+    autosize:         true,
+    theme:            'dark',
+    timezone:         'America/New_York',
+
+    // Dark colour overrides
+    overrides: {
+      'paneProperties.background':           '#0c0c14',
+      'paneProperties.backgroundType':       'solid',
+      'paneProperties.vertGridProperties.color': '#1a1a2e',
+      'paneProperties.horzGridProperties.color': '#1a1a2e',
+      'scalesProperties.textColor':          '#888',
+      'scalesProperties.lineColor':          '#1e293b',
+      'mainSeriesProperties.candleStyle.upColor':       '#22c55e',
+      'mainSeriesProperties.candleStyle.downColor':     '#ef4444',
+      'mainSeriesProperties.candleStyle.wickUpColor':   '#22c55e',
+      'mainSeriesProperties.candleStyle.wickDownColor': '#ef4444',
+      'mainSeriesProperties.candleStyle.borderUpColor': '#22c55e',
+      'mainSeriesProperties.candleStyle.borderDownColor':'#ef4444',
+    },
+
+    // Features
+    disabled_features: [
+      'use_localstorage_for_settings',
+      'header_compare',
+      'header_symbol_search',
+    ],
+    enabled_features: [
+      'study_templates',
+      'hide_left_toolbar_by_default',
+    ],
+
+    // Client identification
+    client_id:        'momentum_dashboard',
+    user_id:          'local',
+  });
+
+  // Store globally for debugging
+  window._tvWidget = widget;
+})();
+</script>
+</body>
+</html>

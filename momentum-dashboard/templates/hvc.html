@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TBD Technologies — High Volume Candles</title>
+<link rel="stylesheet" href="/static/header.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-serif;font-size:13px;}
+
+/* Page layout — two-column: main content left, future panel right */
+.page-layout{display:flex;min-height:calc(100vh - 50px);}
+.main-content{flex:1;max-width:1100px;min-width:0;overflow:hidden;}
+.right-panel{flex:1;min-width:320px;flex-shrink:0;border-left:1px solid #1e1e2e;background:#0a0a10;display:flex;flex-direction:column;}
+.right-panel-placeholder{display:flex;align-items:center;justify-content:center;flex:1;color:#555;font-size:13px;text-align:center;padding:20px;}
+
+/* Row 2: Page Controls */
+.header-row2{background:#0c0c14;padding:6px 20px;border-bottom:1px solid #1e1e2e;display:flex;gap:10px;align-items:center;position:sticky;top:var(--row1-h,50px);z-index:101;}
+/* Modal */
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:999;justify-content:center;align-items:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:#12121a;border:1px solid #2a2a3a;border-radius:10px;padding:28px;max-width:680px;width:92%;max-height:85vh;overflow-y:auto;}
+.modal h2{font-size:17px;color:#fff;margin-bottom:18px;display:flex;align-items:center;gap:8px;}
+.modal-close{float:right;background:none;border:none;color:#666;font-size:22px;cursor:pointer;padding:4px;}.modal-close:hover{color:#fff;}
+.nav-link{color:#f59e0b;font-size:11px;text-decoration:none;font-weight:500;background:#1e293b;padding:4px 10px;border-radius:4px;border:1px solid #334155;}
+.nav-link:hover{background:#334155;}
+.status-badge{font-size:10px;padding:3px 10px;border-radius:10px;font-weight:600;letter-spacing:0.3px;}
+.status-live{background:#064e3b;color:#34d399;border:1px solid #065f46;}
+.status-final{background:#1e293b;color:#94a3b8;border:1px solid #334155;}
+
+/* Info button */
+.info-btn{width:26px;height:26px;border-radius:50%;background:#1e293b;border:1px solid #334155;color:#f59e0b;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:serif;line-height:1;}
+.info-btn:hover{background:#334155;color:#fff;}
+
+/* Row 3: Strategy Filters */
+.header-row3{background:#0c0c14;padding:6px 20px;border-bottom:1px solid #1e1e2e;display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;top:var(--row12-h,86px);z-index:100;}
+.header-row3 label{font-size:11px;color:#555;font-weight:500;}
+.header-row3 select{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:4px 8px;border-radius:4px;font-size:11px;height:26px;}
+.filter-divider{width:1px;height:20px;background:#2a2a3a;margin:0 6px;}
+.filter-toggle{font-size:10px;padding:4px 10px;border-radius:3px;cursor:pointer;font-weight:600;background:#1e293b;color:#aaa;border:1px solid #334155;height:26px;display:inline-flex;align-items:center;justify-content:center;}
+.filter-toggle:hover{background:#334155;color:#fff;}
+.filter-toggle.active{background:#334155;color:#f59e0b;border-color:#f59e0b;}
+.filter-count{font-size:10px;color:#555;font-family:'Consolas',monospace;margin-left:auto;}
+
+/* Section layout */
+.section{padding:16px 20px;}
+.section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+.section-title{font-size:15px;font-weight:700;color:#fff;display:flex;align-items:center;gap:8px;}
+.section-title .count-badge{background:#f59e0b;color:#000;font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;min-width:20px;text-align:center;}
+.section-divider{height:1px;background:#1e1e2e;margin:0 20px;}
+
+/* Period selector */
+.period-selector{display:flex;gap:4px;}
+.period-btn{background:#1e293b;color:#aaa;border:1px solid #334155;padding:4px 12px;border-radius:4px;font-size:11px;cursor:pointer;font-weight:500;}
+.period-btn:hover{background:#334155;color:#fff;}
+.period-btn.active{background:#334155;color:#f59e0b;border-color:#f59e0b;}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;}
+th{background:#0e0e16;color:#666;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:8px 10px;text-align:left;position:sticky;top:0;border-bottom:1px solid #1e1e2e;cursor:pointer;user-select:none;}
+th:hover{color:#f59e0b;}
+th .sort-arrow{font-size:8px;margin-left:3px;opacity:0.5;}
+th.sorted .sort-arrow{opacity:1;color:#f59e0b;}
+td{padding:8px 10px;border-bottom:1px solid #111118;font-size:13px;}
+tr:hover td{background:#0e0e18;}
+tr.bull td{border-left:3px solid #22c55e;}
+tr.bear td{border-left:3px solid #ef4444;}
+
+/* Ticker cell */
+.ticker{font-weight:700;color:#fff;font-family:'Consolas',monospace;font-size:13px;}
+
+/* Price & change */
+.price{font-family:'Consolas',monospace;color:#ccc;}
+.change-up{color:#22c55e;font-weight:600;}
+.change-down{color:#ef4444;font-weight:600;}
+
+/* Volume ratio badge */
+.ratio-badge{display:inline-block;background:#92400e;color:#fbbf24;font-size:12px;font-weight:700;padding:2px 8px;border-radius:3px;font-family:'Consolas',monospace;}
+.ratio-extreme{background:#7c2d12;color:#fb923c;}
+
+/* Gap badges */
+.gap-badge{display:inline-block;font-size:10px;font-weight:600;padding:2px 6px;border-radius:3px;}
+.gap-up{background:#064e3b;color:#34d399;}
+.gap-down{background:#7f1d1d;color:#fca5a5;}
+.gap-open{border:1px solid #f59e0b;color:#f59e0b;font-size:9px;padding:1px 5px;border-radius:3px;margin-left:4px;}
+.gap-closed{border:1px solid #555;color:#888;font-size:9px;padding:1px 5px;border-radius:3px;margin-left:4px;text-decoration:line-through;}
+
+/* Direction dot */
+.dir-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;}
+.dir-bull{background:#22c55e;}
+.dir-bear{background:#ef4444;}
+
+/* History summary */
+.hvc-count{font-weight:700;color:#f59e0b;font-size:15px;}
+.dates-list{font-size:10px;color:#666;font-family:'Consolas',monospace;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+/* Expandable rows */
+.expand-btn{background:none;border:none;color:#555;cursor:pointer;font-size:14px;padding:2px 6px;}
+.expand-btn:hover{color:#f59e0b;}
+.sub-row td{background:#0a0a12;padding:5px 10px 5px 30px;font-size:12px;border-bottom:1px solid #0e0e16;}
+
+/* Empty state */
+.empty-state{text-align:center;padding:40px 20px;color:#555;font-size:13px;}
+.empty-state .icon{font-size:32px;margin-bottom:8px;opacity:0.3;}
+
+/* Auto-refresh indicator */
+.refresh-info{font-size:10px;color:#555;font-family:'Consolas',monospace;}
+
+/* Watchlist dropdown */
+.dd-wrap{position:relative;}
+.dd-btn{background:#1e293b;color:#ccc;border:1px solid #334155;padding:4px 12px;border-radius:4px;font-size:11px;cursor:pointer;font-weight:500;height:26px;display:inline-flex;align-items:center;}
+.dd-btn:hover{background:#334155;}.dd-btn .active-name{color:#f59e0b;}
+.dd-menu{display:none;position:absolute;top:100%;left:0;margin-top:4px;background:#14141e;border:1px solid #2a2a3a;border-radius:6px;padding:8px;min-width:180px;z-index:200;max-height:400px;overflow-y:auto;}
+.dd-menu.open{display:block;}
+.dd-item{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:3px;cursor:pointer;font-size:11px;color:#ccc;}
+.dd-item:hover{background:#1e1e2e;}
+.dd-item.wl-active{background:#1e293b;color:#f59e0b;font-weight:600;}
+
+/* (modal styles defined above in row 1 section) */
+
+/* Explainer content */
+.explainer-section{margin-bottom:20px;}
+.explainer-section h3{font-size:13px;color:#f59e0b;margin-bottom:8px;font-weight:600;}
+.explainer-section p{font-size:12px;color:#999;line-height:1.6;margin-bottom:8px;}
+.explainer-section code{background:#1e293b;color:#fbbf24;padding:1px 5px;border-radius:3px;font-size:11px;font-family:'Consolas',monospace;}
+.explainer-visual{background:#0a0a14;border:1px solid #1e1e2e;border-radius:8px;padding:20px;margin:12px 0;}
+.explainer-bars{display:flex;align-items:flex-end;gap:3px;height:120px;padding:0 20px;}
+.explainer-bar{width:14px;border-radius:2px 2px 0 0;position:relative;transition:height 0.3s;}
+.explainer-bar.normal{background:#334155;opacity:0.5;}
+.explainer-bar.hvc{background:linear-gradient(180deg,#f59e0b,#d97706);box-shadow:0 0 8px rgba(245,158,11,0.3);}
+.explainer-bar-label{position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:8px;color:#f59e0b;font-weight:700;white-space:nowrap;}
+.explainer-bars-legend{display:flex;gap:16px;margin-top:10px;justify-content:center;}
+.explainer-bars-legend span{font-size:10px;color:#666;display:flex;align-items:center;gap:4px;}
+.explainer-bars-legend .dot{width:8px;height:8px;border-radius:2px;}
+.explainer-formula{background:#0e0e18;border:1px solid #2a2a3a;border-radius:6px;padding:14px;margin:10px 0;text-align:center;}
+.explainer-formula .formula{font-family:'Consolas',monospace;font-size:14px;color:#f59e0b;font-weight:700;}
+.explainer-formula .formula-desc{font-size:11px;color:#666;margin-top:6px;}
+.explainer-row{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #1a1a24;}.explainer-row:last-child{border-bottom:none;}
+.explainer-row .ex-icon{width:32px;height:32px;border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:14px;}
+.explainer-row .ex-body{flex:1;}
+.explainer-row .ex-body h4{font-size:12px;color:#fff;margin-bottom:2px;}
+.explainer-row .ex-body p{font-size:11px;color:#888;line-height:1.4;}
+</style>
+</head>
+<body>
+<!-- Logo Popup Modal -->
+<div class="modal-overlay" id="logoModal" onclick="if(event.target===this)closeLogoModal()">
+<div class="modal" style="text-align:center;max-width:500px;">
+<button class="modal-close" onclick="closeLogoModal()">&times;</button>
+<div style="margin:30px 0 20px;">
+<svg width="64" height="80" viewBox="0 0 22 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M11 2L2 26h8l3-10 3 10h4L11 2z" fill="#f59e0b" opacity="0.9"/>
+<path d="M11 2L7 16l4-3 4 3L11 2z" fill="#fbbf24"/>
+</svg>
+</div>
+<h2 style="font-size:28px;font-weight:700;margin-bottom:6px;">TBD <span style="color:#f59e0b;">Technologies</span></h2>
+<p style="color:#666;font-size:13px;margin-bottom:30px;">Momentum Intelligence Platform</p>
+<div style="border-top:1px solid #2a2a3a;padding-top:16px;color:#555;font-size:11px;">Future home of landing content &amp; system overview</div>
+</div></div>
+
+<!-- ROW 1: Global Navigation Bar (shared) -->
+<script>window._activePage='hvc';</script>
+<div id="headerRow1"></div>
+<script src="/static/header.js"></script>
+
+<!-- ROW 2: Page Controls -->
+<div class="header-row2">
+<div class="dd-wrap"><div class="dd-btn" onclick="toggleDD()">Watchlist : <span class="active-name" id="wlName">All Cached</span> &#x25BE;</div><div class="dd-menu" id="wlMenu"></div></div>
+<span class="refresh-info" id="refreshInfo">Auto-refresh: 60s</span>
+<span class="status-badge status-live" id="statusBadge">LIVE</span>
+</div>
+
+<!-- ROW 3: Strategy Filters -->
+<div class="header-row3">
+<div class="help-btn" onclick="openExplainer()" title="What is HVC?">i</div>
+<div class="filter-divider"></div>
+<label>Direction:</label>
+<button class="filter-toggle" data-dir="all" onclick="setDirFilter('all')">All</button>
+<button class="filter-toggle active" data-dir="up" onclick="setDirFilter('up')">Positive</button>
+<button class="filter-toggle" data-dir="down" onclick="setDirFilter('down')">Negative</button>
+<div class="filter-divider"></div>
+<label>Min % Move:</label>
+<select id="minMoveSelect" onchange="setMinMove(this.value)">
+<option value="0">Any</option>
+<option value="5">&#x2265; 5%</option>
+<option value="10">&#x2265; 10%</option>
+<option value="20">&#x2265; 20%</option>
+<option value="50">&#x2265; 50%</option>
+</select>
+<div class="filter-divider"></div>
+<label>Min Ratio:</label>
+<select id="minRatioSelect" onchange="setMinRatio(this.value)">
+<option value="3">&#x2265; 300% (default)</option>
+<option value="4">&#x2265; 400%</option>
+<option value="5">&#x2265; 500%</option>
+<option value="7">&#x2265; 700%</option>
+<option value="10">&#x2265; 1000%</option>
+</select>
+<span class="filter-count" id="filterCountToday"></span>
+</div>
+
+<!-- EXPLAINER MODAL (HVC Guide) -->
+<div class="modal-overlay" id="explainerModal" onclick="if(event.target===this)closeExplainer()">
+<div class="modal">
+<button class="modal-close" onclick="closeExplainer()">&times;</button>
+<h2><span style="color:#f59e0b;">&#x1F4CA;</span> What are High Volume Candles?</h2>
+
+<div class="explainer-section">
+<p>A <strong style="color:#fff;">High Volume Candle (HVC)</strong> is a daily bar where the trading volume is <strong style="color:#f59e0b;">at least 3x the 20-day average volume</strong>. These "skyscraper" bars signal that institutional money is entering a position &mdash; often marking the start of a major move <em>before</em> the price breakout is obvious.</p>
+</div>
+
+<div class="explainer-visual">
+<div class="explainer-bars">
+<div class="explainer-bar normal" style="height:18px;"></div>
+<div class="explainer-bar normal" style="height:22px;"></div>
+<div class="explainer-bar normal" style="height:15px;"></div>
+<div class="explainer-bar normal" style="height:25px;"></div>
+<div class="explainer-bar normal" style="height:12px;"></div>
+<div class="explainer-bar normal" style="height:20px;"></div>
+<div class="explainer-bar normal" style="height:16px;"></div>
+<div class="explainer-bar normal" style="height:28px;"></div>
+<div class="explainer-bar normal" style="height:14px;"></div>
+<div class="explainer-bar normal" style="height:18px;"></div>
+<div class="explainer-bar normal" style="height:22px;"></div>
+<div class="explainer-bar normal" style="height:20px;"></div>
+<div class="explainer-bar normal" style="height:15px;"></div>
+<div class="explainer-bar normal" style="height:24px;"></div>
+<div class="explainer-bar hvc" style="height:105px;"><span class="explainer-bar-label">482%</span></div>
+<div class="explainer-bar normal" style="height:30px;"></div>
+<div class="explainer-bar normal" style="height:22px;"></div>
+<div class="explainer-bar normal" style="height:35px;"></div>
+<div class="explainer-bar hvc" style="height:85px;"><span class="explainer-bar-label">361%</span></div>
+<div class="explainer-bar normal" style="height:28px;"></div>
+</div>
+<div class="explainer-bars-legend">
+<span><span class="dot" style="background:#334155;"></span> Normal volume</span>
+<span><span class="dot" style="background:#f59e0b;"></span> HVC trigger (&ge;300% avg)</span>
+</div>
+</div>
+
+<div class="explainer-formula">
+<div class="formula">volume / SMA(volume, 20) &ge; 3.0</div>
+<div class="formula-desc">Volume must be at least 3x the 20-day simple moving average of volume</div>
+</div>
+
+<div class="explainer-section">
+<h3>What this page tracks</h3>
+<div class="explainer-row">
+<div class="ex-icon" style="background:#064e3b;">&#x2191;</div>
+<div class="ex-body"><h4>Bull vs Bear Candles</h4><p>Green = close &gt; open (bullish). Red = close &lt; open (bearish). Bull HVCs with gap-ups are the highest-conviction breakout signals.</p></div>
+</div>
+<div class="explainer-row">
+<div class="ex-icon" style="background:#92400e;font-size:11px;">4.8x</div>
+<div class="ex-body"><h4>Volume Ratio</h4><p>How many times above the 20-day average. Higher = more unusual = stronger signal. 5x+ ratios are "extreme" and highlighted differently.</p></div>
+</div>
+<div class="explainer-row">
+<div class="ex-icon" style="background:#1e293b;border:1px solid #f59e0b;font-size:9px;color:#f59e0b;">GAP</div>
+<div class="ex-body"><h4>Gap Analysis</h4><p>Gap Up = open above previous bar's high. Gap Down = open below previous bar's low. "Open" gaps haven't been filled yet &mdash; unfilled gaps often act as future support/resistance.</p></div>
+</div>
+<div class="explainer-row">
+<div class="ex-icon" style="background:#1e293b;font-size:11px;color:#22c55e;">&#x0394;%</div>
+<div class="ex-body"><h4>Price Change Tracking</h4><p>History explorer shows how price moved since the first HVC detection. Stocks that trigger multiple HVCs in quick succession are often in the early stages of a parabolic move.</p></div>
+</div>
+</div>
+
+<div class="explainer-section" style="margin-bottom:0;">
+<h3>The AEVA Example</h3>
+<p>AEVA triggered massive volume bars in April-May while the stock was still under $5. Those "skyscraper" bars flagged institutional accumulation months before the move to $30+. This scanner helps you catch those signals early across the entire Russell 3000 universe.</p>
+</div>
+</div>
+</div>
+
+<div class="page-layout">
+<!-- MAIN LEFT CONTENT -->
+<div class="main-content">
+
+<!-- TODAY'S HVC FEED -->
+<div class="section">
+<div class="section-header">
+<div class="section-title">Today's High Volume Candles <span class="count-badge" id="todayCount">0</span></div>
+<div class="refresh-info" id="todayTime">--</div>
+</div>
+<div id="todayTable">
+<div class="empty-state"><div class="icon">&#x1F4CA;</div>No HVC events detected today.<br>Events appear when volume &ge; 300% of 20-bar SMA.</div>
+</div>
+</div>
+
+<div class="section-divider"></div>
+
+<!-- HVC HISTORY EXPLORER -->
+<div class="section">
+<div class="section-header">
+<div class="section-title">HVC History Explorer <span class="count-badge" id="historyCount">0</span></div>
+<div class="period-selector">
+<button class="period-btn" data-period="today" onclick="setPeriod('today')">Today</button>
+<button class="period-btn" data-period="last_session" onclick="setPeriod('last_session')">Last Session</button>
+<button class="period-btn" data-period="this_week" onclick="setPeriod('this_week')">This Week</button>
+<button class="period-btn active" data-period="last_week" onclick="setPeriod('last_week')">Last Week</button>
+<button class="period-btn" data-period="month" onclick="setPeriod('month')">Last Month</button>
+<button class="period-btn" data-period="quarter" onclick="setPeriod('quarter')">Last Quarter</button>
+</div>
+</div>
+<div id="historyTable">
+<div class="empty-state"><div class="icon">&#x1F50D;</div>Loading history...</div>
+</div>
+</div>
+
+</div><!-- /main-content -->
+
+<!-- RIGHT PANEL (future use) -->
+<div class="right-panel">
+<div style="padding:16px 20px;border-bottom:1px solid #1e1e2e;">
+<div class="section-title" style="opacity:0.4;">Analysis Panel</div>
+</div>
+<div class="right-panel-placeholder">
+<div>
+<div style="font-size:28px;opacity:0.2;margin-bottom:12px;">&#x1F4A1;</div>
+<div style="color:#444;font-size:13px;font-weight:500;margin-bottom:4px;">Coming Soon</div>
+<div style="color:#333;font-size:11px;line-height:1.5;">Ticker deep-dives, chart previews,<br>and pattern analysis</div>
+</div>
+</div>
+</div>
+
+</div><!-- /page-layout -->
+
+<script>
+var todayEvents = [];
+var historyData = { summary: [], events: [] };
+var currentPeriod = 'last_week';
+var currentWatchlist = '';
+var watchlists = [];
+var expandedTickers = new Set();
+var todaySortCol = 'volume_ratio';
+var todaySortAsc = false;
+var historySortCol = 'count';
+var historySortAsc = false;
+
+// Filters
+var filterDir = 'up';    // 'all', 'up', 'down' — default to Positive
+var filterMinMove = 0;   // min absolute % change
+var filterMinRatio = 3;  // min volume ratio
+
+function openLogoModal(){document.getElementById('logoModal').classList.add('open');}
+function closeLogoModal(){document.getElementById('logoModal').classList.remove('open');}
+
+function wlParam() {
+    return currentWatchlist ? '&watchlist=' + encodeURIComponent(currentWatchlist) : '';
+}
+
+// Apply client-side filters to today's events
+function applyFiltersToday(arr) {
+    return arr.filter(function(ev) {
+        // Direction filter
+        if (filterDir === 'up' && (ev.price_change_pct == null || ev.price_change_pct <= 0)) return false;
+        if (filterDir === 'down' && (ev.price_change_pct == null || ev.price_change_pct >= 0)) return false;
+        // Min % move
+        if (filterMinMove > 0 && (ev.price_change_pct == null || Math.abs(ev.price_change_pct) < filterMinMove)) return false;
+        // Min ratio
+        if (ev.volume_ratio != null && ev.volume_ratio < filterMinRatio) return false;
+        return true;
+    });
+}
+
+// Apply client-side filters to history summary
+function applyFiltersHistory(arr) {
+    return arr.filter(function(item) {
+        // Direction filter based on price_change_pct since first HVC
+        if (filterDir === 'up' && (item.price_change_pct == null || item.price_change_pct <= 0)) return false;
+        if (filterDir === 'down' && (item.price_change_pct == null || item.price_change_pct >= 0)) return false;
+        // Min % move on the price change since first HVC
+        if (filterMinMove > 0 && (item.price_change_pct == null || Math.abs(item.price_change_pct) < filterMinMove)) return false;
+        return true;
+    });
+}
+
+function setDirFilter(dir) {
+    filterDir = dir;
+    document.querySelectorAll('.filter-toggle[data-dir]').forEach(function(btn){
+        btn.classList.toggle('active', btn.getAttribute('data-dir') === dir);
+    });
+    renderToday();
+    renderHistory();
+}
+
+function setMinMove(val) {
+    filterMinMove = parseFloat(val) || 0;
+    renderToday();
+    renderHistory();
+}
+
+function setMinRatio(val) {
+    filterMinRatio = parseFloat(val) || 3;
+    renderToday();
+    renderHistory();
+}
+
+function fetchToday() {
+    fetch('/api/hvc/today?' + wlParam())
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+        todayEvents = data.events || [];
+        document.getElementById('todayTime').textContent = new Date().toLocaleTimeString();
+        renderToday();
+        updateStatus();
+    })
+    .catch(function(e){ console.error('HVC today fetch error:', e); });
+}
+
+function fetchHistory() {
+    fetch('/api/hvc/history?period=' + currentPeriod + wlParam())
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+        historyData = data;
+        renderHistory();
+    })
+    .catch(function(e){ console.error('HVC history fetch error:', e); });
+}
+
+function fetchWatchlists() {
+    fetch('/api/watchlists')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+        watchlists = data || [];
+        renderWatchlistMenu();
+    })
+    .catch(function(e){ console.error('Watchlist fetch error:', e); });
+}
+
+function renderWatchlistMenu() {
+    var menu = document.getElementById('wlMenu');
+    var html = '<div class="dd-item' + (!currentWatchlist ? ' wl-active' : '') + '" onclick="setWatchlist(\'\')">All Cached</div>';
+    watchlists.forEach(function(wl) {
+        var count = 0;
+        (wl.groups || []).forEach(function(g){ count += (g.tickers || []).length; });
+        var cls = currentWatchlist === wl.name ? ' wl-active' : '';
+        html += '<div class="dd-item' + cls + '" onclick="setWatchlist(\'' + wl.name + '\')">' + wl.name + ' <span style="color:#555;font-size:10px;">(' + count + ')</span></div>';
+    });
+    menu.innerHTML = html;
+}
+
+function setWatchlist(name) {
+    currentWatchlist = name;
+    document.getElementById('wlName').textContent = name || 'All Cached';
+    document.getElementById('wlMenu').classList.remove('open');
+    renderWatchlistMenu();
+    expandedTickers.clear();
+    fetchToday();
+    fetchHistory();
+}
+
+function toggleDD() {
+    document.getElementById('wlMenu').classList.toggle('open');
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dd-wrap')) {
+        document.getElementById('wlMenu').classList.remove('open');
+    }
+});
+
+function setPeriod(p) {
+    currentPeriod = p;
+    document.querySelectorAll('.period-btn').forEach(function(btn){
+        btn.classList.toggle('active', btn.getAttribute('data-period') === p);
+    });
+    expandedTickers.clear();
+    fetchHistory();
+}
+
+function updateStatus() {
+    var now = new Date();
+    var h = now.getUTCHours();
+    var d = now.getUTCDay();
+    var isMarketHours = d >= 1 && d <= 5 && h >= 13 && h <= 21;
+    var badge = document.getElementById('statusBadge');
+    if (isMarketHours) {
+        badge.textContent = 'LIVE (15min delay)';
+        badge.className = 'status-badge status-live';
+    } else {
+        badge.textContent = 'FINAL';
+        badge.className = 'status-badge status-final';
+    }
+}
+
+// Explainer modal
+function openExplainer() {
+    document.getElementById('explainerModal').classList.add('open');
+}
+function closeExplainer() {
+    document.getElementById('explainerModal').classList.remove('open');
+}
+
+function sortArray(arr, col, asc) {
+    return arr.slice().sort(function(a, b) {
+        var va = a[col], vb = b[col];
+        if (va == null) va = asc ? Infinity : -Infinity;
+        if (vb == null) vb = asc ? Infinity : -Infinity;
+        if (typeof va === 'string') return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+        return asc ? va - vb : vb - va;
+    });
+}
+
+function renderToday() {
+    var el = document.getElementById('todayTable');
+    var filtered = applyFiltersToday(todayEvents);
+    document.getElementById('todayCount').textContent = filtered.length;
+    // Update filter count
+    var fcEl = document.getElementById('filterCountToday');
+    if (filtered.length !== todayEvents.length) {
+        fcEl.textContent = 'Showing ' + filtered.length + ' of ' + todayEvents.length;
+    } else {
+        fcEl.textContent = '';
+    }
+
+    if (!filtered.length) {
+        var msg = todayEvents.length > 0
+            ? 'No events match current filters. (' + todayEvents.length + ' total today)'
+            : 'No HVC events detected today.<br>Events appear when volume &ge; 300% of 20-bar SMA.';
+        el.innerHTML = '<div class="empty-state"><div class="icon">&#x1F4CA;</div>' + msg + '</div>';
+        return;
+    }
+    var sorted = sortArray(filtered, todaySortCol, todaySortAsc);
+    var html = '<table><thead><tr>';
+    var cols = [
+        { key: 'ticker', label: 'Ticker' },
+        { key: 'close_price', label: 'Price' },
+        { key: 'price_change_pct', label: 'Chg%' },
+        { key: 'volume', label: 'Volume' },
+        { key: 'avg_volume', label: 'Avg Vol' },
+        { key: 'volume_ratio', label: 'Ratio' },
+        { key: 'candle_dir', label: 'Dir' },
+        { key: 'gap_type', label: 'Gap' },
+        { key: 'detected_at', label: 'Detected' },
+    ];
+    cols.forEach(function(c) {
+        var cls = todaySortCol === c.key ? ' class="sorted"' : '';
+        var arrow = todaySortCol === c.key ? (todaySortAsc ? '&#x25B2;' : '&#x25BC;') : '&#x25BC;';
+        html += '<th' + cls + ' onclick="sortToday(\'' + c.key + '\')">' + c.label + ' <span class="sort-arrow">' + arrow + '</span></th>';
+    });
+    html += '</tr></thead><tbody>';
+    sorted.forEach(function(ev) {
+        var dirClass = ev.candle_dir === 'bull' ? 'bull' : 'bear';
+        html += '<tr class="' + dirClass + '">';
+        html += '<td class="ticker">' + ev.ticker + '</td>';
+        html += '<td class="price">' + fmtPrice(ev.close_price) + '</td>';
+        html += '<td class="' + (ev.price_change_pct > 0 ? 'change-up' : ev.price_change_pct < 0 ? 'change-down' : '') + '">' + fmtPct(ev.price_change_pct) + '</td>';
+        html += '<td>' + fmtVol(ev.volume) + '</td>';
+        html += '<td>' + fmtVol(ev.avg_volume) + '</td>';
+        html += '<td>' + fmtRatio(ev.volume_ratio) + '</td>';
+        html += '<td><span class="dir-dot dir-' + ev.candle_dir + '"></span>' + ev.candle_dir + '</td>';
+        html += '<td>' + fmtGap(ev) + '</td>';
+        html += '<td style="font-size:10px;color:#666;">' + fmtTime(ev.detected_at) + '</td>';
+        html += '</tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+}
+
+function renderHistory() {
+    var el = document.getElementById('historyTable');
+    var summary = historyData.summary || [];
+    var events = historyData.events || [];
+    var filtered = applyFiltersHistory(summary);
+    document.getElementById('historyCount').textContent = filtered.length;
+
+    if (!filtered.length) {
+        var msg = summary.length > 0
+            ? 'No tickers match current filters. (' + summary.length + ' total)'
+            : 'No HVC events found for this period.';
+        el.innerHTML = '<div class="empty-state"><div class="icon">&#x1F50D;</div>' + msg + '</div>';
+        return;
+    }
+    var sorted = sortArray(filtered, historySortCol, historySortAsc);
+    var html = '<table><thead><tr>';
+    var cols = [
+        { key: '_expand', label: '' },
+        { key: 'ticker', label: 'Ticker' },
+        { key: 'count', label: '# HVCs' },
+        { key: 'gap_ups', label: 'Gap Ups' },
+        { key: 'gaps_open', label: 'Gaps Open' },
+        { key: 'first_date', label: 'First HVC' },
+        { key: 'first_price', label: 'Price @ First' },
+        { key: 'current_price', label: 'Current' },
+        { key: 'price_change_pct', label: 'Change' },
+        { key: 'dates', label: 'Event Dates' },
+    ];
+    cols.forEach(function(c) {
+        if (c.key === '_expand') { html += '<th style="width:30px;"></th>'; return; }
+        var cls = historySortCol === c.key ? ' class="sorted"' : '';
+        var arrow = historySortCol === c.key ? (historySortAsc ? '&#x25B2;' : '&#x25BC;') : '&#x25BC;';
+        html += '<th' + cls + ' onclick="sortHistory(\'' + c.key + '\')">' + c.label + ' <span class="sort-arrow">' + arrow + '</span></th>';
+    });
+    html += '</tr></thead><tbody>';
+    sorted.forEach(function(item) {
+        var expanded = expandedTickers.has(item.ticker);
+        html += '<tr>';
+        html += '<td><button class="expand-btn" onclick="toggleExpand(\'' + item.ticker + '\')">' + (expanded ? '&#x25BC;' : '&#x25B6;') + '</button></td>';
+        html += '<td class="ticker">' + item.ticker + '</td>';
+        html += '<td class="hvc-count">' + item.count + '</td>';
+        html += '<td>' + (item.gap_ups || 0) + '</td>';
+        html += '<td>' + (item.gaps_open || 0) + '</td>';
+        html += '<td style="font-family:Consolas,monospace;font-size:11px;">' + (item.first_date || '--') + '</td>';
+        html += '<td class="price">' + fmtPrice(item.first_price) + '</td>';
+        html += '<td class="price">' + fmtPrice(item.current_price) + '</td>';
+        var chgClass = item.price_change_pct > 0 ? 'change-up' : item.price_change_pct < 0 ? 'change-down' : '';
+        html += '<td class="' + chgClass + '">' + fmtPct(item.price_change_pct) + '</td>';
+        var dateStr = (item.dates || []).join(', ');
+        html += '<td class="dates-list" title="' + dateStr + '">' + dateStr + '</td>';
+        html += '</tr>';
+        // Expanded sub-rows
+        if (expanded) {
+            var tickerEvents = events.filter(function(e){ return e.ticker === item.ticker; });
+            tickerEvents.forEach(function(ev) {
+                html += '<tr class="sub-row">';
+                html += '<td></td>';
+                html += '<td style="color:#666;">' + ev.event_date + '</td>';
+                html += '<td>' + fmtRatio(ev.volume_ratio) + '</td>';
+                html += '<td colspan="2">' + fmtGap(ev) + '</td>';
+                html += '<td class="price">' + fmtPrice(ev.open_price) + ' &rarr; ' + fmtPrice(ev.close_price) + '</td>';
+                html += '<td>' + fmtVol(ev.volume) + '</td>';
+                html += '<td><span class="dir-dot dir-' + ev.candle_dir + '"></span>' + ev.candle_dir + '</td>';
+                html += '<td colspan="2"></td>';
+                html += '</tr>';
+            });
+        }
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+}
+
+function toggleExpand(ticker) {
+    if (expandedTickers.has(ticker)) expandedTickers.delete(ticker);
+    else expandedTickers.add(ticker);
+    renderHistory();
+}
+
+function sortToday(col) {
+    if (todaySortCol === col) todaySortAsc = !todaySortAsc;
+    else { todaySortCol = col; todaySortAsc = col === 'ticker'; }
+    renderToday();
+}
+
+function sortHistory(col) {
+    if (historySortCol === col) historySortAsc = !historySortAsc;
+    else { historySortCol = col; historySortAsc = col === 'ticker'; }
+    renderHistory();
+}
+
+// Formatting helpers
+function fmtPrice(v) { return v != null ? '$' + Number(v).toFixed(2) : '--'; }
+function fmtPct(v) { return v != null ? (v > 0 ? '+' : '') + v.toFixed(2) + '%' : '--'; }
+function fmtVol(v) {
+    if (v == null) return '--';
+    if (v >= 1e9) return (v / 1e9).toFixed(1) + 'B';
+    if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return (v / 1e3).toFixed(0) + 'K';
+    return v.toString();
+}
+function fmtRatio(v) {
+    if (v == null) return '--';
+    var pct = Math.round(v * 100);
+    var cls = pct >= 500 ? 'ratio-badge ratio-extreme' : 'ratio-badge';
+    return '<span class="' + cls + '">' + pct + '%</span>';
+}
+function fmtGap(ev) {
+    if (!ev.gap_type) return '<span style="color:#555;">--</span>';
+    var cls = ev.gap_type === 'up' ? 'gap-up' : 'gap-down';
+    var label = ev.gap_type === 'up' ? 'GAP UP' : 'GAP DOWN';
+    var html = '<span class="gap-badge ' + cls + '">' + label + '</span>';
+    if (ev.gap_level != null) html += ' <span style="font-size:10px;color:#666;">@' + Number(ev.gap_level).toFixed(2) + '</span>';
+    if (ev.gap_closed) html += ' <span class="gap-closed">closed</span>';
+    else if (ev.gap_type) html += ' <span class="gap-open">open</span>';
+    return html;
+}
+function fmtTime(ts) {
+    if (!ts) return '--';
+    try { return new Date(ts).toLocaleTimeString(); }
+    catch(e){ return ts.substring(11, 19); }
+}
+
+function setStickyOffsets(){
+  var r1=document.querySelector('.header-row1');
+  var r2=document.querySelector('.header-row2');
+  var r3=document.querySelector('.header-row3');
+  if(!r1)return;
+  var h1=r1.offsetHeight;
+  var h2=r2?r2.offsetHeight:0;
+  var h3=r3?r3.offsetHeight:0;
+  document.documentElement.style.setProperty('--row1-h',h1+'px');
+  document.documentElement.style.setProperty('--row12-h',(h1+h2)+'px');
+  document.documentElement.style.setProperty('--header-h',(h1+h2+h3)+'px');
+}
+setStickyOffsets();
+window.addEventListener('resize',setStickyOffsets);
+
+// Initial load
+fetchWatchlists();
+fetchToday();
+fetchHistory();
+
+// Auto-refresh every 60s
+setInterval(function() {
+    fetchToday();
+    var el = document.getElementById('refreshInfo');
+    el.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+}, 60000);
+
+// Scheduler badge updater
+function updateSchedulerBadge(){
+  fetch('/api/scheduler/status').then(function(r){return r.json();}).then(function(s){
+    var badge=document.getElementById('schedulerBadge');
+    if(!badge)return;
+    var cur=s.current_watchlists||[];
+    if(cur.length){badge.textContent='Scanning: '+cur.join(', ');badge.style.color='#f59e0b';badge.style.borderColor='#f59e0b';}
+    else if(!s.enabled){badge.textContent='Scheduler: OFF';badge.style.color='#ef4444';badge.style.borderColor='#334155';}
+    else{badge.textContent='Scheduler: Idle';badge.style.color='#22c55e';badge.style.borderColor='#334155';}
+  }).catch(function(){});
+}
+updateSchedulerBadge();setInterval(updateSchedulerBadge,30000);
+</script>
+</body>
+</html>

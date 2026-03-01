@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Watchlists — TBD Technologies</title>
+<link rel="stylesheet" href="/static/header.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+::-webkit-scrollbar{width:8px;height:8px;}
+::-webkit-scrollbar-track{background:#0a0a10;}
+::-webkit-scrollbar-thumb{background:#2a2a3a;border-radius:4px;}
+::-webkit-scrollbar-thumb:hover{background:#3a3a4a;}
+*{scrollbar-width:thin;scrollbar-color:#2a2a3a #0a0a10;}
+body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-serif;font-size:14px;}
+/* Modal */
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:999;justify-content:center;align-items:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:#12121a;border:1px solid #2a2a3a;border-radius:10px;padding:28px;max-width:680px;width:92%;max-height:85vh;overflow-y:auto;}
+.modal h2{font-size:17px;color:#fff;margin-bottom:18px;display:flex;align-items:center;gap:8px;}
+.modal-close{float:right;background:none;border:none;color:#666;font-size:22px;cursor:pointer;padding:4px;}.modal-close:hover{color:#fff;}
+
+.main{display:flex;height:calc(100vh - 52px);}
+
+.panel-left{width:200px;border-right:1px solid #1e1e2e;display:flex;flex-direction:column;background:#0a0a10;}
+.ph{padding:8px 10px;font-size:11px;font-weight:700;color:#555;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #1a1a24;display:flex;justify-content:space-between;align-items:center;}
+.ph button{background:none;color:#f59e0b;border:none;font-size:16px;cursor:pointer;font-weight:700;line-height:1;}
+.ph button:hover{color:#fff;}
+.wl-list{flex:1;overflow-y:auto;}
+.wi{padding:7px 12px;cursor:pointer;border-bottom:1px solid #111118;display:flex;justify-content:space-between;align-items:center;}
+.wi:hover{background:#111118;}
+.wi.active{background:#161622;border-left:2px solid #f59e0b;padding-left:8px;}
+.wi .nm{font-size:13px;font-weight:600;color:#d0d0d8;}
+.wi .mt{font-size:11px;color:#555;}
+.wi-del{color:#333;cursor:pointer;font-size:14px;padding:0 4px;display:none;}
+.wi:hover .wi-del{display:block;}
+.wi-del:hover{color:#ef4444;}
+.wi-arrows{display:none;gap:1px;margin-left:auto;margin-right:4px;}
+.wi:hover .wi-arrows{display:inline-flex;}
+.wi-arrows button{background:none;border:none;color:#555;cursor:pointer;font-size:13px;padding:0 2px;line-height:1;}
+.wi-arrows button:hover{color:#f59e0b;}
+
+.panel-mid{width:180px;border-right:1px solid #1e1e2e;display:flex;flex-direction:column;background:#0a0a10;}
+.gi{padding:6px 12px;cursor:pointer;border-bottom:1px solid #111118;display:flex;justify-content:space-between;align-items:center;font-size:13px;}
+.gi:hover{background:#111118;}
+.gi.active{background:#161622;border-left:2px solid #f59e0b;padding-left:8px;}
+.gi .cnt{color:#555;font-size:11px;}
+.gi-del{color:#333;cursor:pointer;font-size:13px;padding:0 2px;margin-left:4px;display:none;}
+.gi:hover .gi-del{display:inline;}
+.gi-del:hover{color:#ef4444;}
+.gi-arrows{display:none;gap:1px;margin-left:auto;margin-right:4px;}
+.gi:hover .gi-arrows{display:inline-flex;}
+.gi-arrows button{background:none;border:none;color:#555;cursor:pointer;font-size:13px;padding:0 2px;line-height:1;}
+.gi-arrows button:hover{color:#f59e0b;}
+
+.panel-right{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.tk-hdr{padding:8px 12px;font-size:11px;font-weight:700;color:#555;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #1a1a24;background:#0e0e16;}
+.tk-body{flex:1;overflow-y:auto;padding:6px 10px;}
+.tr{display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:3px;font-size:15px;font-family:'Consolas',monospace;}
+.tr:hover{background:#161622;}
+.tr .tn{color:#d0d0d8;font-weight:600;width:75px;}
+.tr .ta{color:#555;font-size:12px;width:70px;}
+.tr .tt{font-size:10px;padding:1px 5px;border-radius:2px;font-weight:600;text-transform:uppercase;}
+.ts{background:#1e3a2e;color:#4bb050;}.te{background:#1e2e3a;color:#5090d0;}.ti{background:#3a2e1e;color:#d0a050;}
+.tr .tx{color:#444;cursor:pointer;margin-left:8px;font-size:16px;padding:0 4px;}
+.tr .tx:hover{color:#ef4444;}
+
+.paste{border-top:1px solid #1e1e2e;padding:8px 10px;background:#0a0a10;}
+.paste textarea{width:100%;height:48px;background:#0e0e16;color:#d0d0d8;border:1px solid #2a2a3a;border-radius:4px;padding:4px 6px;font-size:12px;font-family:'Consolas',monospace;outline:none;resize:vertical;}
+.paste textarea:focus{border-color:#f59e0b;}
+.paste textarea::placeholder{color:#444;font-family:'Segoe UI',sans-serif;}
+.paste-row{display:flex;justify-content:space-between;align-items:center;margin-top:4px;}
+.paste-hint{font-size:10px;color:#444;}
+.paste-row button{background:#1e293b;color:#f59e0b;border:1px solid #334155;padding:2px 8px;border-radius:3px;font-size:11px;cursor:pointer;font-weight:600;}
+.paste-row button:hover{background:#334155;}
+
+.save-bar{padding:6px 12px;background:#111118;border-top:1px solid #1e1e2e;display:none;text-align:right;}
+.save-bar button{background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44;padding:4px 14px;border-radius:3px;font-size:13px;cursor:pointer;font-weight:600;}
+.save-bar button:hover{background:#f59e0b33;}
+
+.empty{color:#555;padding:16px;text-align:center;font-size:13px;}
+</style>
+</head>
+<body>
+
+<!-- Logo Popup Modal -->
+<div class="modal-overlay" id="logoModal" onclick="if(event.target===this)closeLogoModal()">
+<div class="modal" style="text-align:center;max-width:500px;">
+<button class="modal-close" onclick="closeLogoModal()">&times;</button>
+<div style="margin:30px 0 20px;">
+<svg width="64" height="80" viewBox="0 0 22 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M11 2L2 26h8l3-10 3 10h4L11 2z" fill="#f59e0b" opacity="0.9"/>
+<path d="M11 2L7 16l4-3 4 3L11 2z" fill="#fbbf24"/>
+</svg>
+</div>
+<h2 style="font-size:28px;font-weight:700;margin-bottom:6px;">TBD <span style="color:#f59e0b;">Technologies</span></h2>
+<p style="color:#666;font-size:13px;margin-bottom:30px;">Momentum Intelligence Platform</p>
+<div style="border-top:1px solid #2a2a3a;padding-top:16px;color:#555;font-size:11px;">Future home of landing content &amp; system overview</div>
+</div></div>
+
+<!-- ROW 1: Global Navigation Bar (shared) -->
+<script>window._activePage='watchlists';</script>
+<div id="headerRow1"></div>
+<script src="/static/header.js"></script>
+
+<div class="main">
+<!-- Watchlists -->
+<div class="panel-left">
+<div class="ph"><span>Watchlists</span><button onclick="newWL()" title="New watchlist">+</button></div>
+<div class="wl-list" id="wlList"></div>
+</div>
+<!-- Groups -->
+<div class="panel-mid">
+<div class="ph"><span>Groups</span><button onclick="addGrpPrompt()" title="New group">+</button></div>
+<div id="grpList" style="flex:1;overflow-y:auto;"></div>
+</div>
+<!-- Tickers -->
+<div class="panel-right">
+<div class="tk-hdr" id="tkHdr">Tickers</div>
+<div class="tk-body" id="tkBody"><div class="empty">Select a watchlist and group</div></div>
+<div class="paste">
+<textarea id="pasteBox" placeholder="Paste tickers: AAPL, MSFT, NVDA or one per line"></textarea>
+<div class="paste-row">
+<span class="paste-hint">TICKER or DISPLAY:API:TYPE (stock/etf)</span>
+<button onclick="doPaste()">Add</button>
+</div>
+</div>
+<div class="save-bar" id="saveBar"><button onclick="doSave()">Save</button></div>
+</div>
+</div>
+
+<script>
+function openLogoModal(){document.getElementById('logoModal').classList.add('open');}
+function closeLogoModal(){document.getElementById('logoModal').classList.remove('open');}
+
+var D=[],aw=null,ag=null,dirty=false;
+
+function load(){fetch('/api/watchlists').then(function(r){return r.json();}).then(function(d){D=d;rWL();if(D.length)selWL(0);});}
+
+function rWL(){
+  var el=document.getElementById('wlList');
+  el.innerHTML=D.map(function(w,i){
+    var c=0;w.groups.forEach(function(g){c+=g.tickers.length;});
+    return '<div class="wi'+(aw===i?' active':'')+'" onclick="selWL('+i+')"><div><div class="nm">'+w.name+'</div><div class="mt">'+w.groups.length+'g · '+c+'t</div></div><span class="wi-arrows"><button onclick="event.stopPropagation();moveWL('+i+',-1)" title="Move up">&uarr;</button><button onclick="event.stopPropagation();moveWL('+i+',1)" title="Move down">&darr;</button></span><span class="wi-del" onclick="event.stopPropagation();delWL('+i+')" title="Delete watchlist">×</span></div>';
+  }).join('');
+}
+function moveWL(i,dir){
+  var j=i+dir;if(j<0||j>=D.length)return;
+  var tmp=D[i];D[i]=D[j];D[j]=tmp;
+  if(aw===i)aw=j;else if(aw===j)aw=i;
+  markDirty();rWL();rGrp();
+}
+
+function selWL(i){aw=i;ag=null;rWL();rGrp();document.getElementById('tkBody').innerHTML='<div class="empty">Select a group</div>';document.getElementById('tkHdr').textContent='Tickers';}
+
+function rGrp(){
+  if(aw===null)return;
+  var el=document.getElementById('grpList');
+  el.innerHTML=D[aw].groups.map(function(g,i){
+    return '<div class="gi'+(ag===i?' active':'')+'" onclick="selGrp('+i+')"><span>'+g.name+'</span><span><span class="cnt">'+g.tickers.length+'</span><span class="gi-arrows"><button onclick="event.stopPropagation();moveGrp('+i+',-1)" title="Move up">&uarr;</button><button onclick="event.stopPropagation();moveGrp('+i+',1)" title="Move down">&darr;</button></span><span class="gi-del" onclick="event.stopPropagation();delGrp('+i+')" title="Delete group">×</span></span></div>';
+  }).join('');
+}
+function moveGrp(i,dir){
+  if(aw===null)return;
+  var gs=D[aw].groups;var j=i+dir;if(j<0||j>=gs.length)return;
+  var tmp=gs[i];gs[i]=gs[j];gs[j]=tmp;
+  if(ag===i)ag=j;else if(ag===j)ag=i;
+  markDirty();rGrp();
+}
+
+function selGrp(i){ag=i;rGrp();rTk();}
+
+function rTk(){
+  if(aw===null||ag===null)return;
+  var g=D[aw].groups[ag];
+  document.getElementById('tkHdr').textContent=g.name+' ('+g.tickers.length+')';
+  var el=document.getElementById('tkBody');
+  if(!g.tickers.length){el.innerHTML='<div class="empty">Empty — paste tickers below</div>';return;}
+  el.innerHTML=g.tickers.map(function(t,i){
+    var tc=t.type==='etf'?'te':t.type==='index'?'ti':'ts';
+    var ap=t.api!==t.display?t.api:'';
+    return '<div class="tr"><span class="tn">'+t.display+'</span><span class="ta">'+ap+'</span><span class="tt '+tc+'">'+(t.type||'stock').toUpperCase()+'</span><span class="tx" onclick="rmTk('+i+')" title="Remove">×</span></div>';
+  }).join('');
+}
+
+function doPaste(){
+  if(aw===null||ag===null){alert('Select a watchlist and group first');return;}
+  var raw=document.getElementById('pasteBox').value.trim();
+  if(!raw)return;
+  var toks=raw.split(/[\n,\t]+/).map(function(s){return s.trim();}).filter(Boolean);
+  var tks=[];
+  toks.forEach(function(tok){
+    tok.split(/\s+/).forEach(function(t){
+      if(!t)return;
+      var p=t.split(':');
+      if(p.length>=3)tks.push({display:p[0].toUpperCase(),api:p[1].toUpperCase(),type:p[2].toLowerCase()});
+      else if(p.length===2)tks.push({display:p[0].toUpperCase(),api:p[0].toUpperCase(),type:p[1].toLowerCase()});
+      else tks.push({display:t.toUpperCase(),api:t.toUpperCase(),type:'stock'});
+    });
+  });
+  var grp=D[aw].groups[ag];
+  var ex=new Set(grp.tickers.map(function(t){return t.display;}));
+  var n=0;
+  tks.forEach(function(t){if(!ex.has(t.display)){grp.tickers.push(t);ex.add(t.display);n++;}});
+  document.getElementById('pasteBox').value='';
+  if(n>0){markDirty();rTk();rGrp();rWL();}
+}
+
+function rmTk(i){
+  if(aw===null||ag===null)return;
+  D[aw].groups[ag].tickers.splice(i,1);
+  markDirty();rTk();rGrp();rWL();
+}
+
+function addGrpPrompt(){
+  if(aw===null){alert('Select a watchlist first');return;}
+  var name=prompt('Group name:');
+  if(!name)return;
+  D[aw].groups.push({name:name.trim(),tickers:[]});
+  markDirty();rGrp();rWL();
+  selGrp(D[aw].groups.length-1);
+}
+
+function delWL(i){
+  if(!confirm('Delete watchlist "'+D[i].name+'"?'))return;
+  D.splice(i,1);
+  if(aw===i){aw=D.length>0?0:null;ag=null;}
+  else if(aw>i)aw--;
+  markDirty();rWL();
+  if(aw!==null)selWL(aw);
+  else{document.getElementById('grpList').innerHTML='';document.getElementById('tkBody').innerHTML='<div class="empty">No watchlist selected</div>';}
+}
+
+function delGrp(i){
+  if(aw===null)return;
+  if(!confirm('Delete group "'+D[aw].groups[i].name+'"?'))return;
+  D[aw].groups.splice(i,1);
+  if(ag===i){ag=null;document.getElementById('tkBody').innerHTML='<div class="empty">Select a group</div>';document.getElementById('tkHdr').textContent='Tickers';}
+  else if(ag>i)ag--;
+  markDirty();rGrp();rWL();
+}
+
+function newWL(){
+  var name=prompt('Watchlist name:');
+  if(!name)return;
+  D.push({name:name.trim(),groups:[]});
+  markDirty();rWL();selWL(D.length-1);
+}
+
+function markDirty(){dirty=true;document.getElementById('saveBar').style.display='block';}
+
+function doSave(){
+  fetch('/api/watchlists/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(D)})
+  .then(function(r){return r.json();})
+  .then(function(res){
+    if(res.ok){dirty=false;document.getElementById('saveBar').style.display='none';alert('Saved!');}
+    else alert('Error: '+(res.error||'Unknown'));
+  }).catch(function(e){alert('Save failed: '+e.message);});
+}
+
+load();
+
+// Scheduler badge updater
+function updateSchedulerBadge(){
+  fetch('/api/scheduler/status').then(function(r){return r.json();}).then(function(s){
+    var badge=document.getElementById('schedulerBadge');
+    if(!badge)return;
+    var cur=s.current_watchlists||[];
+    if(cur.length){badge.textContent='Scanning: '+cur.join(', ');badge.style.color='#f59e0b';badge.style.borderColor='#f59e0b';}
+    else if(!s.enabled){badge.textContent='Scheduler: OFF';badge.style.color='#ef4444';badge.style.borderColor='#334155';}
+    else{badge.textContent='Scheduler: Idle';badge.style.color='#22c55e';badge.style.borderColor='#334155';}
+  }).catch(function(){});
+}
+updateSchedulerBadge();setInterval(updateSchedulerBadge,30000);
+</script>
+</body>
+</html>

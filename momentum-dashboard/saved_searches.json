@@ -1,0 +1,17 @@
+{
+  "Squeeze Orange 1W": {
+    "criteria": [
+      {
+        "indicator": "sqz_state",
+        "timeframes": [
+          "1W"
+        ],
+        "value": "orange",
+        "join": "if"
+      }
+    ],
+    "adj": 0,
+    "watchlist": "",
+    "created": "2026-02-23T01:37:29.249144"
+  }
+}

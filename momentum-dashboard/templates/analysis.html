@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TBD Technologies — Sweep Analysis</title>
+<link rel="stylesheet" href="/static/header.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#08080d;color:#d0d0d8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;overflow-x:hidden;}
+
+.page-content{padding:12px 20px 40px;max-width:1600px;margin:0 auto;}
+
+.chart-section{background:#0a0a10;border:1px solid #1e1e2e;border-radius:8px;margin-bottom:16px;overflow:hidden;}
+.section-header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid #1e1e2e;}
+.section-title{font-size:14px;font-weight:700;color:#d0d0d8;letter-spacing:0.3px;}
+.section-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+
+.ctrl-label{font-size:9px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.5px;}
+.ctrl-select{background:#14141e;color:#aaa;border:1px solid #1e1e2e;font-size:11px;padding:3px 8px;border-radius:4px;height:26px;cursor:pointer;font-weight:600;}
+.ctrl-select:hover{border-color:#555;}
+.ctrl-select:focus{outline:none;border-color:#f59e0b66;}
+.ctrl-input{background:#14141e;color:#aaa;border:1px solid #1e1e2e;font-size:11px;padding:3px 8px;border-radius:4px;height:26px;font-weight:600;font-family:'Consolas',monospace;width:90px;}
+.ctrl-input:focus{outline:none;border-color:#f59e0b66;}
+.ctrl-sep{width:1px;height:18px;background:#1e1e2e;}
+
+.chart-box{width:100%;position:relative;}
+.chart-box .loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#555;font-size:12px;}
+
+/* Toggle buttons */
+.ctrl-toggle{background:#14141e;color:#888;border:1px solid #1e1e2e;padding:3px 10px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;height:26px;text-transform:uppercase;letter-spacing:0.3px;}
+.ctrl-toggle:hover{color:#ccc;background:#1a1a26;}
+.ctrl-toggle.active{color:#f59e0b;background:#1a1a26;border-color:#f59e0b66;}
+.ctrl-toggle.disabled{opacity:0.3;cursor:not-allowed;pointer-events:none;}
+
+/* Universe scope bar */
+.scope-bar{display:flex;align-items:center;gap:6px;padding:6px 16px;border-bottom:1px solid #1e1e2e;background:#09090f;}
+.scope-btn{background:#14141e;color:#888;border:1px solid #1e1e2e;padding:4px 14px;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;height:26px;display:inline-flex;align-items:center;gap:5px;text-transform:uppercase;letter-spacing:0.3px;white-space:nowrap;transition:all .15s;}
+.scope-btn:hover{color:#ccc;background:#1a1a26;border-color:#333;}
+.scope-btn.active{color:#4ade80;background:#14241e;border-color:#4ade8066;}
+.scope-btn.disabled{opacity:0.35;cursor:not-allowed;}
+.scope-btn.disabled:hover{color:#888;background:#14141e;border-color:#1e1e2e;}
+.scope-btn .scope-badge{font-size:8px;font-weight:700;color:#000;background:#555;padding:1px 4px;border-radius:3px;text-transform:uppercase;letter-spacing:0.3px;}
+.scope-btn.disabled .scope-badge{background:#444;color:#222;}
+.scope-btn.active .scope-badge{background:#4ade80;color:#052e16;}
+.scope-wl-select{background:#14141e;color:#888;border:1px solid #1e1e2e;font-size:10px;padding:2px 6px;border-radius:4px;height:26px;cursor:pointer;font-weight:600;text-transform:uppercase;}
+.scope-wl-select:focus{outline:none;border-color:#4ade8066;}
+.scope-wl-select.active{color:#4ade80;border-color:#4ade8066;background:#14241e;}
+
+/* Year nav */
+.year-nav{display:flex;align-items:center;gap:4px;}
+.year-nav-btn{background:none;border:1px solid #1e1e2e;color:#888;font-size:14px;cursor:pointer;width:26px;height:26px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;padding:0;}
+.year-nav-btn:hover{color:#ccc;border-color:#555;}
+.year-label{font-size:13px;font-weight:700;color:#d0d0d8;min-width:40px;text-align:center;}
+</style>
+</head>
+<body>
+
+<script>window._activePage='analysis';</script>
+<div id="headerRow1"></div>
+<script src="/static/header.js"></script>
+
+<div class="page-content">
+
+  <!-- ================================================================ -->
+  <!-- RIVER CHART -->
+  <!-- ================================================================ -->
+  <div class="chart-section">
+    <div class="section-header">
+      <div class="section-title">&#x1F30A; Sector Flow</div>
+      <div class="section-controls">
+        <span class="ctrl-label">Granularity</span>
+        <select class="ctrl-select" id="riverGran" onchange="loadRiver()">
+          <option value="week" selected>Weekly</option>
+          <option value="month">Monthly</option>
+        </select>
+        <div class="ctrl-sep"></div>
+        <span class="ctrl-label">Metric</span>
+        <select class="ctrl-select" id="riverMetric" onchange="loadRiver()">
+          <option value="notional" selected>Total Notional ($)</option>
+          <option value="count">Sweep Count</option>
+        </select>
+        <div class="ctrl-sep"></div>
+        <span class="ctrl-label">From</span>
+        <input type="date" class="ctrl-input" id="riverFrom" onchange="loadRiver()">
+        <span class="ctrl-label">To</span>
+        <input type="date" class="ctrl-input" id="riverTo" onchange="loadRiver()">
+        <div class="ctrl-sep"></div>
+        <span class="ctrl-label">Min Day $</span>
+        <input type="number" class="ctrl-input" id="riverMinNotional" value="0" min="0" step="1000000" onchange="loadRiver()" style="width:80px;">
+      </div>
+    </div>
+    <div class="scope-bar" id="riverScopeBar">
+      <span class="ctrl-label" style="color:#666;">Universe</span>
+      <div class="ctrl-sep"></div>
+      <button class="scope-btn active" id="scopeStocks" onclick="setRiverScope('stocks')">
+        📊 Stocks <span class="scope-badge">Live</span>
+      </button>
+      <button class="scope-btn disabled" id="scopeEtfs" title="ETF data coming soon" onclick="return false;">
+        📈 ETFs <span class="scope-badge">Soon</span>
+      </button>
+      <div class="ctrl-sep"></div>
+      <button class="scope-btn" id="scopeWatchlist" onclick="setRiverScope('watchlist')">
+        ⭐ Watchlist
+      </button>
+      <select class="scope-wl-select" id="riverWatchlist" onchange="onRiverWatchlistChange()" disabled>
+        <option value="">— pick —</option>
+      </select>
+      <div class="ctrl-sep"></div>
+      <button class="scope-btn disabled" id="scopeSectorEtf" title="Sector ETF breakdown coming soon" onclick="return false;">
+        🏗️ Sector ETFs <span class="scope-badge">Soon</span>
+      </button>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+        <button class="ctrl-toggle" onclick="riverLegendAll(true)" style="font-size:9px;height:22px;padding:2px 8px;">All</button>
+        <button class="ctrl-toggle" onclick="riverLegendAll(false)" style="font-size:9px;height:22px;padding:2px 8px;">None</button>
+      </div>
+    </div>
+    <div class="chart-box" id="riverChartBox" style="height:480px;">
+      <div class="loading">Loading river chart...</div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- CALENDAR HEATMAP -->
+  <!-- ================================================================ -->
+  <div class="chart-section">
+    <div class="section-header">
+      <div class="section-title">&#x1F4C5; Calendar Heatmap</div>
+      <div class="section-controls">
+        <div class="year-nav">
+          <button class="year-nav-btn" onclick="changeYear(-1)">&#x25C0;</button>
+          <span class="year-label" id="heatYearLabel">2026</span>
+          <button class="year-nav-btn" onclick="changeYear(1)">&#x25B6;</button>
+        </div>
+        <div class="ctrl-sep"></div>
+        <span class="ctrl-label">Metric</span>
+        <select class="ctrl-select" id="heatMetric" onchange="loadHeatmap()">
+          <option value="notional" selected>Total Notional</option>
+          <option value="count">Sweep Count</option>
+          <option value="events">Event Count</option>
+        </select>
+        <div class="ctrl-sep"></div>
+        <span class="ctrl-label">Event Type</span>
+        <select class="ctrl-select" id="heatEventType" onchange="loadHeatmap()">
+          <option value="all" selected>All</option>
+          <option value="clusterbomb">Clusterbombs</option>
+          <option value="rare_sweep">Rare Sweeps</option>
+          <option value="monster_sweep">Monsters</option>
+        </select>
+      </div>
+    </div>
+    <div class="chart-box" id="heatmapChartBox" style="height:220px;">
+      <div class="loading">Loading heatmap...</div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script>
+// ====================================================================
+// STATE
+// ====================================================================
+var _riverChart = null;
+var _riverSectors = [];
+var _riverScope = 'stocks';  // 'stocks' | 'watchlist'
+var _riverWatchlists = [];   // cached from /api/watchlists
+var _heatmapChart = null;
+var _heatYear = 2026;
+
+var SECTOR_COLORS = {
+  'Technology':              '#1848cc',
+  'Financials':              '#388e3c',
+  'Health Care':             '#c2185b',
+  'Consumer Discretionary':  '#f57c00',
+  'Energy':                  '#b22833',
+  'Industrials':             '#0097a7',
+  'Consumer Staples':        '#7b1fa2',
+  'Communication Services':  '#fbc02d',
+  'Materials':               '#5d4037',
+  'Real Estate':             '#00838f',
+  'Utilities':               '#558b2f',
+  'Other':                   '#616161'
+};
+
+// ====================================================================
+// UTILITIES
+// ====================================================================
+function fmtNotional(val){
+  if(val >= 1e9) return (val/1e9).toFixed(1) + 'B';
+  if(val >= 1e6) return (val/1e6).toFixed(1) + 'M';
+  if(val >= 1e3) return (val/1e3).toFixed(0) + 'K';
+  return val.toFixed(0);
+}
+
+// ====================================================================
+// RIVER CHART
+// ====================================================================
+function setRiverScope(scope){
+  if(scope === _riverScope) return;
+  _riverScope = scope;
+  // Update button active states
+  document.getElementById('scopeStocks').classList.toggle('active', scope === 'stocks');
+  document.getElementById('scopeWatchlist').classList.toggle('active', scope === 'watchlist');
+  var wlSel = document.getElementById('riverWatchlist');
+  wlSel.disabled = (scope !== 'watchlist');
+  wlSel.classList.toggle('active', scope === 'watchlist');
+  if(scope === 'watchlist' && !wlSel.value){
+    // Don't load yet — need a watchlist picked
+    return;
+  }
+  loadRiver();
+}
+
+function onRiverWatchlistChange(){
+  var wlSel = document.getElementById('riverWatchlist');
+  if(wlSel.value){
+    _riverScope = 'watchlist';
+    document.getElementById('scopeStocks').classList.remove('active');
+    document.getElementById('scopeWatchlist').classList.add('active');
+    wlSel.disabled = false;
+    wlSel.classList.add('active');
+    loadRiver();
+  }
+}
+
+function loadRiverWatchlists(){
+  fetch('/api/watchlists')
+    .then(function(r){ return r.json(); })
+    .then(function(list){
+      _riverWatchlists = list;
+      var sel = document.getElementById('riverWatchlist');
+      // Keep the placeholder
+      sel.innerHTML = '<option value="">— pick —</option>';
+      list.forEach(function(wl){
+        var opt = document.createElement('option');
+        opt.value = wl.name;
+        opt.textContent = wl.name;
+        sel.appendChild(opt);
+      });
+    })
+    .catch(function(e){ console.error('Watchlist load error:', e); });
+}
+
+function loadRiver(){
+  var gran = document.getElementById('riverGran').value;
+  var metric = document.getElementById('riverMetric').value;
+  var from = document.getElementById('riverFrom').value;
+  var to = document.getElementById('riverTo').value;
+  var minN = document.getElementById('riverMinNotional').value;
+
+  var params = new URLSearchParams({granularity: gran, metric: metric});
+  if(from) params.set('date_from', from);
+  if(to) params.set('date_to', to);
+  if(minN && parseFloat(minN) > 0) params.set('min_notional', minN);
+  if(_riverScope === 'watchlist'){
+    var wl = document.getElementById('riverWatchlist').value;
+    if(wl) params.set('watchlist', wl);
+  }
+
+  fetch('/api/analysis/river?' + params.toString())
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d.error){ console.error('River error:', d.error); return; }
+      renderRiver(d.data, d.sectors, metric);
+    })
+    .catch(function(e){ console.error('River fetch error:', e); });
+}
+
+function riverLegendAll(show){
+  if(!_riverChart || !_riverSectors.length) return;
+  var selected = {};
+  for(var i = 0; i < _riverSectors.length; i++){
+    selected[_riverSectors[i]] = show;
+  }
+  _riverChart.setOption({legend: {selected: selected}});
+}
+
+function renderRiver(data, sectors, metric){
+  _riverSectors = sectors || [];
+  var dom = document.getElementById('riverChartBox');
+  dom.innerHTML = '';
+  if(!data || data.length === 0){
+    dom.innerHTML = '<div class="loading">No data available</div>';
+    return;
+  }
+
+  if(_riverChart){ _riverChart.dispose(); }
+  _riverChart = echarts.init(dom, null, {renderer: 'canvas'});
+
+  var isNotional = (metric === 'notional');
+  var colorList = sectors.map(function(s){ return SECTOR_COLORS[s] || '#6b7280'; });
+
+  var option = {
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: '#12121a',
+      borderColor: '#2a2a3a',
+      textStyle: {color: '#d0d0d8', fontSize: 11},
+      formatter: function(params){
+        if(!params || params.length === 0) return '';
+        var html = '<div style="font-weight:700;margin-bottom:4px;color:#f59e0b">' + params[0].axisValue + '</div>';
+        var items = [];
+        var total = 0;
+        for(var i = 0; i < params.length; i++){
+          var p = params[i];
+          var val = p.value ? p.value[1] : 0;
+          if(val > 0){
+            items.push({name: p.seriesName || (p.value ? p.value[2] : ''), val: val, marker: p.marker});
+            total += val;
+          }
+        }
+        items.sort(function(a,b){ return b.val - a.val; });
+        for(var j = 0; j < items.length; j++){
+          var display = isNotional ? '$' + fmtNotional(items[j].val) : items[j].val.toLocaleString();
+          html += '<div style="font-size:11px">' + items[j].marker + ' ' + items[j].name + ': <strong>' + display + '</strong></div>';
+        }
+        var totalDisplay = isNotional ? '$' + fmtNotional(total) : total.toLocaleString();
+        html += '<div style="border-top:1px solid #333;margin-top:4px;padding-top:4px;font-weight:700;color:#ccc">Total: ' + totalDisplay + '</div>';
+        return html;
+      }
+    },
+    legend: {
+      data: sectors,
+      textStyle: {color: '#888', fontSize: 10},
+      top: 8,
+      left: 'center',
+      type: 'scroll',
+      pageTextStyle: {color: '#888'},
+      pageIconColor: '#888',
+      pageIconInactiveColor: '#333'
+    },
+    singleAxis: {
+      type: 'time',
+      top: 50,
+      bottom: 50,
+      axisLine: {lineStyle: {color: '#1e1e2e'}},
+      axisLabel: {color: '#666', fontSize: 10},
+      splitLine: {show: false}
+    },
+    series: [{
+      type: 'themeRiver',
+      data: data,
+      emphasis: {
+        focus: 'series',
+        itemStyle: {shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.3)'}
+      },
+      label: {show: false}
+    }],
+    dataZoom: [{
+      type: 'inside',
+      filterMode: 'none'
+    }, {
+      type: 'slider',
+      bottom: 8,
+      height: 22,
+      borderColor: '#2a2a3a',
+      backgroundColor: '#0a0a10',
+      fillerColor: 'rgba(245,158,11,0.08)',
+      handleStyle: {color: '#f59e0b', borderColor: '#f59e0b'},
+      textStyle: {color: '#666', fontSize: 10},
+      dataBackground: {
+        lineStyle: {color: '#333'},
+        areaStyle: {color: '#1a1a2e'}
+      }
+    }],
+    color: colorList
+  };
+
+  _riverChart.setOption(option);
+}
+
+// ====================================================================
+// CALENDAR HEATMAP
+// ====================================================================
+function changeYear(delta){
+  _heatYear += delta;
+  if(_heatYear < 2016) _heatYear = 2016;
+  if(_heatYear > 2026) _heatYear = 2026;
+  document.getElementById('heatYearLabel').textContent = _heatYear;
+  loadHeatmap();
+}
+
+function loadHeatmap(){
+  var metric = document.getElementById('heatMetric').value;
+  var eventType = document.getElementById('heatEventType').value;
+
+  var params = new URLSearchParams({year: _heatYear, metric: metric, event_type: eventType});
+
+  fetch('/api/analysis/heatmap?' + params.toString())
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d.error){ console.error('Heatmap error:', d.error); return; }
+      renderHeatmap(d.data, d.year, metric);
+    })
+    .catch(function(e){ console.error('Heatmap fetch error:', e); });
+}
+
+function renderHeatmap(data, year, metric){
+  var dom = document.getElementById('heatmapChartBox');
+  dom.innerHTML = '';
+  if(!data || data.length === 0){
+    dom.innerHTML = '<div class="loading">No data for ' + year + '</div>';
+    return;
+  }
+
+  if(_heatmapChart){ _heatmapChart.dispose(); }
+  _heatmapChart = echarts.init(dom, null, {renderer: 'canvas'});
+
+  var isNotional = (metric === 'notional');
+  var values = data.map(function(d){ return d[1]; });
+  var maxVal = Math.max.apply(null, values);
+
+  var option = {
+    backgroundColor: 'transparent',
+    tooltip: {
+      backgroundColor: '#12121a',
+      borderColor: '#2a2a3a',
+      textStyle: {color: '#d0d0d8', fontSize: 11},
+      formatter: function(p){
+        if(!p.value) return '';
+        var val = isNotional ? '$' + fmtNotional(p.value[1]) : p.value[1].toLocaleString();
+        return '<div style="font-weight:700;color:#f59e0b">' + p.value[0] + '</div>' +
+               '<div>' + (isNotional ? 'Notional' : (metric === 'count' ? 'Sweeps' : 'Events')) + ': <strong>' + val + '</strong></div>';
+      }
+    },
+    visualMap: {
+      min: 0,
+      max: maxVal || 1,
+      calculable: true,
+      orient: 'horizontal',
+      left: 'center',
+      bottom: 4,
+      itemWidth: 12,
+      itemHeight: 100,
+      inRange: {
+        color: ['#0f0f1a', '#1a1a2e', '#f59e0b33', '#f59e0b88', '#f59e0b']
+      },
+      textStyle: {color: '#666', fontSize: 10},
+      formatter: function(val){ return isNotional ? '$' + fmtNotional(val) : Math.round(val); }
+    },
+    calendar: {
+      range: String(year),
+      top: 30,
+      left: 50,
+      right: 30,
+      bottom: 50,
+      cellSize: ['auto', 15],
+      splitLine: {lineStyle: {color: '#1e1e2e', width: 1}},
+      itemStyle: {borderColor: '#08080d', borderWidth: 2, color: '#0a0a10'},
+      dayLabel: {
+        nameMap: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+        color: '#555',
+        fontSize: 9
+      },
+      monthLabel: {color: '#888', fontSize: 10},
+      yearLabel: {show: false}
+    },
+    series: [{
+      type: 'heatmap',
+      coordinateSystem: 'calendar',
+      data: data,
+      emphasis: {
+        itemStyle: {borderColor: '#f59e0b', borderWidth: 2}
+      }
+    }]
+  };
+
+  _heatmapChart.setOption(option);
+}
+
+// ====================================================================
+// RESIZE HANDLING
+// ====================================================================
+window.addEventListener('resize', function(){
+  if(_riverChart) _riverChart.resize();
+  if(_heatmapChart) _heatmapChart.resize();
+});
+
+// ====================================================================
+// INIT
+// ====================================================================
+loadRiverWatchlists();
+loadRiver();
+loadHeatmap();
+</script>
+</body>
+</html>

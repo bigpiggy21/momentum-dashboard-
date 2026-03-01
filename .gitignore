@@ -1,0 +1,42 @@
+# Data files — transfer via scp, not git
+momentum-dashboard/cache/
+momentum-dashboard/*.db
+momentum-dashboard/*.db-journal
+momentum-dashboard/*.db-wal
+
+# API keys / secrets
+momentum-dashboard/config.py
+
+# Debug scripts
+momentum-dashboard/debug_*.py
+momentum-dashboard/diag_*.py
+momentum-dashboard/benchmark.py
+
+# Misc data files
+momentum-dashboard/*.csv
+momentum-dashboard/*.txt
+momentum-dashboard/*.zip
+momentum-dashboard/download_log.txt
+
+# Old/duplicate watchlist files in wrong location
+momentum-dashboard/sp500_watchlist.py
+momentum-dashboard/russell1000_watchlist.py
+momentum-dashboard/russell2000_watchlist.py
+momentum-dashboard/russell3000_watchlist.py
+momentum-dashboard/templates/change_detector.py
+momentum-dashboard/templates/indicators.py
+momentum-dashboard/templates/sp500_watchlist.py
+momentum-dashboard/templates/config.py
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Claude Code local settings
+.claude/
+momentum-dashboard/.claude/
+
+# OS files
+Thumbs.db
+.DS_Store

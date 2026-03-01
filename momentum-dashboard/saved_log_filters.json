@@ -1,0 +1,55 @@
+{
+  "Orange 4HR to 1D": {
+    "timeScope": "24h",
+    "barStatus": "confirmed",
+    "activeInds": {
+      "MOM": {
+        "on": false,
+        "subs": [
+          "aqua",
+          "blue",
+          "yellow",
+          "red"
+        ]
+      },
+      "SQZ": {
+        "on": true,
+        "subs": [
+          "orange"
+        ]
+      },
+      "BAND": {
+        "on": false,
+        "subs": [
+          "bull",
+          "bear"
+        ]
+      },
+      "ACC": {
+        "on": false,
+        "subs": [
+          "accel",
+          "decel"
+        ]
+      },
+      "DEV": {
+        "on": false,
+        "subs": [
+          "buy",
+          "sell"
+        ]
+      },
+      "30WMA": {
+        "on": false,
+        "subs": []
+      }
+    },
+    "activeTFs": [
+      "8H",
+      "1D",
+      "4H"
+    ],
+    "ticker": "",
+    "created": "2026-02-23T12:42:56.147056"
+  }
+}

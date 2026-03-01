@@ -1,0 +1,37 @@
+/* ====================================================================
+   SHARED HEADER — Global navigation bar (row 1)
+   Based on settings.html reference styling.
+   Linked from all pages via <link rel="stylesheet" href="/static/header.css">
+   ==================================================================== */
+
+/* Row 1: Global Navigation */
+.header-row1{background:linear-gradient(180deg,#111118,#0c0c12);padding:12px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1e1e2e;position:sticky;top:0;z-index:102;}
+.header-row1 h1{font-size:26px;font-weight:700;color:#fff;display:flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;}
+.header-row1 h1 .accent{color:#f59e0b;}
+.logo-clickable{cursor:pointer;}.logo-clickable:hover{opacity:0.85;}
+.logo-icon{flex-shrink:0;filter:drop-shadow(0 0 4px rgba(245,158,11,0.3));}
+.header-left{display:flex;align-items:center;gap:17px;flex-wrap:wrap;}
+.header-right{display:flex;align-items:center;gap:16px;}
+.header-divider{width:1px;height:34px;background:#2a2a3a;margin:0 5px;}
+.header-section{display:flex;flex-direction:column;gap:2px;}
+.section-label{font-size:11px;text-transform:uppercase;color:#444;font-weight:700;letter-spacing:1px;padding-left:2px;}
+.section-controls{display:flex;gap:4px;align-items:center;}
+.page-btn{font-size:13px;padding:4px 10px;border-radius:4px;text-decoration:none;cursor:pointer;font-weight:600;background:#1e293b;color:#aaa;border:1px solid #334155;display:inline-flex;align-items:center;gap:3px;white-space:nowrap;transition:all 0.15s;}
+.page-btn:hover{background:#334155;color:#fff;}
+.page-btn.page-active{background:#334155;color:#f59e0b;border-color:#f59e0b;}
+.page-btn.page-disabled{opacity:0.3;cursor:not-allowed;pointer-events:none;}
+.status{font-size:13px;color:#555;font-family:'Consolas',monospace;text-align:right;line-height:1.5;}
+.status .live{color:#22c55e;}
+
+/* ? help button — small, circular */
+.page-help-btn{width:28px;height:28px;padding:0;border-radius:50%;font-size:14px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;color:#555;background:#14141e;border:1px solid #2a2a3a;flex-shrink:0;}
+.page-help-btn:hover{color:#f59e0b;border-color:#f59e0b44;background:#1a1a24;}
+
+/* Darkpool Sweeps — orange border highlight */
+.page-btn.sweeps-highlight{border-color:#f59e0b88;color:#d4a030;font-weight:700;}
+.page-btn.sweeps-highlight:hover{border-color:#f59e0b;color:#f59e0b;background:#f59e0b11;}
+.page-btn.sweeps-highlight.page-active{background:#f59e0b18;color:#f59e0b;border-color:#f59e0b;}
+
+/* Scheduler button — darker/hidden, sits next to Last Scan */
+.scheduler-btn{background:#0e0e16;color:#444;border-color:#1a1a24;font-size:14px;padding:4px 8px;}
+.scheduler-btn:hover{background:#1a1a24;color:#888;border-color:#2a2a3a;}

@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TBD Technologies — Event Log</title>
+<link rel="stylesheet" href="/static/header.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-serif;font-size:13px;}
+/* Row 2: Page Controls */
+.header-row2{background:#0c0c14;padding:6px 20px;border-bottom:1px solid #1e1e2e;display:flex;gap:10px;align-items:center;position:sticky;top:var(--row1-h,50px);z-index:101;}
+.row2-btn{background:#1e293b;color:#aaa;border:1px solid #334155;padding:4px 12px;border-radius:4px;font-size:11px;cursor:pointer;font-weight:500;display:inline-flex;align-items:center;gap:4px;height:26px;}
+.row2-btn:hover{background:#334155;color:#fff;}
+/* Row 3: Filter Bar */
+.header-row3{background:#0c0c14;padding:6px 20px;border-bottom:1px solid #1e1e2e;display:flex;gap:8px;align-items:center;flex-wrap:wrap;position:sticky;top:var(--row12-h,86px);z-index:100;}
+.header-row3 label{font-size:11px;color:#555;font-weight:500;white-space:nowrap;}
+.header-row3 select{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:4px 8px;border-radius:4px;font-size:11px;height:26px;cursor:pointer;}
+.filter-divider{width:1px;height:20px;background:#2a2a3a;flex-shrink:0;}
+/* Saved filter controls */
+.saved-wrap{display:flex;gap:4px;align-items:center;}
+.saved-select{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:4px 8px;border-radius:4px;font-size:11px;height:26px;min-width:140px;}
+.btn-save,.btn-del{background:#1e293b;color:#aaa;border:1px solid #334155;padding:4px 8px;border-radius:4px;font-size:10px;cursor:pointer;font-weight:600;height:26px;display:inline-flex;align-items:center;}
+.btn-save:hover,.btn-del:hover{background:#334155;color:#fff;}
+/* Status toggles */
+.filter-toggle{font-size:10px;padding:4px 10px;border-radius:3px;cursor:pointer;font-weight:600;background:#1e293b;color:#aaa;border:1px solid #334155;height:26px;display:inline-flex;align-items:center;justify-content:center;}
+.filter-toggle:hover{background:#334155;color:#fff;}
+.filter-toggle.active{background:#334155;color:#f59e0b;border-color:#f59e0b;}
+/* Indicator toggles */
+.ind-toggle-group{display:flex;gap:3px;align-items:flex-start;}
+.ind-wrap{display:flex;flex-direction:column;gap:1px;}
+.ind-toggle{font-size:9px;padding:4px 8px;border-radius:3px 3px 0 0;cursor:pointer;font-weight:700;border:none;height:20px;display:inline-flex;align-items:center;justify-content:center;letter-spacing:0.3px;}
+.ind-toggle.no-subs{border-radius:3px;height:26px;}
+.ind-toggle.active{opacity:1;}.ind-toggle.inactive{opacity:0.25;}
+.it-mom{background:#0999a8;color:#fff;}.it-sqz{background:#e45200;color:#fff;}.it-band{background:#2c66ff;color:#fff;}.it-acc{background:#4bb050;color:#fff;}.it-dev{background:#555;color:#fff;}.it-30wma{background:#f59e0b;color:#000;}
+.ind-subs{display:flex;gap:1px;}
+.ind-sub{height:6px;border-radius:0 0 3px 3px;cursor:pointer;border:none;flex:1;min-width:8px;}
+.ind-sub.active{opacity:1;}.ind-sub.inactive{opacity:0.2;}
+.is-mom-aqua{background:#0999a8;}.is-mom-blue{background:#1546cc;}.is-mom-yellow{background:#d4a800;}.is-mom-red{background:#b22838;}
+.is-sqz-green{background:#1d5e20;}.is-sqz-black{background:#444;}.is-sqz-red{background:#821824;}.is-sqz-orange{background:#e45200;}
+.is-band-bull{background:#4bb050;}.is-band-bear{background:#ff5254;}
+.is-acc-accel{background:#4bb050;}.is-acc-decel{background:#ff5254;}
+.is-dev-buy{background:#2d8a35;}.is-dev-sell{background:#c43030;}
+/* TF toggles */
+.tf-toggles{display:flex;gap:3px;flex-wrap:wrap;}
+.tf-toggle{font-size:9px;padding:4px 5px;border-radius:3px;cursor:pointer;font-weight:600;background:#1e293b;color:#aaa;border:1px solid #334155;height:26px;display:inline-flex;align-items:center;justify-content:center;}
+.tf-toggle.active{background:#334155;color:#fff;border-color:#555;}
+.tf-toggle.inactive{opacity:0.25;}
+.tf-all-btn{width:22px;height:26px;border-radius:3px;cursor:pointer;font-weight:700;background:#0e0e16;color:#444;border:1px solid #1e1e2e;display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0;}
+.tf-all-btn:hover{color:#f59e0b;border-color:#f59e0b;}
+/* Ticker input */
+.ticker-input{background:#0e0e16;color:#fff;border:1px solid #334155;padding:4px 12px;border-radius:4px;font-size:11px;width:84px;font-family:'Consolas',monospace;text-transform:uppercase;outline:none;height:26px;}
+.ticker-input:focus{border-color:#f59e0b;}
+.ticker-input::placeholder{color:#444;text-transform:none;font-family:'Segoe UI',sans-serif;}
+/* Event count */
+.filter-count{font-size:10px;color:#555;font-family:'Consolas',monospace;margin-left:auto;white-space:nowrap;}
+/* Modal */
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:999;justify-content:center;align-items:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:#12121a;border:1px solid #2a2a3a;border-radius:10px;padding:28px;max-width:680px;width:92%;max-height:85vh;overflow-y:auto;}
+.modal h2{font-size:17px;color:#fff;margin-bottom:18px;display:flex;align-items:center;gap:8px;}
+.modal-close{float:right;background:none;border:none;color:#666;font-size:22px;cursor:pointer;padding:4px;}.modal-close:hover{color:#fff;}
+/* Dropdowns */
+.dd-wrap{position:relative;}
+.dd-btn{background:#1e293b;color:#ccc;border:1px solid #334155;padding:4px 12px;border-radius:4px;font-size:11px;cursor:pointer;font-weight:500;height:26px;display:inline-flex;align-items:center;}
+.dd-btn:hover{background:#334155;}.dd-btn .active-name{color:#f59e0b;}
+.dd-menu{display:none;position:absolute;top:100%;left:0;margin-top:4px;background:#14141e;border:1px solid #2a2a3a;border-radius:6px;padding:8px;min-width:180px;z-index:200;max-height:400px;overflow-y:auto;}
+.dd-menu.open{display:block;}
+.dd-item{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:3px;cursor:pointer;font-size:11px;color:#ccc;}
+.dd-item:hover{background:#1e1e2e;}.dd-item input{accent-color:#f59e0b;}
+.dd-item.wl-active{background:#1e293b;color:#f59e0b;font-weight:600;}
+.dd-controls{display:flex;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid #2a2a3a;}
+.dd-controls button{background:#1e293b;color:#aaa;border:1px solid #334155;padding:2px 8px;border-radius:3px;font-size:10px;cursor:pointer;}
+.dd-controls button:hover{background:#334155;color:#fff;}
+/* Feed Container */
+.feed-container{overflow-y:auto;height:calc(100vh - var(--header-h,130px));}
+/* Session separator */
+.session-sep{display:flex;align-items:center;gap:10px;padding:6px 20px;background:#0a0a10;border-bottom:1px solid #1a1a24;}
+.session-time{font-size:10px;color:#555;font-family:'Consolas',monospace;font-weight:600;white-space:nowrap;}
+.session-line{flex:1;height:1px;background:#1a1a24;}
+.session-cnt{font-size:9px;color:#444;font-family:'Consolas',monospace;white-space:nowrap;}
+/* Event row */
+.ev-row{display:flex;padding:5px 20px;border-bottom:1px solid #0e0e14;align-items:center;gap:10px;}
+.ev-row:hover{background:#12121c;}
+.ev-row.ev-live{opacity:0.55;}
+.ev-time{color:#555;min-width:60px;font-family:'Consolas',monospace;font-size:11px;flex-shrink:0;}
+.ev-ticker{font-weight:700;min-width:50px;color:#fff;font-size:12px;flex-shrink:0;cursor:pointer;text-decoration:none;}
+.ev-ticker:hover{color:#f59e0b;text-decoration:underline;}
+.ev-tf{min-width:30px;font-weight:600;padding:1px 6px;border-radius:2px;text-align:center;font-size:9px;font-family:'Consolas',monospace;flex-shrink:0;}
+.ev-desc{flex:1;font-size:12px;}
+.ev-status{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.ev-status.st-confirmed{background:#22c55e;}
+.ev-status.st-live{background:#f59e0b;}
+/* Indicator colors for descriptions */
+.ind-MOM{color:#22d3ee;}.ind-SQZ{color:#f59e0b;}.ind-BAND{color:#60a5fa;}.ind-ACC{color:#4ade80;}.ind-DEV{color:#f87171;}.ind-30WMA{color:#f59e0b;}
+/* TF badge colors */
+.tf-high{background:#3b1111;color:#fca5a5;}.tf-mid{background:#3b2911;color:#fcd34d;}.tf-low{background:#113b1a;color:#86efac;}
+/* Load more */
+.load-more{padding:12px 20px;text-align:center;color:#555;font-size:11px;cursor:pointer;border-top:1px solid #1a1a24;}
+.load-more:hover{background:#0e0e16;color:#f59e0b;}
+/* Empty state */
+.feed-empty{padding:40px 20px;text-align:center;color:#333;font-size:12px;}
+::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:#08080d;}::-webkit-scrollbar-thumb{background:#2a2a3a;border-radius:2px;}
+</style>
+</head>
+<body>
+<!-- Logo Popup Modal -->
+<div class="modal-overlay" id="logoModal" onclick="if(event.target===this)closeLogoModal()">
+<div class="modal" style="text-align:center;max-width:500px;">
+<button class="modal-close" onclick="closeLogoModal()">&times;</button>
+<div style="margin:30px 0 20px;">
+<svg width="64" height="80" viewBox="0 0 22 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M11 2L2 26h8l3-10 3 10h4L11 2z" fill="#f59e0b" opacity="0.9"/>
+<path d="M11 2L7 16l4-3 4 3L11 2z" fill="#fbbf24"/>
+</svg>
+</div>
+<h2 style="font-size:28px;font-weight:700;margin-bottom:6px;">TBD <span style="color:#f59e0b;">Technologies</span></h2>
+<p style="color:#666;font-size:13px;margin-bottom:30px;">Momentum Intelligence Platform</p>
+<div style="border-top:1px solid #2a2a3a;padding-top:16px;color:#555;font-size:11px;">Future home of landing content &amp; system overview</div>
+</div></div>
+
+<!-- ROW 1: Global Navigation Bar (shared) -->
+<script>window._activePage='log';</script>
+<div id="headerRow1"></div>
+<script src="/static/header.js"></script>
+
+<!-- Row 2: Ticker + Watchlist + Groups + Refresh -->
+<div class="header-row2">
+<input type="text" id="tickerFilter" class="ticker-input" placeholder="Ticker..." maxlength="10" spellcheck="false" oninput="onTickerInput()">
+<div class="dd-wrap"><div class="dd-btn" onclick="toggleDD('wlMenu')">Watchlist : <span class="active-name" id="wlName">Leverage</span> &#x25BE;</div><div class="dd-menu" id="wlMenu"></div></div>
+<div class="dd-wrap"><div class="dd-btn" onclick="toggleDD('grpMenu')">Groups &#x25BE;</div><div class="dd-menu" id="grpMenu"></div></div>
+<button id="refreshBtn" onclick="fetchEvents()" class="row2-btn"><span id="refreshIcon">&#x21BB;</span> Refresh</button>
+</div>
+
+<!-- Row 3: Filter Bar -->
+<div class="header-row3">
+<div class="saved-wrap">
+<select class="saved-select" id="savedFilterSelect" onchange="loadFilter()">
+<option value="">-- Saved Filters --</option>
+</select>
+<button class="btn-save" onclick="saveFilter()">Save</button>
+<button class="btn-del" id="btnDelFilter" onclick="deleteFilter()" style="display:none;">Del</button>
+</div>
+<div class="filter-divider"></div>
+<label>Scope:</label>
+<select id="timeScope" onchange="onScopeChange()">
+<option value="24h" selected>Last 24h</option>
+<option value="session">Since Last Session</option>
+<option value="week">Last Week</option>
+<option value="month">Last Month</option>
+<option value="all">All Time</option>
+</select>
+<div class="filter-divider"></div>
+<label>Status:</label>
+<button class="filter-toggle active" data-status="all" onclick="setBarStatus('all')">All</button>
+<button class="filter-toggle" data-status="confirmed" onclick="setBarStatus('confirmed')">Confirmed</button>
+<button class="filter-toggle" data-status="live" onclick="setBarStatus('live')">Live</button>
+<div class="filter-divider"></div>
+<label>ADJ:</label>
+<button class="filter-toggle active" data-adj="all" onclick="setDivAdj('all')">Both</button>
+<button class="filter-toggle" data-adj="0" onclick="setDivAdj('0')">Off</button>
+<button class="filter-toggle" data-adj="1" onclick="setDivAdj('1')">On</button>
+<div class="filter-divider"></div>
+<label>Indicators:</label>
+<div class="ind-toggle-group" id="indToggles"></div>
+<div class="filter-divider"></div>
+<label>TF:</label>
+<div class="tf-all-btn" onclick="tfAll()" title="Select all TFs">All</div>
+<div class="tf-toggles" id="tfToggles"></div>
+<div class="tf-all-btn" onclick="tfClear()" title="Deselect all TFs">Clr</div>
+<div class="filter-divider"></div>
+<span class="filter-count" id="eventCount">-- events</span>
+</div>
+
+<!-- Event Feed -->
+<div class="feed-container" id="feedContainer">
+<div id="eventFeed"></div>
+<div id="loadMore" class="load-more" style="display:none;" onclick="loadMore()">Load more events...</div>
+</div>
+
+<script>
+/* ===== Modals ===== */
+function openLogoModal(){document.getElementById('logoModal').classList.add('open');}
+function closeLogoModal(){document.getElementById('logoModal').classList.remove('open');}
+
+/* ===== Sticky Offsets ===== */
+function setStickyOffsets(){
+  var r1=document.querySelector('.header-row1');
+  var r2=document.querySelector('.header-row2');
+  var r3=document.querySelector('.header-row3');
+  if(!r1)return;
+  var h1=r1.offsetHeight;
+  var h2=r2?r2.offsetHeight:0;
+  var h3=r3?r3.offsetHeight:0;
+  document.documentElement.style.setProperty('--row1-h',h1+'px');
+  document.documentElement.style.setProperty('--row12-h',(h1+h2)+'px');
+  document.documentElement.style.setProperty('--header-h',(h1+h2+h3)+'px');
+}
+
+/* ===== Constants ===== */
+var ALL_TFS=["1H","4H","8H","1D","2D","3D","5D","1W","2W","6W","1M","3M","6M","12M"];
+var TF_W={};ALL_TFS.forEach(function(t,i){TF_W[t]=i;});
+function tfClass(tf){var i=TF_W[tf];if(i===undefined)i=TF_W[tf.toUpperCase()]||0;return i>=10?'tf-high':i>=7?'tf-mid':'tf-low';}
+
+var IND_DEFS={
+  MOM:{label:'MOM',cls:'it-mom',subs:[
+    {val:'aqua',cls:'is-mom-aqua',tip:'+ve Rising'},
+    {val:'blue',cls:'is-mom-blue',tip:'+ve Falling'},
+    {val:'yellow',cls:'is-mom-yellow',tip:'-ve Rising'},
+    {val:'red',cls:'is-mom-red',tip:'-ve Falling'}
+  ],keys:['MOM']},
+  SQZ:{label:'SQZ',cls:'it-sqz',subs:[
+    {val:'green',cls:'is-sqz-green',tip:'No Squeeze'},
+    {val:'black',cls:'is-sqz-black',tip:'Low'},
+    {val:'red',cls:'is-sqz-red',tip:'Mid'},
+    {val:'orange',cls:'is-sqz-orange',tip:'High'}
+  ],keys:['SQZ']},
+  BAND:{label:'BAND',cls:'it-band',subs:[
+    {val:'bull',cls:'is-band-bull',tip:'Flipped Bullish'},
+    {val:'bear',cls:'is-band-bear',tip:'Flipped Bearish'}
+  ],keys:['BAND']},
+  ACC:{label:'ACC',cls:'it-acc',subs:[
+    {val:'accel',cls:'is-acc-accel',tip:'Accelerating'},
+    {val:'decel',cls:'is-acc-decel',tip:'Decelerating'}
+  ],keys:['ACC','ACC_IMPULSE']},
+  DEV:{label:'DEV',cls:'it-dev',subs:[
+    {val:'buy',cls:'is-dev-buy',tip:'Buy Signal'},
+    {val:'sell',cls:'is-dev-sell',tip:'Sell Signal'}
+  ],keys:['DEV']},
+  '30WMA':{label:'30W',cls:'it-30wma',subs:[],keys:['30WMA']}
+};
+var IND_ORDER=['MOM','SQZ','BAND','ACC','DEV','30WMA'];
+var DISPLAY_BATCH=500;
+
+/* ===== Global State ===== */
+var allEvents=[];
+var filteredEvents=[];
+var displayedCount=0;
+var timeScope='24h';
+var barStatusFilter='all';
+var divAdjFilter='all';
+var activeInds={};
+var activeTFs=new Set(ALL_TFS);
+var tickerFilter='';
+var savedFilters={};
+var currentFilterName='';
+var activeWatchlist='Leverage';
+var watchlists=[];
+var groups=[];
+var visibleGroups=new Set();
+var tickerDebounce=null;
+
+/* Init indicator state */
+IND_ORDER.forEach(function(k){
+  var def=IND_DEFS[k];
+  activeInds[k]={on:true,subs:new Set(def.subs.map(function(s){return s.val;}))};
+});
+
+/* ===== Dropdown ===== */
+function toggleDD(id){
+  document.querySelectorAll('.dd-menu').forEach(function(m){if(m.id!==id)m.classList.remove('open');});
+  document.getElementById(id).classList.toggle('open');
+}
+document.addEventListener('click',function(e){if(!e.target.closest('.dd-wrap'))document.querySelectorAll('.dd-menu').forEach(function(m){m.classList.remove('open');});});
+
+/* ===== Watchlist/Groups ===== */
+function buildWatchlistMenu(){
+  var m=document.getElementById('wlMenu');
+  m.innerHTML=watchlists.map(function(w){
+    var cls=w.name===activeWatchlist?' wl-active':'';
+    return '<div class="dd-item'+cls+'" onclick="switchWatchlist(\''+w.name+'\')">'+w.name+' <span style="color:#555;font-size:9px;margin-left:4px">('+w.tickers+')</span></div>';
+  }).join('');
+}
+function switchWatchlist(name){
+  activeWatchlist=name;
+  document.getElementById('wlName').textContent=name;
+  visibleGroups.clear();
+  buildWatchlistMenu();
+  loadGroups();
+}
+function buildGroupsMenu(){
+  var m=document.getElementById('grpMenu');
+  m.innerHTML=groups.map(function(g){
+    return '<label class="dd-item"><input type="checkbox" '+(visibleGroups.has(g.name)?'checked':'')+' onchange="toggleGrp(\''+g.name.replace(/'/g,"\\'")+'\')"> '+g.name+' ('+g.tickers.length+')</label>';
+  }).join('')+'<div class="dd-controls"><button onclick="grpAll()">All</button><button onclick="grpNone()">None</button></div>';
+}
+function toggleGrp(n){if(visibleGroups.has(n))visibleGroups.delete(n);else visibleGroups.add(n);buildGroupsMenu();applyFiltersAndRender();}
+function grpAll(){groups.forEach(function(g){visibleGroups.add(g.name);});buildGroupsMenu();applyFiltersAndRender();}
+function grpNone(){visibleGroups.clear();buildGroupsMenu();applyFiltersAndRender();}
+function getVisibleTickers(){
+  var s=new Set();
+  groups.forEach(function(g){if(visibleGroups.has(g.name))g.tickers.forEach(function(t){s.add(t.display);});});
+  return s;
+}
+
+/* ===== Filter Bar Builders ===== */
+function buildIndicatorToggles(){
+  var c=document.getElementById('indToggles');
+  var html='';
+  IND_ORDER.forEach(function(k){
+    var def=IND_DEFS[k];
+    var st=activeInds[k];
+    var hasSubs=def.subs.length>0;
+    html+='<div class="ind-wrap">';
+    html+='<div class="ind-toggle '+def.cls+(st.on?' active':' inactive')+(hasSubs?'':' no-subs')+'" onclick="toggleInd(\''+k+'\')" title="'+k+'">'+def.label+'</div>';
+    if(hasSubs){
+      html+='<div class="ind-subs">';
+      def.subs.forEach(function(sub){
+        var son=st.subs.has(sub.val);
+        html+='<div class="ind-sub '+sub.cls+(son?' active':' inactive')+'" onclick="toggleSub(\''+k+'\',\''+sub.val+'\')" title="'+sub.tip+'"></div>';
+      });
+      html+='</div>';
+    }
+    html+='</div>';
+  });
+  c.innerHTML=html;
+}
+
+function buildTFToggles(){
+  var c=document.getElementById('tfToggles');
+  c.innerHTML=ALL_TFS.map(function(tf){
+    var on=activeTFs.has(tf);
+    return '<div class="tf-toggle'+(on?' active':' inactive')+'" onclick="toggleTF(\''+tf+'\')">'+tf+'</div>';
+  }).join('');
+}
+
+/* ===== Filter Handlers ===== */
+function onScopeChange(){
+  timeScope=document.getElementById('timeScope').value;
+  fetchEvents();
+}
+
+function setBarStatus(status){
+  barStatusFilter=status;
+  document.querySelectorAll('.filter-toggle[data-status]').forEach(function(b){
+    b.classList.toggle('active',b.dataset.status===status);
+  });
+  fetchEvents();
+}
+
+function setDivAdj(val){
+  divAdjFilter=val;
+  document.querySelectorAll('.filter-toggle[data-adj]').forEach(function(b){
+    b.classList.toggle('active',b.dataset.adj===val);
+  });
+  fetchEvents();
+}
+
+function toggleInd(key){
+  var st=activeInds[key];
+  st.on=!st.on;
+  if(st.on){IND_DEFS[key].subs.forEach(function(s){st.subs.add(s.val);});}
+  buildIndicatorToggles();
+  applyFiltersAndRender();
+}
+
+function toggleSub(key,val){
+  var st=activeInds[key];
+  if(st.subs.has(val))st.subs.delete(val);else st.subs.add(val);
+  st.on=st.subs.size>0;
+  buildIndicatorToggles();
+  applyFiltersAndRender();
+}
+
+function tfAll(){ALL_TFS.forEach(function(tf){activeTFs.add(tf);});buildTFToggles();applyFiltersAndRender();}
+function tfClear(){activeTFs.clear();activeTFs.add(ALL_TFS[0]);buildTFToggles();applyFiltersAndRender();}
+
+function toggleTF(tf){
+  if(activeTFs.has(tf))activeTFs.delete(tf);else activeTFs.add(tf);
+  buildTFToggles();
+  applyFiltersAndRender();
+}
+
+function onTickerInput(){
+  clearTimeout(tickerDebounce);
+  tickerDebounce=setTimeout(function(){
+    tickerFilter=document.getElementById('tickerFilter').value.trim().toUpperCase();
+    applyFiltersAndRender();
+  },300);
+}
+
+/* ===== Data Fetching ===== */
+function getSinceISO(){
+  var now=Date.now();
+  if(timeScope==='24h')return new Date(now-86400000).toISOString();
+  if(timeScope==='session'){
+    // Walk back to previous trading day (skip weekends)
+    var d=new Date(now);d.setDate(d.getDate()-1);
+    while(d.getDay()===0||d.getDay()===6)d.setDate(d.getDate()-1);
+    d.setUTCHours(0,0,0,0);
+    return d.toISOString();
+  }
+  if(timeScope==='week')return new Date(now-7*86400000).toISOString();
+  if(timeScope==='month')return new Date(now-30*86400000).toISOString();
+  return ''; // all time
+}
+
+function fetchEvents(){
+  var url='/api/events?limit=20000';
+  var since=getSinceISO();
+  if(since)url+='&since='+encodeURIComponent(since);
+  if(barStatusFilter!=='all')url+='&bar_status='+barStatusFilter;
+  if(divAdjFilter!=='all')url+='&div_adj='+divAdjFilter;
+  fetch(url).then(function(r){return r.json();}).then(function(data){
+    allEvents=data;
+    applyFiltersAndRender();
+  }).catch(function(e){console.error('Event fetch error:',e);});
+}
+
+/* ===== Client-side Filtering ===== */
+function matchesSub(ev,indKey,subs){
+  var nv=(ev.new_value||'').toLowerCase();var desc=(ev.description||'');
+  if(indKey==='MOM')return subs.has(nv);
+  if(indKey==='SQZ')return subs.has(nv);
+  if(indKey==='BAND'){if(desc.indexOf('Bullish')>=0)return subs.has('bull');if(desc.indexOf('Bearish')>=0)return subs.has('bear');return true;}
+  if(indKey==='ACC'){if(desc.indexOf('Accel')>=0)return subs.has('accel');if(desc.indexOf('Decel')>=0)return subs.has('decel');return true;}
+  if(indKey==='DEV'){if(desc.indexOf('Buy')>=0||nv.indexOf('buy')>=0)return subs.has('buy');if(desc.indexOf('Sell')>=0||nv.indexOf('sell')>=0)return subs.has('sell');return true;}
+  return true;
+}
+
+function matchesIndicators(ev){
+  var matched=false;
+  IND_ORDER.forEach(function(k){
+    if(!activeInds[k].on)return;
+    IND_DEFS[k].keys.forEach(function(ek){
+      if(ev.indicator===ek){
+        if(IND_DEFS[k].subs.length===0)matched=true;
+        else if(matchesSub(ev,k,activeInds[k].subs))matched=true;
+      }
+    });
+  });
+  return matched;
+}
+
+function applyFiltersAndRender(){
+  var visTickers=getVisibleTickers();
+  filteredEvents=allEvents.filter(function(e){
+    if(!activeTFs.has(e.timeframe))return false;
+    if(tickerFilter&&e.ticker.indexOf(tickerFilter)<0)return false;
+    if(!tickerFilter&&visTickers.size>0&&!visTickers.has(e.ticker))return false;
+    return matchesIndicators(e);
+  });
+  document.getElementById('eventCount').textContent=filteredEvents.length+' events';
+  displayedCount=0;
+  renderFeed();
+}
+
+/* ===== Rendering ===== */
+function formatTime(ts){return ts?ts.substring(11,19):'';}
+function formatSessionTime(ts){return ts?ts.substring(0,16).replace('T',' ')+' UTC':'';}
+
+function groupBySession(events){
+  if(!events.length)return [];
+  var sessions=[];var cur={ts:events[0].timestamp,events:[events[0]]};
+  for(var i=1;i<events.length;i++){
+    var gap=Math.abs(new Date(cur.events[cur.events.length-1].timestamp)-new Date(events[i].timestamp))/1000;
+    if(gap>120){
+      sessions.push(cur);
+      cur={ts:events[i].timestamp,events:[events[i]]};
+    }else{
+      cur.events.push(events[i]);
+    }
+  }
+  sessions.push(cur);
+  return sessions;
+}
+
+function renderEventRow(ev){
+  var indCls='ind-'+(ev.indicator||'').replace('ACC_IMPULSE','ACC');
+  var tfCls=tfClass(ev.timeframe||'');
+  var bs=ev.bar_status||'confirmed';
+  var liveCls=bs==='live'?' ev-live':'';
+  return '<div class="ev-row'+liveCls+'">'+
+    '<span class="ev-time">'+formatTime(ev.timestamp)+'</span>'+
+    '<a class="ev-ticker" href="/?ticker='+encodeURIComponent(ev.ticker)+'">'+ev.ticker+'</a>'+
+    '<span class="ev-tf '+tfCls+'">'+ev.timeframe+'</span>'+
+    '<span class="ev-desc '+indCls+'">'+ev.description+'</span>'+
+    '<span class="ev-status st-'+bs+'" title="'+bs+'"></span>'+
+    '</div>';
+}
+
+function renderFeed(){
+  var feed=document.getElementById('eventFeed');
+  var batch=filteredEvents.slice(0,DISPLAY_BATCH);
+  if(!batch.length){
+    feed.innerHTML='<div class="feed-empty">No events match current filters</div>';
+    document.getElementById('loadMore').style.display='none';
+    return;
+  }
+  var sessions=groupBySession(batch);
+  var html='';
+  sessions.forEach(function(s){
+    html+='<div class="session-sep"><span class="session-time">'+formatSessionTime(s.ts)+'</span><div class="session-line"></div><span class="session-cnt">'+s.events.length+' events</span></div>';
+    s.events.forEach(function(ev){html+=renderEventRow(ev);});
+  });
+  feed.innerHTML=html;
+  displayedCount=batch.length;
+  document.getElementById('loadMore').style.display=filteredEvents.length>displayedCount?'block':'none';
+}
+
+function loadMore(){
+  var feed=document.getElementById('eventFeed');
+  var next=filteredEvents.slice(displayedCount,displayedCount+DISPLAY_BATCH);
+  if(!next.length)return;
+  var sessions=groupBySession(next);
+  var html='';
+  sessions.forEach(function(s){
+    html+='<div class="session-sep"><span class="session-time">'+formatSessionTime(s.ts)+'</span><div class="session-line"></div><span class="session-cnt">'+s.events.length+' events</span></div>';
+    s.events.forEach(function(ev){html+=renderEventRow(ev);});
+  });
+  feed.innerHTML+=html;
+  displayedCount+=next.length;
+  document.getElementById('loadMore').style.display=filteredEvents.length>displayedCount?'block':'none';
+}
+
+/* ===== Saved Filters ===== */
+function buildSavedFilterMenu(){
+  var sel=document.getElementById('savedFilterSelect');
+  var html='<option value="">-- Saved Filters --</option>';
+  Object.keys(savedFilters).sort().forEach(function(name){
+    var selected=name===currentFilterName?' selected':'';
+    html+='<option value="'+name+'"'+selected+'>'+name+'</option>';
+  });
+  sel.innerHTML=html;
+  document.getElementById('btnDelFilter').style.display=currentFilterName?'inline-flex':'none';
+}
+
+function saveFilter(){
+  var name=prompt('Filter name:');
+  if(!name||!name.trim())return;
+  name=name.trim();
+  var payload={
+    name:name,
+    timeScope:timeScope,
+    barStatus:barStatusFilter,
+    divAdj:divAdjFilter,
+    activeInds:{},
+    activeTFs:Array.from(activeTFs),
+    ticker:tickerFilter
+  };
+  IND_ORDER.forEach(function(k){
+    payload.activeInds[k]={on:activeInds[k].on,subs:Array.from(activeInds[k].subs)};
+  });
+  fetch('/api/log-filters/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.ok){currentFilterName=name;fetchSavedFilters();}
+  });
+}
+
+function loadFilter(){
+  var sel=document.getElementById('savedFilterSelect');
+  var name=sel.value;
+  if(!name){currentFilterName='';document.getElementById('btnDelFilter').style.display='none';return;}
+  var f=savedFilters[name];
+  if(!f)return;
+  currentFilterName=name;
+  document.getElementById('btnDelFilter').style.display='inline-flex';
+  // Apply saved state
+  timeScope=f.timeScope||'24h';
+  document.getElementById('timeScope').value=timeScope;
+  barStatusFilter=f.barStatus||'all';
+  document.querySelectorAll('.filter-toggle[data-status]').forEach(function(b){b.classList.toggle('active',b.dataset.status===barStatusFilter);});
+  divAdjFilter=f.divAdj||'all';
+  document.querySelectorAll('.filter-toggle[data-adj]').forEach(function(b){b.classList.toggle('active',b.dataset.adj===divAdjFilter);});
+  tickerFilter=f.ticker||'';
+  document.getElementById('tickerFilter').value=tickerFilter;
+  if(f.activeTFs)activeTFs=new Set(f.activeTFs);
+  if(f.activeInds){
+    IND_ORDER.forEach(function(k){
+      if(f.activeInds[k]){
+        activeInds[k]={on:f.activeInds[k].on,subs:new Set(f.activeInds[k].subs||[])};
+      }
+    });
+  }
+  buildIndicatorToggles();
+  buildTFToggles();
+  fetchEvents();
+}
+
+function deleteFilter(){
+  if(!currentFilterName)return;
+  if(!confirm('Delete saved filter "'+currentFilterName+'"?'))return;
+  fetch('/api/log-filters/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:currentFilterName})})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.ok){currentFilterName='';fetchSavedFilters();}
+  });
+}
+
+function fetchSavedFilters(){
+  fetch('/api/log-filters').then(function(r){return r.json();}).then(function(d){
+    savedFilters=d;
+    buildSavedFilterMenu();
+  });
+}
+
+/* ===== Init ===== */
+function loadGroups(){
+  fetch('/api/groups?watchlist='+encodeURIComponent(activeWatchlist)).then(function(r){return r.json();}).then(function(g){
+    groups=g;
+    if(visibleGroups.size===0)g.forEach(function(gr){visibleGroups.add(gr.name);});
+    buildGroupsMenu();
+    fetchEvents();
+  });
+}
+
+buildIndicatorToggles();
+buildTFToggles();
+Promise.all([
+  fetch('/api/watchlists').then(function(r){return r.json();}),
+]).then(function(r){
+  watchlists=r[0];
+  buildWatchlistMenu();
+  loadGroups();
+});
+fetchSavedFilters();
+setStickyOffsets();
+window.addEventListener('resize',setStickyOffsets);
+setInterval(fetchEvents,60000);
+
+// Scheduler badge updater
+function updateSchedulerBadge(){
+  fetch('/api/scheduler/status').then(function(r){return r.json();}).then(function(s){
+    var badge=document.getElementById('schedulerBadge');
+    if(!badge)return;
+    var cur=s.current_watchlists||[];
+    if(cur.length){badge.textContent='Scanning: '+cur.join(', ');badge.style.color='#f59e0b';badge.style.borderColor='#f59e0b';}
+    else if(!s.enabled){badge.textContent='Scheduler: OFF';badge.style.color='#ef4444';badge.style.borderColor='#334155';}
+    else{badge.textContent='Scheduler: Idle';badge.style.color='#22c55e';badge.style.borderColor='#334155';}
+  }).catch(function(){});
+}
+updateSchedulerBadge();setInterval(updateSchedulerBadge,30000);
+</script>
+</body>
+</html>

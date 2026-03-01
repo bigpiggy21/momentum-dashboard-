@@ -1,0 +1,108 @@
+{
+  "enabled": true,
+  "max_concurrent": 1,
+  "backfill": false,
+  "backfill_years": 10,
+  "watchlists": {
+    "Leverage": {
+      "enabled": true,
+      "mode": "manual",
+      "interval_minutes": 30,
+      "priority": 1,
+      "collect_workers": 4,
+      "compute_workers": 8,
+      "market_hours_only": false,
+      "after_close_delay_minutes": 30
+    },
+    "Debug": {
+      "enabled": false,
+      "mode": "manual",
+      "interval_minutes": 15,
+      "priority": 99,
+      "collect_workers": 4,
+      "compute_workers": 8,
+      "market_hours_only": false,
+      "after_close_delay_minutes": 30
+    },
+    "Overview": {
+      "enabled": false,
+      "mode": "manual",
+      "interval_minutes": 15,
+      "priority": 99,
+      "collect_workers": 4,
+      "compute_workers": 8,
+      "market_hours_only": false,
+      "after_close_delay_minutes": 30
+    },
+    "Russell1000": {
+      "enabled": false,
+      "mode": "manual",
+      "interval_minutes": 15,
+      "priority": 99,
+      "collect_workers": 4,
+      "compute_workers": 8,
+      "market_hours_only": false,
+      "after_close_delay_minutes": 30
+    },
+    "Russell2000": {
+      "enabled": true,
+      "mode": "after_close",
+      "interval_minutes": 15,
+      "priority": 99,
+      "collect_workers": 4,
+      "compute_workers": 8,
+      "market_hours_only": false,
+      "after_close_delay_minutes": 1455
+    },
+    "Russell3000": {
+      "enabled": true,
+      "mode": "after_close",
+      "interval_minutes": 15,
+      "priority": 99,
+      "collect_workers": 4,
+      "compute_workers": 8,
+      "market_hours_only": false,
+      "after_close_delay_minutes": 1500
+    },
+    "SP500": {
+      "enabled": false,
+      "mode": "interval",
+      "interval_minutes": 60,
+      "priority": 99,
+      "collect_workers": 4,
+      "compute_workers": 8,
+      "market_hours_only": false,
+      "after_close_delay_minutes": 30
+    },
+    "RandomsToScanFor": {
+      "enabled": false,
+      "mode": "manual",
+      "interval_minutes": 15,
+      "priority": 99,
+      "collect_workers": 4,
+      "compute_workers": 8,
+      "market_hours_only": false,
+      "after_close_delay_minutes": 30
+    },
+    "CopperMiners": {
+      "enabled": false,
+      "mode": "manual",
+      "interval_minutes": 15,
+      "priority": 99,
+      "collect_workers": 4,
+      "compute_workers": 8,
+      "market_hours_only": false,
+      "after_close_delay_minutes": 30
+    },
+    "Randomstoscanfor": {
+      "enabled": false,
+      "mode": "manual",
+      "interval_minutes": 15,
+      "priority": 99,
+      "collect_workers": 4,
+      "compute_workers": 8,
+      "market_hours_only": false,
+      "after_close_delay_minutes": 30
+    }
+  }
+}

@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TBD Technologies — Settings</title>
+<link rel="stylesheet" href="/static/header.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-serif;font-size:13px;}
+::-webkit-scrollbar{width:8px;height:8px;}
+::-webkit-scrollbar-track{background:#0a0a10;}
+::-webkit-scrollbar-thumb{background:#2a2a3a;border-radius:4px;}
+::-webkit-scrollbar-thumb:hover{background:#3a3a4a;}
+*{scrollbar-width:thin;scrollbar-color:#2a2a3a #0a0a10;}
+
+
+/* Settings content area */
+.settings-container{max-width:900px;margin:30px auto;padding:0 24px;}
+.settings-container h2{font-size:20px;color:#fff;margin-bottom:20px;display:flex;align-items:center;gap:8px;}
+
+/* Scheduler section */
+.sched-global{display:flex;align-items:center;gap:12px;margin-bottom:20px;padding:16px;background:#0e0e16;border:1px solid #1e1e2e;border-radius:8px;}
+.sched-toggle{padding:6px 20px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid #334155;background:#1e293b;color:#888;letter-spacing:0.5px;}
+.sched-label{font-size:13px;color:#888;}
+.sched-max-label{font-size:11px;color:#555;}
+.sched-max-input{width:44px;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:4px 6px;border-radius:4px;font-size:12px;text-align:center;}
+.sched-status-badge{font-size:11px;color:#555;margin-left:auto;}
+
+/* Table */
+.sched-table{width:100%;border-collapse:collapse;font-size:12px;background:#0e0e16;border:1px solid #1e1e2e;border-radius:8px;overflow:hidden;}
+.sched-table thead tr{border-bottom:2px solid #2a2a3a;}
+.sched-table th{text-align:center;padding:10px 8px;color:#666;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;}
+.sched-table th:first-child{text-align:left;}
+.sched-table td{padding:8px 8px;text-align:center;border-bottom:1px solid #1a1a24;}
+.sched-table td:first-child{text-align:left;color:#ccc;font-weight:600;}
+.sched-table input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;}
+.sched-table input[type="checkbox"]{accent-color:#f59e0b;}
+.sched-table select{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 6px;border-radius:4px;font-size:11px;}
+.sched-table .run-btn{background:#1e293b;color:#aaa;border:1px solid #334155;padding:4px 12px;border-radius:4px;font-size:10px;cursor:pointer;font-weight:600;}
+.sched-table .run-btn:hover{background:#334155;color:#fff;}
+
+/* Save bar */
+.sched-save-bar{margin-top:16px;display:flex;gap:10px;align-items:center;}
+.sched-save-btn{background:#f59e0b;color:#000;border:none;padding:8px 24px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;}
+.sched-save-btn:hover{background:#d97706;}
+.sched-save-status{font-size:11px;color:#555;}
+
+/* Single-ticker backfill */
+.ticker-backfill{display:flex;align-items:center;gap:10px;margin-bottom:20px;padding:14px 16px;background:#0e0e16;border:1px solid #1e1e2e;border-radius:8px;}
+.ticker-backfill label{font-size:12px;color:#888;white-space:nowrap;}
+.ticker-backfill input[type="text"]{width:90px;background:#14141e;border:1px solid #2a2a3a;color:#f0f0f0;padding:5px 8px;border-radius:4px;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;}
+.ticker-backfill input[type="text"]::placeholder{color:#444;text-transform:none;letter-spacing:0;}
+.backfill-btn{background:#1e293b;color:#aaa;border:1px solid #334155;padding:5px 16px;border-radius:4px;font-size:11px;cursor:pointer;font-weight:600;}
+.backfill-btn:hover{background:#334155;color:#fff;}
+.backfill-btn:disabled{opacity:0.4;cursor:default;}
+.backfill-status{font-size:11px;color:#555;}
+
+/* Architecture details */
+.arch-details{margin-top:24px;border-top:1px solid #2a2a3a;padding-top:16px;}
+.arch-details summary{cursor:pointer;color:#666;font-size:12px;font-weight:600;}
+.arch-details .arch-body{margin-top:10px;font-size:12px;color:#555;line-height:1.7;}
+.arch-details .arch-body strong{color:#f59e0b;}
+
+/* Static info section */
+.info-section{margin-top:32px;border-top:1px solid #2a2a3a;padding-top:20px;}
+.info-section h3{font-size:14px;color:#f59e0b;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.info-section p{font-size:12px;color:#555;margin-bottom:10px;}
+.info-grid{display:grid;grid-template-columns:150px 1fr;gap:8px 14px;font-size:12px;margin-bottom:20px;}
+.info-grid .lbl{color:#666;}
+.info-grid .val{color:#ccc;}
+</style>
+</head>
+<body>
+
+<!-- ROW 1: Global Navigation Bar (shared) -->
+<script>window._activePage='settings';</script>
+<div id="headerRow1"></div>
+<script src="/static/header.js"></script>
+
+<!-- SETTINGS CONTENT -->
+<div class="settings-container">
+
+<h2>&#x2699; Settings</h2>
+
+<!-- Global Toggle -->
+<div class="sched-global">
+  <span class="sched-label">Scheduler</span>
+  <button id="schedulerToggle" class="sched-toggle" onclick="toggleSchedulerEnabled()">ENABLED</button>
+  <span class="sched-max-label">Max concurrent:</span>
+  <input type="number" id="schedMaxConcurrent" class="sched-max-input" min="1" max="8" value="2">
+  <span style="width:1px;height:20px;background:#2a2a3a;margin:0 8px;"></span>
+  <span class="sched-max-label">OHLC history:</span>
+  <input type="number" id="schedBackfillYears" class="sched-max-input" min="1" max="22" value="10" style="width:38px;" title="How many years of daily OHLC data to keep in cache">
+  <span class="sched-max-label" style="color:#444;">years</span>
+  <span id="schedulerStatusBadge" class="sched-status-badge"></span>
+</div>
+
+<!-- Single-Ticker Backfill -->
+<div class="ticker-backfill">
+  <label>Single ticker:</label>
+  <input type="text" id="backfillTicker" placeholder="e.g. NVDA" maxlength="10"
+         onkeydown="if(event.key==='Enter')triggerTickerBackfill()">
+  <button class="backfill-btn" id="backfillBtn" onclick="triggerTickerBackfill()">Backfill</button>
+  <span class="backfill-status" id="backfillStatus"></span>
+</div>
+
+<!-- Watchlist Schedule Table -->
+<table class="sched-table" id="schedulerTable">
+  <thead>
+    <tr>
+      <th>Watchlist</th>
+      <th>On</th>
+      <th>Mode</th>
+      <th>Interval</th>
+      <th>Pri</th>
+      <th>Fetch</th>
+      <th>Comp</th>
+      <th>Status</th>
+      <th>Last Run</th>
+      <th>Next</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody id="schedulerTableBody">
+  </tbody>
+</table>
+
+<!-- Save Button -->
+<div class="sched-save-bar">
+  <button id="schedulerSaveBtn" class="sched-save-btn" onclick="saveSchedulerConfig()">Save Configuration</button>
+  <span id="schedulerSaveStatus" class="sched-save-status"></span>
+</div>
+
+<!-- Architecture Details (collapsible) -->
+<details class="arch-details">
+  <summary>Architecture Details</summary>
+  <div class="arch-body">
+    <strong>Data Flow:</strong> Collector (API fetch &rarr; CSV cache)
+    &rarr; Engine (CSV &rarr; indicators in SQLite) &rarr; Dashboard (SQLite &rarr; browser)<br>
+    <strong>Parallelism:</strong> Collection uses ThreadPoolExecutor (I/O-bound),
+    computation uses ProcessPoolExecutor (CPU-bound). Multiple watchlists can run concurrently.<br>
+    <strong>Market Calendar:</strong> NYSE holidays computed algorithmically.
+    DST-aware (US Eastern). After-close mode triggers post-16:00 ET on trading days only.<br>
+    <strong>Indicators:</strong> MOM, SQZ, BAND, ACC, DEV, 30WMA across 14 timeframes (1H&ndash;12M).<br>
+    <strong>Storage:</strong> SQLite (WAL mode) for indicators and events. CSV cache for raw OHLC data.
+  </div>
+</details>
+
+<!-- Static info: Process documentation -->
+<div class="info-section">
+<h3>&#x1F4E1; Process 1 — Data Collector</h3>
+<p>Fetches OHLC price data from the data source and caches to local CSV files.</p>
+<div class="info-grid">
+<span class="lbl">Data Source</span><span class="val">yfinance (Yahoo Finance)</span>
+<span class="lbl">Price Adjustment</span><span class="val">Split-adjusted always, dividend toggle (ADJ)</span>
+<span class="lbl">Trading Hours</span><span class="val">Extended (pre + post market included)</span>
+<span class="lbl">Watchlists</span><span class="val">SP500 (473 tickers), Leverage, custom</span>
+<span class="lbl">Cache</span><span class="val">Local CSV files per ticker (incremental updates)</span>
+</div>
+</div>
+
+<div class="info-section" style="border-top:1px solid #1e1e2e;margin-top:16px;padding-top:16px;">
+<h3>&#x2699; Process 2 — Computation Engine</h3>
+<p>Reads cached CSV data and computes all indicators across all timeframes. Writes results to SQLite.</p>
+<div class="info-grid">
+<span class="lbl">Indicators</span><span class="val">MOM, SQZ, BAND, ACC, DEV, 30WMA</span>
+<span class="lbl">Timeframes</span><span class="val">1H, 4H, 8H, 1D, 2D, 3D, 5D, 1W, 2W, 6W, 1M, 3M, 6M, 12M</span>
+<span class="lbl">Workers</span><span class="val">ProcessPoolExecutor (CPU-bound)</span>
+<span class="lbl">Change Detection</span><span class="val">Tracks indicator state changes and logs events</span>
+<span class="lbl">Storage</span><span class="val">SQLite (momentum_dashboard.db)</span>
+</div>
+</div>
+
+<div class="info-section" style="border-top:1px solid #1e1e2e;margin-top:16px;padding-top:16px;">
+<h3>&#x1F310; Process 3 — Dashboard Server</h3>
+<p>Serves the web interface and API. Reads from SQLite to render current state.</p>
+<div class="info-grid">
+<span class="lbl">Version</span><span class="val">TBD Technologies v0.1</span>
+<span class="lbl">Server</span><span class="val">Python HTTPServer on port 8080</span>
+<span class="lbl">Auto-refresh</span><span class="val">Dashboard polls every 60 seconds</span>
+<span class="lbl">Strategies</span><span class="val">Bollingers, Relative Strength, High Volume Candles</span>
+<span class="lbl">Tools</span><span class="val">Screener, Event Log, Watchlist Manager</span>
+</div>
+</div>
+
+</div>
+
+<script>
+// ---------- Scheduler Settings ----------
+var schedulerConfig=null;
+var schedulerStatus=null;
+var _schedRefreshTimer=null;
+var _schedDirty=false;
+
+function refreshSchedulerUI(){
+  Promise.all([
+    fetch('/api/scheduler/config').then(function(r){return r.json();}),
+    fetch('/api/scheduler/status').then(function(r){return r.json();})
+  ]).then(function(r){
+    schedulerConfig=r[0];schedulerStatus=r[1];
+    renderSchedulerTable();
+  }).catch(function(e){console.error('Scheduler fetch error:',e);});
+  // Auto-refresh status every 5s
+  clearInterval(_schedRefreshTimer);
+  _schedRefreshTimer=setInterval(function(){
+    fetch('/api/scheduler/status').then(function(r){return r.json();}).then(function(s){
+      schedulerStatus=s;
+      if(_schedDirty){updateSchedulerStatusCells();}else{renderSchedulerTable();}
+    });
+  },5000);
+}
+
+function renderSchedulerTable(){
+  if(!schedulerConfig||!schedulerStatus)return;
+  // Global toggle
+  var tb=document.getElementById('schedulerToggle');
+  var en=schedulerConfig.enabled;
+  tb.textContent=en?'ENABLED':'DISABLED';
+  tb.style.background=en?'#22c55e':'#1e293b';
+  tb.style.color=en?'#000':'#888';
+  tb.style.borderColor=en?'#22c55e':'#334155';
+  // Max concurrent + backfill years
+  document.getElementById('schedMaxConcurrent').value=schedulerConfig.max_concurrent||2;
+  document.getElementById('schedBackfillYears').value=schedulerConfig.backfill_years||10;
+  // Status badge
+  var badge=document.getElementById('schedulerStatusBadge');
+  var cur=schedulerStatus.current_watchlists||[];
+  badge.textContent=cur.length?'Running: '+cur.join(', '):'Idle';
+  badge.style.color=cur.length?'#f59e0b':'#555';
+  // Table rows
+  var body=document.getElementById('schedulerTableBody');
+  var wlc=schedulerConfig.watchlists||{};
+  var wls=schedulerStatus.watchlists||{};
+  var names=Object.keys(wlc);
+  names.sort(function(a,b){return(wlc[a].priority||99)-(wlc[b].priority||99);});
+  body.innerHTML=names.map(function(name){
+    var cfg=wlc[name];var st=wls[name]||{};
+    var modeOpts=['interval','after_close','manual'].map(function(m){
+      var lbl=m==='after_close'?'After Close':m.charAt(0).toUpperCase()+m.slice(1);
+      return '<option value="'+m+'"'+(cfg.mode===m?' selected':'')+'>'+lbl+'</option>';
+    }).join('');
+    var intCell=cfg.mode==='interval'
+      ?'<input type="number" data-wl="'+name+'" data-field="interval_minutes" value="'+cfg.interval_minutes+'" min="1" max="1440" style="width:50px;"> min'
+      :cfg.mode==='after_close'?'+<input type="number" data-wl="'+name+'" data-field="after_close_delay_minutes" value="'+(cfg.after_close_delay_minutes||30)+'" min="0" max="240" style="width:40px;"> min':'--';
+    var stColor=st.status==='collecting'||st.status==='computing'?'#f59e0b':st.status==='error'?'#ef4444':'#555';
+    var stText=st.status||'idle';
+    if(st.status==='collecting'||st.status==='computing')stText+=' ('+((st.tickers_done||0))+'/'+((st.tickers_total||'?'))+')';
+    if(st.status==='error'&&st.last_error)stText=st.last_error.substring(0,30);
+    var lastRun=st.last_completed_utc?_fmtAgo(st.last_completed_utc):'--';
+    var lastDur=st.last_duration_seconds?(' ('+Math.round(st.last_duration_seconds)+'s)'):'';
+    var nextRun=st.next_scheduled_utc?_fmtTime(st.next_scheduled_utc):'--';
+    var isRunning=st.status==='collecting'||st.status==='computing';
+    var runBtn='<button class="run-btn" onclick="triggerWatchlist(\''+name+'\')" '+(isRunning?'style="opacity:0.3;pointer-events:none;"':'')+'>Run</button>';
+    return '<tr>'
+      +'<td>'+name+'</td>'
+      +'<td><input type="checkbox" data-wl="'+name+'" data-field="enabled" '+(cfg.enabled?'checked':'')+'></td>'
+      +'<td><select data-wl="'+name+'" data-field="mode">'+modeOpts+'</select></td>'
+      +'<td style="font-size:11px;">'+intCell+'</td>'
+      +'<td><input type="number" data-wl="'+name+'" data-field="priority" value="'+cfg.priority+'" min="1" max="99" style="width:38px;"></td>'
+      +'<td><input type="number" data-wl="'+name+'" data-field="collect_workers" value="'+cfg.collect_workers+'" min="1" max="16" style="width:34px;"></td>'
+      +'<td><input type="number" data-wl="'+name+'" data-field="compute_workers" value="'+cfg.compute_workers+'" min="1" max="16" style="width:34px;"></td>'
+      +'<td data-st="'+name+'" style="color:'+stColor+';">'+stText+'</td>'
+      +'<td data-lr="'+name+'" style="color:#555;font-size:10px;">'+lastRun+lastDur+'</td>'
+      +'<td data-nr="'+name+'" style="color:#555;font-size:10px;">'+nextRun+'</td>'
+      +'<td>'+runBtn+'</td>'
+      +'</tr>';
+  }).join('');
+  // Attach change listeners to mark form dirty
+  document.querySelectorAll('#schedulerTableBody [data-wl]').forEach(function(el){
+    el.addEventListener('change',function(){_schedDirty=true;});
+    el.addEventListener('input',function(){_schedDirty=true;});
+  });
+}
+
+function updateSchedulerStatusCells(){
+  if(!schedulerStatus)return;
+  var wls=schedulerStatus.watchlists||{};
+  var badge=document.getElementById('schedulerStatusBadge');
+  var cur=schedulerStatus.current_watchlists||[];
+  if(badge){badge.textContent=cur.length?'Running: '+cur.join(', '):'Idle';badge.style.color=cur.length?'#f59e0b':'#555';}
+  Object.keys(wls).forEach(function(name){
+    var st=wls[name]||{};
+    var stEl=document.querySelector('#schedulerTableBody [data-st="'+name+'"]');
+    var lrEl=document.querySelector('#schedulerTableBody [data-lr="'+name+'"]');
+    var nrEl=document.querySelector('#schedulerTableBody [data-nr="'+name+'"]');
+    if(stEl){
+      var stColor=st.status==='collecting'||st.status==='computing'?'#f59e0b':st.status==='error'?'#ef4444':'#555';
+      var stText=st.status||'idle';
+      if(st.status==='collecting'||st.status==='computing')stText+=' ('+((st.tickers_done||0))+'/'+((st.tickers_total||'?'))+')';
+      if(st.status==='error'&&st.last_error)stText=st.last_error.substring(0,30);
+      stEl.textContent=stText;stEl.style.color=stColor;
+    }
+    if(lrEl){
+      var lastRun=st.last_completed_utc?_fmtAgo(st.last_completed_utc):'--';
+      var lastDur=st.last_duration_seconds?(' ('+Math.round(st.last_duration_seconds)+'s)'):'';
+      lrEl.textContent=lastRun+lastDur;
+    }
+    if(nrEl){nrEl.textContent=st.next_scheduled_utc?_fmtTime(st.next_scheduled_utc):'--';}
+  });
+}
+
+function _fmtAgo(isoStr){
+  try{
+    var d=new Date(isoStr);var diff=Math.round((Date.now()-d.getTime())/1000);
+    if(diff<60)return diff+'s ago';
+    if(diff<3600)return Math.round(diff/60)+'m ago';
+    if(diff<86400)return Math.round(diff/3600)+'h ago';
+    return Math.round(diff/86400)+'d ago';
+  }catch(e){return isoStr;}
+}
+function _fmtTime(isoStr){
+  if(isoStr==='now')return 'now';
+  try{var d=new Date(isoStr);return d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
+  catch(e){return isoStr;}
+}
+
+function toggleSchedulerEnabled(){
+  var newEnabled=!(schedulerConfig&&schedulerConfig.enabled);
+  fetch('/api/scheduler/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:newEnabled})
+  }).then(function(r){return r.json();}).then(function(){refreshSchedulerUI();});
+}
+
+function saveSchedulerConfig(){
+  var config={enabled:schedulerConfig?schedulerConfig.enabled:true,max_concurrent:parseInt(document.getElementById('schedMaxConcurrent').value)||2,backfill_years:parseInt(document.getElementById('schedBackfillYears').value)||10,watchlists:{}};
+  document.querySelectorAll('#schedulerTableBody [data-wl]').forEach(function(el){
+    var wl=el.getAttribute('data-wl');
+    var field=el.getAttribute('data-field');
+    if(!config.watchlists[wl]){
+      config.watchlists[wl]=Object.assign({},schedulerConfig.watchlists[wl]);
+    }
+    if(el.type==='checkbox')config.watchlists[wl][field]=el.checked;
+    else if(el.type==='number')config.watchlists[wl][field]=parseInt(el.value)||0;
+    else config.watchlists[wl][field]=el.value;
+  });
+  fetch('/api/scheduler/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(config)
+  }).then(function(r){return r.json();}).then(function(r){
+    var st=document.getElementById('schedulerSaveStatus');
+    st.textContent=r.ok?'Saved!':('Error: '+r.error);
+    st.style.color=r.ok?'#22c55e':'#ef4444';
+    setTimeout(function(){st.textContent='';},3000);
+    if(r.ok){_schedDirty=false;refreshSchedulerUI();}
+  });
+}
+
+function triggerWatchlist(name){
+  fetch('/api/scheduler/trigger',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({watchlist:name})
+  }).then(function(r){return r.json();}).then(function(r){
+    if(!r.ok)alert('Trigger failed: '+r.error);
+    setTimeout(function(){refreshSchedulerUI();},500);
+  });
+}
+
+// ---------- Single-Ticker Backfill ----------
+var _backfillPollTimer=null;
+
+function triggerTickerBackfill(){
+  var inp=document.getElementById('backfillTicker');
+  var ticker=(inp.value||'').trim().toUpperCase();
+  if(!ticker)return;
+  var btn=document.getElementById('backfillBtn');
+  var st=document.getElementById('backfillStatus');
+  btn.disabled=true;
+  st.textContent='Starting...';st.style.color='#f59e0b';
+  fetch('/api/scheduler/trigger-ticker',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticker:ticker})
+  }).then(function(r){return r.json();}).then(function(r){
+    if(!r.ok){
+      st.textContent=r.error||'Failed';st.style.color='#ef4444';
+      btn.disabled=false;
+      return;
+    }
+    pollTickerBackfill();
+  }).catch(function(e){
+    st.textContent='Error: '+e;st.style.color='#ef4444';
+    btn.disabled=false;
+  });
+}
+
+function pollTickerBackfill(){
+  clearInterval(_backfillPollTimer);
+  _backfillPollTimer=setInterval(function(){
+    fetch('/api/scheduler/ticker-backfill-status').then(function(r){return r.json();}).then(function(s){
+      var st=document.getElementById('backfillStatus');
+      var btn=document.getElementById('backfillBtn');
+      if(s.phase==='collecting'){
+        st.textContent='Collecting '+s.ticker+'...';st.style.color='#f59e0b';
+      }else if(s.phase==='computing'){
+        st.textContent='Computing '+s.ticker+'...';st.style.color='#f59e0b';
+      }else if(s.phase==='done'){
+        st.textContent=s.message;st.style.color='#22c55e';
+        btn.disabled=false;
+        clearInterval(_backfillPollTimer);
+      }else if(s.phase==='error'){
+        st.textContent=s.message;st.style.color='#ef4444';
+        btn.disabled=false;
+        clearInterval(_backfillPollTimer);
+      }
+      if(!s.running){btn.disabled=false;}
+    });
+  },1000);
+}
+
+// Check if a backfill is already running on page load
+fetch('/api/scheduler/ticker-backfill-status').then(function(r){return r.json();}).then(function(s){
+  if(s.running){
+    document.getElementById('backfillTicker').value=s.ticker;
+    document.getElementById('backfillBtn').disabled=true;
+    document.getElementById('backfillStatus').textContent=s.message;
+    document.getElementById('backfillStatus').style.color='#f59e0b';
+    pollTickerBackfill();
+  }
+});
+
+// Load scheduler UI on page load
+refreshSchedulerUI();
+</script>
+</body>
+</html>
