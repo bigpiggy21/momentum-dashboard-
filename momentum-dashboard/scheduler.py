@@ -350,6 +350,10 @@ class WatchlistScheduler:
 
     # ---------- Config API ----------
 
+    def reload_config(self):
+        """Force re-load config from disk and re-discover any new watchlists."""
+        self._config = _load_scheduler_config()
+
     def get_config(self) -> dict:
         """Return current config for API response."""
         if not self._config or not self._config.get("watchlists"):

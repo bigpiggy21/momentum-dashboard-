@@ -754,6 +754,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         """POST /api/watchlists/refresh — re-scan watchlists/ folder and return updated list."""
         try:
             reload_watchlists()
+            # Also force scheduler to re-discover new watchlists
+            scheduler.reload_config()
             total_tickers = 0
             wl_names = []
             for name, groups in WATCHLISTS.items():

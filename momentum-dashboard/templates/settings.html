@@ -116,7 +116,7 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
   <input type="number" id="schedMaxConcurrent" class="sched-max-input" min="1" max="8" value="2">
   <span style="width:1px;height:20px;background:#2a2a3a;margin:0 8px;"></span>
   <span class="sched-max-label">OHLC history:</span>
-  <input type="number" id="schedBackfillYears" class="sched-max-input" min="1" max="22" value="10" style="width:38px;" title="How many years of daily OHLC data to keep in cache">
+  <input type="number" id="schedBackfillYears" class="sched-max-input" min="1" max="22" value="10" style="width:60px;" title="How many years of daily OHLC data to keep in cache">
   <span class="sched-max-label" style="color:#444;">years</span>
   <span id="schedulerStatusBadge" class="sched-status-badge"></span>
 </div>
@@ -294,8 +294,8 @@ function renderSchedulerTable(){
       return '<option value="'+m+'"'+(cfg.mode===m?' selected':'')+'>'+lbl+'</option>';
     }).join('');
     var intCell=cfg.mode==='interval'
-      ?'<input type="number" data-wl="'+name+'" data-field="interval_minutes" value="'+cfg.interval_minutes+'" min="1" max="1440" style="width:50px;"> min'
-      :cfg.mode==='after_close'?'+<input type="number" data-wl="'+name+'" data-field="after_close_delay_minutes" value="'+(cfg.after_close_delay_minutes||30)+'" min="0" max="240" style="width:40px;"> min':'--';
+      ?'<input type="number" data-wl="'+name+'" data-field="interval_minutes" value="'+cfg.interval_minutes+'" min="1" max="1440" style="width:70px;"> min'
+      :cfg.mode==='after_close'?'+<input type="number" data-wl="'+name+'" data-field="after_close_delay_minutes" value="'+(cfg.after_close_delay_minutes||30)+'" min="0" max="240" style="width:60px;"> min':'--';
     var stColor=st.status==='collecting'||st.status==='computing'?'#f59e0b':st.status==='error'?'#ef4444':'#555';
     var stText=st.status||'idle';
     if(st.status==='collecting')stText=st.tickers_done>0?'collecting ('+st.tickers_done+'/'+((st.tickers_total||'?'))+')':'collecting '+((st.tickers_total||'')?st.tickers_total+' tickers':'')+'…';
