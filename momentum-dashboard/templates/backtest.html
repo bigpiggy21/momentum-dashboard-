@@ -419,7 +419,7 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
     <div class="bt-chart-header">
       <span class="bt-chart-title" id="chartTitle">Select a trade</span>
       <span class="bt-chart-meta" id="chartMeta"></span>
-      <button class="chart-zoom-btn" id="chartZoomBtn" onclick="toggleChartZoom()" title="Toggle between trade view and wide context view">WIDE</button>
+      <button class="chart-zoom-btn active" id="chartZoomBtn" onclick="toggleChartZoom()" title="Toggle between trade view and wide context view">TIGHT</button>
     </div>
     <div class="bt-chart-body">
       <canvas id="priceChart"></canvas>
@@ -1200,7 +1200,7 @@ function selectTrade(idx) {
 // ═══════════════════════════════════════════
 // CHART DRAWING
 // ═══════════════════════════════════════════
-var _chartWideMode = false;
+var _chartWideMode = true;
 var _wideCache = {};  // ticker+entry → {prices, entry_idx, exit_idx, dates}
 
 function toggleChartZoom() {
@@ -1239,7 +1239,7 @@ function drawChart(trade) {
     var url = '/api/backtest/trade-chart?ticker=' + encodeURIComponent(trade.ticker)
       + '&entry=' + trade.entry_date
       + '&exit=' + (trade.exit_date || '')
-      + '&context=100';
+      + '&context=200';
     fetch(url).then(function(r){ return r.json(); }).then(function(d) {
       if (d.ok) {
         _wideCache[cacheKey] = d;
