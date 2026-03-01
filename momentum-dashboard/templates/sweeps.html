@@ -1681,13 +1681,13 @@ function renderChart(ticker, chartData, containerId){
     });
   }
   var volData = [];
-  // For hourly timeframes, group notional onto the last candle of that date
+  // For daily/weekly, use last candle of day. For intraday, match to VWAP-weighted time.
   var lastCandleByDate = {};
   chartData.candles.forEach(function(c){
     var dateKey = typeof c.time === 'number'
       ? new Date(c.time * 1000).toISOString().slice(0,10)
       : c.time;
-    lastCandleByDate[dateKey] = c.time;  // keep overwriting — last candle wins
+    lastCandleByDate[dateKey] = c.time;
   });
   Object.keys(sweepNotionalByDate).forEach(function(dateKey){
     var notional = sweepNotionalByDate[dateKey];
@@ -1695,6 +1695,21 @@ function renderChart(ticker, chartData, containerId){
 
     // Find the chart time for this date
     var timeVal = lastCandleByDate[dateKey];
+    // For intraday: use VWAP-weighted avg time to find the correct candle
+    if(isIntraday && sweepByDate[dateKey] && sweepByDate[dateKey].vwapTimeSec && candlesByDate[dateKey]){
+      var dayCandles = candlesByDate[dateKey];
+      var targetSec = sweepByDate[dateKey].vwapTimeSec;
+      var bestDist = Infinity;
+      for(var ci = 0; ci < dayCandles.length; ci++){
+        var cDate = new Date(dayCandles[ci].time * 1000);
+        var cSec = cDate.getUTCHours() * 3600 + cDate.getUTCMinutes() * 60;
+        var dist = Math.abs(cSec - targetSec);
+        if(dist < bestDist){
+          bestDist = dist;
+          timeVal = dayCandles[ci].time;
+        }
+      }
+    }
     // For weekly: check weekLookup
     if(timeVal === undefined && weekLookup[dateKey]){
       timeVal = weekLookup[dateKey].time;
