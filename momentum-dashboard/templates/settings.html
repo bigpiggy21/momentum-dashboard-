@@ -152,6 +152,12 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
   </div>
 </div>
 
+<!-- Watchlist Refresh -->
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+  <button class="sched-save-btn" onclick="refreshWatchlists()" style="padding:6px 16px;font-size:12px;">&#x1F504; Refresh Watchlists</button>
+  <span id="wlRefreshStatus" style="font-size:11px;color:#555;font-family:'Consolas',monospace;"></span>
+</div>
+
 <!-- Watchlist Schedule Table -->
 <table class="sched-table" id="schedulerTable">
   <thead>
@@ -398,6 +404,26 @@ function triggerWatchlist(name){
     if(!r.ok)alert('Trigger failed: '+r.error);
     setTimeout(function(){refreshSchedulerUI();},500);
   });
+}
+
+// ---------- Refresh Watchlists ----------
+function refreshWatchlists(){
+  var st=document.getElementById('wlRefreshStatus');
+  st.textContent='Refreshing...';st.style.color='#f59e0b';
+  fetch('/api/watchlists/refresh',{method:'POST'})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.ok){
+      st.textContent=d.watchlists+' watchlists, '+d.tickers+' tickers loaded';
+      st.style.color='#22c55e';
+      // Also refresh scheduler table to pick up new watchlists
+      setTimeout(function(){refreshSchedulerUI();},300);
+    }else{
+      st.textContent='Error: '+(d.error||'Unknown');st.style.color='#ef4444';
+    }
+    setTimeout(function(){st.textContent='';},5000);
+  })
+  .catch(function(e){st.textContent='Failed: '+e.message;st.style.color='#ef4444';});
 }
 
 // ---------- Single-Ticker Backfill ----------

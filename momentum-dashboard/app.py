@@ -458,6 +458,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         
         if path == "/api/watchlists/save":
             self.save_watchlists()
+        elif path == "/api/watchlists/refresh":
+            self.refresh_watchlists()
         elif path == "/api/search":
             self.serve_search()
         elif path == "/api/searches/save":
@@ -747,6 +749,22 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 })
             result.append(wl)
         self.send_json(result)
+
+    def refresh_watchlists(self):
+        """POST /api/watchlists/refresh — re-scan watchlists/ folder and return updated list."""
+        try:
+            reload_watchlists()
+            total_tickers = 0
+            wl_names = []
+            for name, groups in WATCHLISTS.items():
+                wl_names.append(name)
+                for _, tickers in groups:
+                    total_tickers += len(tickers)
+            print(f"🔄 Watchlists refreshed: {len(wl_names)} watchlists, {total_tickers} tickers", flush=True)
+            self.send_json({"ok": True, "watchlists": len(wl_names), "tickers": total_tickers,
+                            "names": wl_names})
+        except Exception as e:
+            self.send_json({"ok": False, "error": str(e)})
 
     def serve_saved_searches(self):
         """GET /api/searches — return all saved search configurations."""
