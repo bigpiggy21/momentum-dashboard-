@@ -1170,7 +1170,10 @@ function deleteProfile(name){
 
 function filterByType(events){
   if(_trackerTypeFilter === 'all') return events;
-  // Filter by primary event_type — monster_sweep = standalone monsters only
+  // Monsters includes any event with is_monster flag (standalone OR CB+monster overlay)
+  if(_trackerTypeFilter === 'monster_sweep'){
+    return events.filter(function(ev){ return ev.is_monster || (ev.event_type||'clusterbomb') === 'monster_sweep'; });
+  }
   return events.filter(function(ev){ return (ev.event_type||'clusterbomb') === _trackerTypeFilter; });
 }
 
