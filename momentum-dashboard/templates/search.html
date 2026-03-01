@@ -107,6 +107,32 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 .empty-state .big{font-size:16px;color:#555;margin-bottom:8px;}
 .toast{position:fixed;bottom:20px;right:20px;background:#1e293b;color:#f59e0b;padding:10px 18px;border-radius:6px;border:1px solid #334155;font-size:12px;font-weight:600;z-index:999;opacity:0;transition:opacity 0.3s;}
 .toast.show{opacity:1;}
+/* Intel enrichment panel */
+.rt-intel{background:#f59e0b;color:#000;}
+.enrichment-row td{padding:4px 12px 6px;background:#090910;border-bottom:2px solid #16161e;}
+.enrich-wrap{display:flex;align-items:flex-start;gap:16px;padding:2px 0;}
+.enrich-rs{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.enrich-rs-badge{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:22px;border-radius:4px;font-size:11px;font-weight:800;color:#000;padding:0 4px;}
+.rs-99{background:#fb923c;}.rs-90{background:#fbbf24;}.rs-80{background:#60a5fa;}.rs-70{background:#94a3b8;color:#fff;}.rs-low{background:#444;color:#999;}
+.enrich-rs-delta{font-size:10px;font-family:'Consolas',monospace;}
+.enrich-rs-delta .d-pos{color:#22c55e;}.enrich-rs-delta .d-neg{color:#ef4444;}.enrich-rs-delta .d-flat{color:#555;}
+.enrich-nh{color:#f59e0b;font-size:12px;font-weight:700;}.enrich-ms{font-size:10px;color:#666;font-family:'Consolas',monospace;}
+.enrich-sector{font-size:10px;color:#555;background:#14141e;padding:2px 6px;border-radius:3px;}
+.enrich-div{width:1px;background:#1e1e2e;align-self:stretch;margin:0 2px;}
+.enrich-grid{display:grid;grid-template-columns:32px repeat(5,36px);gap:1px;font-family:'Consolas',monospace;}
+.eg-hdr{font-size:8px;color:#555;text-align:center;font-weight:700;padding:1px 0;}
+.eg-lbl{font-size:9px;font-weight:700;padding:2px 0;text-align:right;}
+.eg-cell{font-size:10px;text-align:center;padding:1px 0;border-radius:2px;}
+.eg-cell.has-val{font-weight:700;}
+.eg-dim{color:#222;}
+.eg-hvc.has-val{color:#0999a8;}.eg-cb.has-val{color:#60a5fa;}.eg-rare.has-val{color:#a78bfa;}.eg-mon.has-val{color:#f59e0b;}
+.enrich-returns{display:flex;flex-direction:column;gap:1px;flex-shrink:0;}
+.er-item{display:flex;align-items:center;gap:3px;font-size:10px;}
+.er-lbl{color:#444;font-size:9px;font-weight:700;width:20px;text-align:right;}
+.er-val{font-family:'Consolas',monospace;font-weight:600;}
+.er-val.r-pos{color:#22c55e;}.er-val.r-neg{color:#ef4444;}.er-val.r-flat{color:#555;}
+.enrich-none{color:#222;font-size:10px;padding:2px 0;}
+.hide-intel .enrichment-row{display:none;}
 ::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:#08080d;}::-webkit-scrollbar-thumb{background:#2a2a3a;border-radius:3px;}
 /* Saved searches */
 .saved-wrap{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
@@ -239,6 +265,47 @@ var INDICATORS={
       {key:"gap",label:"Gap",choices:[{val:"",label:"Any"},{val:"has_gap",label:"Has Gap Up"},{val:"has_open_gap",label:"Has Open Gap"}]},
       {key:"count",label:"Count",choices:[{val:"",label:"Any"},{val:"multi_hvc",label:"2+ HVCs"}]}
     ]
+  },
+  rs_rating:{label:"RS Rating",values:[
+    {val:"gte_99",label:"\u2265 99 (Elite)"},
+    {val:"gte_95",label:"\u2265 95"},
+    {val:"gte_90",label:"\u2265 90 (Strong)"},
+    {val:"gte_85",label:"\u2265 85"},
+    {val:"gte_80",label:"\u2265 80"},
+    {val:"gte_70",label:"\u2265 70"},
+    {val:"lte_30",label:"\u2264 30 (Weak)"},
+    {val:"lte_20",label:"\u2264 20"},
+    {val:"lte_10",label:"\u2264 10 (Very Weak)"}
+  ],noTF:true},
+  rs_new_high:{label:"RS New High",values:[
+    {val:"true",label:"At RS New High"}
+  ],noTF:true},
+  monster_score:{label:"Monster Score",values:[
+    {val:"gte_80",label:"\u2265 80 (Very Strong)"},
+    {val:"gte_60",label:"\u2265 60 (Strong)"},
+    {val:"gte_40",label:"\u2265 40 (Moderate)"},
+    {val:"gte_20",label:"\u2265 20 (Some)"}
+  ],noTF:true},
+  has_sweep:{label:"Sweep Activity",values:[
+    {val:"week",label:"Within Last Week"},
+    {val:"month",label:"Within Last Month"},
+    {val:"quarter",label:"Within Last Quarter"},
+    {val:"half_year",label:"Within Last 6 Months"},
+    {val:"year",label:"Within Last Year"}
+  ],noTF:true,compound:true,
+    compoundOptions:[
+      {key:"type",label:"Type",choices:[
+        {val:"",label:"Any Type"},
+        {val:"clusterbomb",label:"Clusterbomb"},
+        {val:"rare_sweep",label:"Rare Sweep"},
+        {val:"monster_sweep",label:"Monster"}
+      ]},
+      {key:"count",label:"Count",choices:[
+        {val:"",label:"Any"},
+        {val:"multi",label:"2+ Events"},
+        {val:"many",label:"5+ Events"}
+      ]}
+    ]
   }
 };
 
@@ -265,7 +332,7 @@ function toggleAdj(){adjActive=adjActive?0:1;document.getElementById('adjBtn').c
 function toggleRow(row){
   if(hiddenRows.has(row))hiddenRows.delete(row);else hiddenRows.add(row);
   var wrap=document.getElementById('resultsWrap');
-  ['mom','sqz','band','acc','dev'].forEach(function(r){wrap.classList.toggle('hide-'+r,hiddenRows.has(r));});
+  ['mom','sqz','band','acc','dev','intel'].forEach(function(r){wrap.classList.toggle('hide-'+r,hiddenRows.has(r));});
   document.querySelectorAll('.row-toggle').forEach(function(el){
     var r=el.textContent.toLowerCase();
     el.classList.toggle('active',!hiddenRows.has(r));
@@ -451,6 +518,7 @@ function renderResults(){
     +'<div class="row-toggle rt-band'+(hiddenRows.has('band')?' inactive':' active')+'" onclick="toggleRow(\'band\')">BAND</div>'
     +'<div class="row-toggle rt-acc'+(hiddenRows.has('acc')?' inactive':' active')+'" onclick="toggleRow(\'acc\')">ACC</div>'
     +'<div class="row-toggle rt-dev'+(hiddenRows.has('dev')?' inactive':' active')+'" onclick="toggleRow(\'dev\')">DEV</div>'
+    +'<div class="row-toggle rt-intel'+(hiddenRows.has('intel')?' inactive':' active')+'" onclick="toggleRow(\'intel\')">INTEL</div>'
     +'</div></div>';
 
   var matchSet=getMatchSet();
@@ -492,9 +560,84 @@ function renderResults(){
       html+='</div></td>';
     });
     html+='</tr>';
+    html+=renderEnrichmentRow(tk,state._enrichment||{});
   });
   html+='</tbody></table>';
   wrap.innerHTML=html;
+}
+
+function renderEnrichmentRow(tk,enr){
+  var cs=ALL_TFS.length+4;
+  if(!enr||(!enr.rs&&!enr.hvc&&!enr.sw)){
+    return '<tr class="enrichment-row"><td colspan="'+cs+'"><div class="enrich-none">No intel data</div></td></tr>';
+  }
+  var h='<tr class="enrichment-row"><td colspan="'+cs+'"><div class="enrich-wrap">';
+
+  // RS section
+  var rs=enr.rs||{};
+  h+='<div class="enrich-rs">';
+  var rating=rs.r;
+  if(rating!=null){
+    var rcls='rs-low';
+    if(rating>=99)rcls='rs-99';else if(rating>=90)rcls='rs-90';else if(rating>=80)rcls='rs-80';else if(rating>=70)rcls='rs-70';
+    h+='<span class="enrich-rs-badge '+rcls+'" title="RS Rating">'+rating+'</span>';
+    var d5=rs.d5,d20=rs.d20;
+    h+='<span class="enrich-rs-delta">';
+    if(d5!=null){var dc5=d5>0?'d-pos':d5<0?'d-neg':'d-flat';h+='<span class="'+dc5+'" title="5d change">'+(d5>0?'+':'')+d5+'</span>';}
+    if(d5!=null&&d20!=null)h+=' <span style="color:#333">/</span> ';
+    if(d20!=null){var dc20=d20>0?'d-pos':d20<0?'d-neg':'d-flat';h+='<span class="'+dc20+'" title="20d change">'+(d20>0?'+':'')+d20+'</span>';}
+    h+='</span>';
+    if(rs.nh)h+='<span class="enrich-nh" title="RS New High">★</span>';
+    if(rs.ms!=null&&rs.ms>0)h+='<span class="enrich-ms" title="Monster Score">MS:'+Math.round(rs.ms)+'</span>';
+  }else{
+    h+='<span class="enrich-none">No RS</span>';
+  }
+  if(rs.sec)h+='<span class="enrich-sector">'+rs.sec+'</span>';
+  h+='</div>';
+
+  h+='<div class="enrich-div"></div>';
+
+  // Activity grid: 6 cols (label + 5 periods) x 4 rows (HVC, CB, Rare, Monster)
+  var periods=['1W','1M','3M','6M','1Y'];
+  var hvc=enr.hvc||[0,0,0,0,0];
+  var sw=enr.sw||{};
+  var cb=sw.cb||[0,0,0,0,0];
+  var rare=sw.rare||[0,0,0,0,0];
+  var mon=sw.mon||[0,0,0,0,0];
+
+  h+='<div class="enrich-grid">';
+  // Header row
+  h+='<div class="eg-hdr"></div>';
+  periods.forEach(function(p){h+='<div class="eg-hdr">'+p+'</div>';});
+  // HVC row
+  h+='<div class="eg-lbl" style="color:#0999a8;">HVC</div>';
+  hvc.forEach(function(v){h+='<div class="eg-cell eg-hvc'+(v?' has-val':' eg-dim')+'">'+(v||'\u2014')+'</div>';});
+  // CB row
+  h+='<div class="eg-lbl" style="color:#60a5fa;">CB</div>';
+  cb.forEach(function(v){h+='<div class="eg-cell eg-cb'+(v?' has-val':' eg-dim')+'">'+(v||'\u2014')+'</div>';});
+  // Rare row
+  h+='<div class="eg-lbl" style="color:#a78bfa;">R</div>';
+  rare.forEach(function(v){h+='<div class="eg-cell eg-rare'+(v?' has-val':' eg-dim')+'">'+(v||'\u2014')+'</div>';});
+  // Monster row
+  h+='<div class="eg-lbl" style="color:#f59e0b;">M</div>';
+  mon.forEach(function(v){h+='<div class="eg-cell eg-mon'+(v?' has-val':' eg-dim')+'">'+(v||'\u2014')+'</div>';});
+  h+='</div>';
+
+  h+='<div class="enrich-div"></div>';
+
+  // Returns section
+  h+='<div class="enrich-returns">';
+  var rets=[{l:'1M',v:rs.r1m},{l:'3M',v:rs.r3m},{l:'6M',v:rs.r6m}];
+  rets.forEach(function(rp){
+    var val=rp.v;
+    var cls=val>0?'r-pos':val<0?'r-neg':'r-flat';
+    var txt=val!=null?(val>0?'+':'')+val.toFixed(1)+'%':'\u2014';
+    h+='<div class="er-item"><span class="er-lbl">'+rp.l+'</span><span class="er-val '+cls+'">'+txt+'</span></div>';
+  });
+  h+='</div>';
+
+  h+='</div></td></tr>';
+  return h;
 }
 
 // ── Saved searches ──────────────────────────────────────

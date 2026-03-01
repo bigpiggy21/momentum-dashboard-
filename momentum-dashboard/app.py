@@ -3180,11 +3180,61 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     hvc_sets[period_val] = set(summary.keys())
                     hvc_summaries[period_val] = summary
 
+            # Pre-load RS data if any criteria use rs_rating/rs_new_high/monster_score
+            rs_data = {}
+            needs_rs = any(c.get("indicator") in ("rs_rating", "rs_new_high", "monster_score")
+                           for c in criteria if c.get("value"))
+            if needs_rs:
+                from change_detector import _get_db
+                _conn_rs = _get_db()
+                _cur_rs = _conn_rs.cursor()
+                _cur_rs.execute("SELECT ticker, rs_rating, rs_new_high, monster_score FROM rs_rankings")
+                for _row in _cur_rs.fetchall():
+                    rs_data[_row[0]] = {"rs_rating": _row[1], "rs_new_high": int(_row[2] or 0),
+                                        "monster_score": _row[3]}
+                _conn_rs.close()
+
+            # Pre-load sweep event data if any criteria use has_sweep
+            sweep_sets = {}  # {period: {ticker: {event_type: count}}}
+            needs_sweep = any(c.get("indicator") == "has_sweep" for c in criteria if c.get("value"))
+            if needs_sweep:
+                from change_detector import _get_db
+                from datetime import date as _date2
+                _today2 = _date2.today()
+                _sweep_periods = {
+                    "week": (_today2 - timedelta(weeks=1)).isoformat(),
+                    "month": (_today2 - timedelta(days=30)).isoformat(),
+                    "quarter": (_today2 - timedelta(days=90)).isoformat(),
+                    "half_year": (_today2 - timedelta(days=182)).isoformat(),
+                    "year": (_today2 - timedelta(days=365)).isoformat(),
+                }
+                _conn_sw = _get_db()
+                _cur_sw = _conn_sw.cursor()
+                for _sp_val, _sp_since in _sweep_periods.items():
+                    _cur_sw.execute("""
+                        SELECT ticker, COALESCE(event_type, 'clusterbomb'), COUNT(*)
+                        FROM clusterbomb_events WHERE event_date >= ?
+                        GROUP BY ticker, COALESCE(event_type, 'clusterbomb')
+                    """, (_sp_since,))
+                    sweep_sets[_sp_val] = {}
+                    for _row in _cur_sw.fetchall():
+                        _tk, _et, _cnt = _row
+                        if _tk not in sweep_sets[_sp_val]:
+                            sweep_sets[_sp_val][_tk] = {}
+                        sweep_sets[_sp_val][_tk][_et] = _cnt
+                _conn_sw.close()
+
             # Filter tickers: match ANY and_group (OR between groups)
             matches = {}
             for ticker, tdata in state.items():
-                if self._ticker_matches_or_groups(ticker, tdata, and_groups, hvc_sets, hvc_summaries, state):
+                if self._ticker_matches_or_groups(ticker, tdata, and_groups, hvc_sets, hvc_summaries,
+                                                   state, rs_data, sweep_sets):
                     matches[ticker] = tdata
+
+            # Enrich matched tickers with HVC, sweep, RS data
+            enrichment = self._get_screener_enrichment(list(matches.keys()))
+            for tk in matches:
+                matches[tk]['_enrichment'] = enrichment.get(tk, {})
 
             self.send_json({"matches": matches, "total": total})
         except Exception as e:
@@ -3192,24 +3242,80 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             traceback.print_exc()
             self.send_json({"matches": {}, "total": 0, "error": str(e)})
 
-    def _ticker_matches_or_groups(self, ticker, tdata, and_groups, hvc_sets=None, hvc_summaries=None, state=None):
+    def _ticker_matches_or_groups(self, ticker, tdata, and_groups, hvc_sets=None, hvc_summaries=None,
+                                   state=None, rs_data=None, sweep_sets=None):
         """Check if ticker matches ANY of the AND-groups (OR between groups).
         Within each group, ALL criteria must match (AND between rows).
         Within each criterion, ANY timeframe can match (OR across TFs)."""
         if not and_groups:
             return False
         for group in and_groups:
-            if self._ticker_matches_and_group(ticker, tdata, group, hvc_sets, hvc_summaries, state):
+            if self._ticker_matches_and_group(ticker, tdata, group, hvc_sets, hvc_summaries,
+                                               state, rs_data, sweep_sets):
                 return True
         return False
 
-    def _ticker_matches_and_group(self, ticker, tdata, group, hvc_sets=None, hvc_summaries=None, state=None):
+    def _ticker_matches_and_group(self, ticker, tdata, group, hvc_sets=None, hvc_summaries=None,
+                                    state=None, rs_data=None, sweep_sets=None):
         """Check if ticker matches ALL criteria in this AND-group."""
         meta = tdata.get("_meta", {})
         for criterion in group:
             ind = criterion["indicator"]
             val = criterion["value"]
             timeframes = criterion["timeframes"]
+
+            # RS Rating filter (e.g. val="gte_90" or "lte_20")
+            if ind == "rs_rating":
+                if not rs_data or ticker not in rs_data:
+                    return False
+                rs_r = rs_data[ticker].get("rs_rating", 0) or 0
+                parts = val.split("_")
+                if len(parts) == 2:
+                    if parts[0] == "gte" and rs_r < int(parts[1]):
+                        return False
+                    elif parts[0] == "lte" and rs_r > int(parts[1]):
+                        return False
+                continue
+
+            # RS New High filter
+            if ind == "rs_new_high":
+                if not rs_data or ticker not in rs_data:
+                    return False
+                if val == "true" and not rs_data[ticker].get("rs_new_high"):
+                    return False
+                continue
+
+            # Monster Score filter (e.g. val="gte_60")
+            if ind == "monster_score":
+                if not rs_data or ticker not in rs_data:
+                    return False
+                ms = rs_data[ticker].get("monster_score", 0) or 0
+                parts = val.split("_")
+                if len(parts) == 2 and parts[0] == "gte" and ms < int(parts[1]):
+                    return False
+                continue
+
+            # Sweep activity filter (compound: "period|type|count")
+            if ind == "has_sweep":
+                parts = val.split("|")
+                period_val = parts[0] if parts else "month"
+                if not sweep_sets or period_val not in sweep_sets:
+                    return False
+                tk_sweeps = sweep_sets[period_val].get(ticker, {})
+                if not tk_sweeps:
+                    return False
+                # Type sub-filter
+                if len(parts) > 1 and parts[1]:
+                    if parts[1] not in tk_sweeps:
+                        return False
+                # Count sub-filter
+                if len(parts) > 2 and parts[2]:
+                    total_events = sum(tk_sweeps.values())
+                    if parts[2] == "multi" and total_events < 2:
+                        return False
+                    elif parts[2] == "many" and total_events < 5:
+                        return False
+                continue
 
             # Meta-level indicators (no timeframe)
             if ind == "above_wma30":
@@ -3285,6 +3391,92 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             if not any_tf_match:
                 return False
         return True
+
+    def _get_screener_enrichment(self, tickers):
+        """Batch-fetch HVC, sweep, and RS enrichment for screener results.
+
+        Returns dict: {ticker: {rs: {...}, hvc: [1w,1m,3m,6m,1y], sw: {cb:[...], rare:[...], mon:[...]}}}
+        Arrays are ordered [1w, 1m, 3m, 6m, 1y] for period counts.
+        """
+        if not tickers:
+            return {}
+        from change_detector import _get_db
+        from datetime import date as _date
+        today = _date.today()
+        d1w = (today - timedelta(days=7)).isoformat()
+        d1m = (today - timedelta(days=30)).isoformat()
+        d3m = (today - timedelta(days=90)).isoformat()
+        d6m = (today - timedelta(days=182)).isoformat()
+        d1y = (today - timedelta(days=365)).isoformat()
+        ph = ','.join(['?'] * len(tickers))
+        tl = list(tickers)
+        conn = _get_db()
+        c = conn.cursor()
+        out = {}
+
+        # 1. RS data — single query from rs_rankings
+        try:
+            c.execute(f"""SELECT ticker, rs_rating, rs_change_5d, rs_change_20d,
+                         rs_new_high, price_new_high, above_rs_30wma, monster_score,
+                         sector, price_return_1m, price_return_3m, price_return_6m
+                         FROM rs_rankings WHERE ticker IN ({ph})""", tl)
+            for row in c.fetchall():
+                tk = row[0]
+                out[tk] = {'rs': {
+                    'r': row[1], 'd5': row[2], 'd20': row[3],
+                    'nh': int(row[4] or 0), 'pnh': int(row[5] or 0),
+                    'wma': int(row[6] or 0), 'ms': row[7],
+                    'sec': row[8] or '',
+                    'r1m': row[9], 'r3m': row[10], 'r6m': row[11]
+                }}
+        except Exception:
+            pass
+
+        # 2. HVC counts by period — CASE/WHEN bucketing
+        try:
+            c.execute(f"""SELECT ticker,
+                         SUM(CASE WHEN event_date >= ? THEN 1 ELSE 0 END),
+                         SUM(CASE WHEN event_date >= ? THEN 1 ELSE 0 END),
+                         SUM(CASE WHEN event_date >= ? THEN 1 ELSE 0 END),
+                         SUM(CASE WHEN event_date >= ? THEN 1 ELSE 0 END),
+                         COUNT(*)
+                         FROM hvc_events WHERE event_date >= ? AND ticker IN ({ph})
+                         GROUP BY ticker""",
+                      [d1w, d1m, d3m, d6m, d1y] + tl)
+            for row in c.fetchall():
+                tk = row[0]
+                if tk not in out:
+                    out[tk] = {}
+                out[tk]['hvc'] = [row[1] or 0, row[2] or 0, row[3] or 0,
+                                  row[4] or 0, row[5] or 0]
+        except Exception:
+            pass
+
+        # 3. Sweep events by type and period
+        try:
+            c.execute(f"""SELECT ticker, COALESCE(event_type, 'clusterbomb'),
+                         SUM(CASE WHEN event_date >= ? THEN 1 ELSE 0 END),
+                         SUM(CASE WHEN event_date >= ? THEN 1 ELSE 0 END),
+                         SUM(CASE WHEN event_date >= ? THEN 1 ELSE 0 END),
+                         SUM(CASE WHEN event_date >= ? THEN 1 ELSE 0 END),
+                         COUNT(*)
+                         FROM clusterbomb_events WHERE event_date >= ? AND ticker IN ({ph})
+                         GROUP BY ticker, COALESCE(event_type, 'clusterbomb')""",
+                      [d1w, d1m, d3m, d6m, d1y] + tl)
+            for row in c.fetchall():
+                tk, etype = row[0], row[1]
+                if tk not in out:
+                    out[tk] = {}
+                if 'sw' not in out[tk]:
+                    out[tk]['sw'] = {}
+                key = 'cb' if etype == 'clusterbomb' else ('rare' if etype == 'rare_sweep' else 'mon')
+                out[tk]['sw'][key] = [row[2] or 0, row[3] or 0, row[4] or 0,
+                                      row[5] or 0, row[6] or 0]
+        except Exception:
+            pass
+
+        conn.close()
+        return out
 
     def send_json(self, data):
         """Helper to send JSON response, with optional gzip compression."""
