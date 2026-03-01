@@ -254,9 +254,6 @@ tr.clickable{cursor:pointer;}
 <label style="font-size:11px;color:#555;font-weight:500;">Universe</label>
 <select id="selUniverse" onchange="loadAll()" style="background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:4px 8px;border-radius:4px;font-size:11px;height:26px;">
 <option value="Russell3000">Russell 3000</option>
-<option value="SP500">S&P 500</option>
-<option value="Russell1000">Russell 1000</option>
-<option value="Russell2000">Russell 2000</option>
 </select>
 <span class="refresh-info" id="lastComputed"></span>
 <div style="margin-left:auto;display:flex;gap:6px;">
@@ -495,6 +492,29 @@ function api(url){
 }
 function apiPost(url, body){
     return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));
+}
+
+// ============================================================
+// UNIVERSE DROPDOWN (dynamic from watchlists)
+// ============================================================
+function populateUniverseDropdown(){
+    fetch('/api/watchlists').then(function(r){return r.json();}).then(function(wls){
+        var sel=document.getElementById('selUniverse');
+        var cur=sel.value||'Russell3000';
+        // Build display-friendly labels
+        var nameMap={'Russell3000':'Russell 3000','Russell2000':'Russell 2000','Russell1000':'Russell 1000','SP500':'S&P 500'};
+        sel.innerHTML='';
+        wls.forEach(function(wl){
+            var opt=document.createElement('option');
+            opt.value=wl.name;
+            opt.textContent=nameMap[wl.name]||wl.name;
+            sel.appendChild(opt);
+        });
+        // Restore previous selection if it still exists
+        if(sel.querySelector('option[value="'+cur+'"]'))sel.value=cur;
+        else if(sel.options.length)sel.value=sel.options[0].value;
+        _universe=sel.value;
+    }).catch(function(e){console.error('Failed to load universes:',e);});
 }
 
 // ============================================================
@@ -1488,6 +1508,7 @@ function msBadge(ms){
 // ============================================================
 // INIT
 // ============================================================
+populateUniverseDropdown();
 populateSavedSearches();
 loadAll();
 

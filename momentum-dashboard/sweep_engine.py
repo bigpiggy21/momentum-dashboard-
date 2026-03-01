@@ -1361,7 +1361,8 @@ def _check_rarity(conn, ticker, event_date, min_notional, rarity_days):
         return 0
 
 
-def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None):
+def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None,
+                           date_from=None, date_to=None):
     """
     Detect days where a ticker had sweep activity after a long quiet period,
     regardless of whether it meets clusterbomb thresholds (min_sweeps / min_total).
@@ -1384,9 +1385,15 @@ def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None)
         placeholders = ",".join("?" * len(tickers))
         where.append(f"ticker IN ({placeholders})")
         params.extend(tickers)
+    if date_from:
+        where.append("trade_date >= ?")
+        params.append(date_from)
+    if date_to:
+        where.append("trade_date <= ?")
+        params.append(date_to)
     where_sql = " AND ".join(where)
 
-    # Get all ticker+date sweep activity
+    # Get all ticker+date sweep activity (scoped to date range if provided)
     rows = c.execute(f"""
         SELECT ticker, trade_date,
                COUNT(*) as sweep_count,
@@ -1462,7 +1469,8 @@ def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None)
     return events
 
 
-def detect_monster_sweeps(monster_min_notional=DEFAULT_MONSTER_MIN_NOTIONAL, tickers=None):
+def detect_monster_sweeps(monster_min_notional=DEFAULT_MONSTER_MIN_NOTIONAL, tickers=None,
+                          date_from=None, date_to=None):
     """
     Detect days where a single dark pool sweep exceeds the monster threshold.
 
@@ -1486,6 +1494,12 @@ def detect_monster_sweeps(monster_min_notional=DEFAULT_MONSTER_MIN_NOTIONAL, tic
         placeholders = ",".join("?" * len(tickers))
         where.append(f"ticker IN ({placeholders})")
         params.extend(tickers)
+    if date_from:
+        where.append("trade_date >= ?")
+        params.append(date_from)
+    if date_to:
+        where.append("trade_date <= ?")
+        params.append(date_to)
 
     where_sql = " AND ".join(where)
 
@@ -1557,6 +1571,50 @@ def detect_monster_sweeps(monster_min_notional=DEFAULT_MONSTER_MIN_NOTIONAL, tic
           f"{inserted} new monster-only events inserted "
           f"(threshold: ${monster_min_notional:,.0f})")
     return events
+
+
+# ---------------------------------------------------------------------------
+# Incremental detection (for live scanner)
+# ---------------------------------------------------------------------------
+
+def detect_today():
+    """Run all detection passes on today's data only.
+
+    Used by the live sweep daemon to detect events incrementally.
+    Returns dict of event counts: {clusterbomb: N, rare_sweep: N, monster_sweep: N}.
+    Safe to call repeatedly — INSERT OR IGNORE prevents duplicates.
+    """
+    cfg = get_detection_config().get("stock", {})
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    cbs = detect_clusterbombs(
+        min_sweeps=cfg.get("min_sweeps", DEFAULT_CB_MIN_SWEEPS),
+        min_notional=cfg.get("min_notional", DEFAULT_CB_MIN_NOTIONAL),
+        min_total=cfg.get("min_total", DEFAULT_CB_MIN_TOTAL),
+        rarity_days=cfg.get("rarity_days", DEFAULT_CB_RARITY_DAYS),
+        rare_min_notional=cfg.get("rare_min_notional", DEFAULT_CB_RARE_MIN_NOTIONAL),
+        date_from=today,
+        date_to=today,
+    )
+
+    rares = detect_rare_sweep_days(
+        min_notional=cfg.get("rare_min_notional", DEFAULT_CB_RARE_MIN_NOTIONAL),
+        rarity_days=cfg.get("rarity_days", DEFAULT_CB_RARITY_DAYS),
+        date_from=today,
+        date_to=today,
+    )
+
+    monsters = detect_monster_sweeps(
+        monster_min_notional=cfg.get("monster_min_notional", DEFAULT_MONSTER_MIN_NOTIONAL),
+        date_from=today,
+        date_to=today,
+    )
+
+    return {
+        "clusterbomb": len(cbs),
+        "rare_sweep": len(rares),
+        "monster_sweep": len(monsters),
+    }
 
 
 # ---------------------------------------------------------------------------

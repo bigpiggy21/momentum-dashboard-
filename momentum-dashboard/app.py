@@ -55,6 +55,10 @@ _ticker_backfill = {
 }
 _ticker_backfill_lock = threading.Lock()
 
+# Live sweep daemon instance (created on first start)
+_live_daemon = None
+_live_daemon_lock = threading.Lock()
+
 # Server-side tracker response cache (60s TTL)
 _tracker_cache = {}       # {cache_key: {"data": response_dict, "ts": float}}
 _TRACKER_CACHE_TTL = 60   # seconds
@@ -400,6 +404,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_sweep_detection_config()
         elif path == "/api/sweeps/fetch-progress":
             self.serve_sweep_fetch_progress()
+        elif path == "/api/sweeps/live/status":
+            self.serve_live_sweep_status()
+        elif path == "/api/sweeps/live/events":
+            self.serve_live_sweep_events()
+        elif path == "/api/sweeps/live/config":
+            self.serve_live_sweep_get_config()
         elif path == "/api/sweeps/sectors":
             self.serve_sweep_sectors()
         elif path == "/api/analysis/river":
@@ -476,6 +486,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.save_sweep_detection_config()
         elif path == "/api/sweeps/rebuild-cache":
             self.serve_rebuild_cache()
+        elif path == "/api/sweeps/live/start":
+            self.serve_live_sweep_start()
+        elif path == "/api/sweeps/live/stop":
+            self.serve_live_sweep_stop()
+        elif path == "/api/sweeps/live/config":
+            self.serve_live_sweep_save_config()
         else:
             self.send_response(404)
             self.end_headers()
@@ -2587,6 +2603,98 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             }
         self.send_json(data)
 
+    # ------------------------------------------------------------------
+    # Live sweep scanner endpoints
+    # ------------------------------------------------------------------
+
+    def serve_live_sweep_status(self):
+        """GET /api/sweeps/live/status — return live scanner daemon status."""
+        global _live_daemon
+        if _live_daemon is None:
+            self.send_json({
+                "running": False, "connected": False, "authenticated": False,
+                "subscribed": False, "started_at": None,
+                "trades_received": 0, "trades_per_sec": 0.0,
+                "sweeps_today": 0, "sweeps_buffered": 0, "sweeps_written": 0,
+                "last_sweep": None, "tickers_active": 0,
+                "events_detected": {"clusterbomb": 0, "rare_sweep": 0, "monster_sweep": 0},
+                "last_detection_at": None, "last_flush_at": None,
+                "reconnect_count": 0, "error": None,
+            })
+            return
+        self.send_json(_live_daemon.get_status())
+
+    def serve_live_sweep_events(self):
+        """GET /api/sweeps/live/events — events detected today by live scanner."""
+        from sweep_engine import _get_db
+        try:
+            today = datetime.now().strftime("%Y-%m-%d")
+            conn = _get_db()
+            rows = conn.execute("""
+                SELECT ticker, event_date, event_type, is_monster, total_notional, sweep_count
+                FROM clusterbomb_events
+                WHERE event_date = ?
+                ORDER BY total_notional DESC
+            """, (today,)).fetchall()
+            conn.close()
+            events = [dict(r) for r in rows]
+            self.send_json({"date": today, "events": events})
+        except Exception as e:
+            self.send_json({"error": str(e)})
+
+    def serve_live_sweep_start(self):
+        """POST /api/sweeps/live/start — start the live sweep daemon."""
+        global _live_daemon
+        from live_sweep_daemon import LiveSweepDaemon, load_live_config
+
+        with _live_daemon_lock:
+            if _live_daemon is not None and _live_daemon.get_status().get("running"):
+                self.send_json({"ok": True, "message": "Already running",
+                                "status": _live_daemon.get_status()})
+                return
+
+            try:
+                cfg = load_live_config()
+                _live_daemon = LiveSweepDaemon(config=cfg)
+                _live_daemon.start()
+                self.send_json({"ok": True, "message": "Live scanner started",
+                                "status": _live_daemon.get_status()})
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e)})
+
+    def serve_live_sweep_stop(self):
+        """POST /api/sweeps/live/stop — stop the live sweep daemon."""
+        global _live_daemon
+        with _live_daemon_lock:
+            if _live_daemon is None or not _live_daemon.get_status().get("running"):
+                self.send_json({"ok": True, "message": "Not running"})
+                return
+
+            try:
+                _live_daemon.stop()
+                self.send_json({"ok": True, "message": "Live scanner stopped"})
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e)})
+
+    def serve_live_sweep_get_config(self):
+        """GET /api/sweeps/live/config — return current live scanner configuration."""
+        from live_sweep_daemon import load_live_config
+        try:
+            self.send_json(load_live_config())
+        except Exception as e:
+            self.send_json({"error": str(e)})
+
+    def serve_live_sweep_save_config(self):
+        """POST /api/sweeps/live/config — save live scanner configuration."""
+        from live_sweep_daemon import save_live_config
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            save_live_config(body)
+            self.send_json({"ok": True})
+        except Exception as e:
+            self.send_json({"ok": False, "error": str(e)})
+
     def serve_sweep_detection_config(self):
         """GET /api/sweeps/detection-config — return current detection parameters."""
         from sweep_engine import get_detection_config
@@ -3196,6 +3304,18 @@ def main():
                 print("📊 Done.")
         except Exception as _e:
             print(f"⚠️  Cache rebuild skipped: {_e}")
+
+        # Auto-start live sweep daemon if configured
+        try:
+            from live_sweep_daemon import LiveSweepDaemon, load_live_config
+            _live_cfg = load_live_config()
+            if _live_cfg.get("auto_start", False):
+                global _live_daemon
+                _live_daemon = LiveSweepDaemon(config=_live_cfg)
+                _live_daemon.start()
+                print("⚡ Live sweep scanner auto-started")
+        except Exception as _e:
+            print(f"⚠️  Live scanner auto-start skipped: {_e}")
 
         start_server(args.port)
         return

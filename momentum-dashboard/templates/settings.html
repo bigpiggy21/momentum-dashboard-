@@ -245,7 +245,8 @@ function renderSchedulerTable(){
       :cfg.mode==='after_close'?'+<input type="number" data-wl="'+name+'" data-field="after_close_delay_minutes" value="'+(cfg.after_close_delay_minutes||30)+'" min="0" max="240" style="width:40px;"> min':'--';
     var stColor=st.status==='collecting'||st.status==='computing'?'#f59e0b':st.status==='error'?'#ef4444':'#555';
     var stText=st.status||'idle';
-    if(st.status==='collecting'||st.status==='computing')stText+=' ('+((st.tickers_done||0))+'/'+((st.tickers_total||'?'))+')';
+    if(st.status==='collecting')stText=st.tickers_done>0?'collecting ('+st.tickers_done+'/'+((st.tickers_total||'?'))+')':'collecting '+((st.tickers_total||'')?st.tickers_total+' tickers':'')+'…';
+    else if(st.status==='computing')stText=st.tickers_done>0?'computing ('+st.tickers_done+'/'+((st.tickers_total||'?'))+')':'computing…';
     if(st.status==='error'&&st.last_error)stText=st.last_error.substring(0,30);
     var lastRun=st.last_completed_utc?_fmtAgo(st.last_completed_utc):'--';
     var lastDur=st.last_duration_seconds?(' ('+Math.round(st.last_duration_seconds)+'s)'):'';
@@ -287,7 +288,8 @@ function updateSchedulerStatusCells(){
     if(stEl){
       var stColor=st.status==='collecting'||st.status==='computing'?'#f59e0b':st.status==='error'?'#ef4444':'#555';
       var stText=st.status||'idle';
-      if(st.status==='collecting'||st.status==='computing')stText+=' ('+((st.tickers_done||0))+'/'+((st.tickers_total||'?'))+')';
+      if(st.status==='collecting')stText=st.tickers_done>0?'collecting ('+st.tickers_done+'/'+((st.tickers_total||'?'))+')':'collecting '+((st.tickers_total||'')?st.tickers_total+' tickers':'')+'…';
+      else if(st.status==='computing')stText=st.tickers_done>0?'computing ('+st.tickers_done+'/'+((st.tickers_total||'?'))+')':'computing…';
       if(st.status==='error'&&st.last_error)stText=st.last_error.substring(0,30);
       stEl.textContent=stText;stEl.style.color=stColor;
     }

@@ -239,6 +239,7 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
 .loading{text-align:center;padding:30px;color:#555;font-size:12px;}
 .spinner{display:inline-block;width:16px;height:16px;border:2px solid #333;border-top-color:#f59e0b;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:6px;vertical-align:middle;}
 @keyframes spin{to{transform:rotate(360deg);}}
+@keyframes livePulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
 .tracker-loading-overlay{position:absolute;inset:0;background:rgba(8,8,13,0.85);display:flex;align-items:center;justify-content:center;z-index:5;color:#888;font-size:12px;font-weight:500;gap:8px;pointer-events:none;}
 .tracker-body{position:relative;}
 .header-spinner{display:none;width:14px;height:14px;border:2px solid #333;border-top-color:#f59e0b;border-radius:50%;animation:spin 0.8s linear infinite;margin-left:6px;vertical-align:middle;flex-shrink:0;}
@@ -643,21 +644,61 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
       </div>
     </div>
 
-    <!-- Section: Sweep Scheduler -->
+    <!-- Section: Live Scanner -->
     <div class="settings-section">
-      <div class="settings-section-title">&#x23F0; Sweep Scheduler</div>
-      <div class="settings-row">
-        <div class="settings-label">Status</div>
-        <span class="settings-status stopped" id="sweepSchedulerStatus">&#x25CF; Not configured</span>
+      <div class="settings-section-title">&#x26A1; Live Scanner</div>
+
+      <!-- Status + toggle -->
+      <div class="settings-row" style="align-items:center;">
+        <span id="liveStatusDot" style="font-size:14px;margin-right:6px;">&#x25CF;</span>
+        <span id="liveStatusText" style="font-size:11px;color:#666;">Stopped</span>
+        <div style="margin-left:auto;">
+          <button class="settings-btn" id="btnLiveToggle" onclick="toggleLiveScanner()" style="font-size:10px;min-width:54px;">
+            Start
+          </button>
+        </div>
       </div>
-      <div style="background:#14141e;border:1px solid #1e1e2e;border-radius:4px;padding:10px 12px;font-size:10px;color:#666;line-height:1.5;">
-        <strong style="color:#888;">Coming soon</strong> — The sweep scheduler will handle:
-        <ul style="margin:4px 0 0 14px;padding:0;">
-          <li>Live sweep tracking during market hours</li>
-          <li>Historical backfill for new tickers/watchlists</li>
-          <li>Automatic clusterbomb detection after each scan</li>
-        </ul>
-        <div style="margin-top:6px;color:#555;">Use the <strong>Fetch</strong> button to manually pull sweep data for now.</div>
+
+      <!-- Live stats (shown when running) -->
+      <div id="liveStatsPanel" style="display:none;background:#14141e;border:1px solid #1e1e2e;border-radius:4px;padding:8px 10px;margin-top:6px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:10px;">
+          <div><span style="color:#555;">Trades/s</span> <span id="liveTradesPerSec" style="color:#ccc;float:right;">0</span></div>
+          <div><span style="color:#555;">Sweeps today</span> <span id="liveSweepsToday" style="color:#ccc;float:right;">0</span></div>
+          <div><span style="color:#555;">Active tickers</span> <span id="liveTickersActive" style="color:#ccc;float:right;">0</span></div>
+          <div><span style="color:#555;">Written to DB</span> <span id="liveSweepsWritten" style="color:#ccc;float:right;">0</span></div>
+        </div>
+        <div id="liveLastSweep" style="font-size:9px;color:#555;margin-top:4px;"></div>
+        <!-- Events detected -->
+        <div style="margin-top:6px;padding-top:6px;border-top:1px solid #1e1e2e;">
+          <div style="font-size:9px;color:#555;margin-bottom:3px;">Events detected today:</div>
+          <div style="display:flex;gap:10px;font-size:10px;">
+            <span><span style="color:#f59e0b;" id="liveCBs">0</span> CBs</span>
+            <span><span style="color:#a855f7;" id="liveRares">0</span> Rare</span>
+            <span><span style="color:#f97316;" id="liveMonsters">0</span> Monsters</span>
+          </div>
+          <div id="liveLastDetection" style="font-size:9px;color:#444;margin-top:2px;"></div>
+        </div>
+      </div>
+
+      <!-- Settings -->
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid #1e1e2e;">
+        <div class="settings-row">
+          <div class="settings-label">Auto-start on launch</div>
+          <input type="checkbox" id="liveAutoStart">
+        </div>
+        <div class="settings-row">
+          <div class="settings-label">Detection interval</div>
+          <input type="number" class="settings-input" id="liveDetectionInterval" value="5" min="1" max="60" style="width:50px;"> <span style="font-size:10px;color:#555;">min</span>
+        </div>
+        <div class="settings-row">
+          <div class="settings-label">Min notional</div>
+          <input type="text" class="settings-input" id="liveMinNotional" value="500K" style="width:70px;">
+        </div>
+        <div style="margin-top:6px;">
+          <button class="settings-btn settings-btn-secondary" onclick="saveLiveConfig()" style="font-size:10px;">
+            &#x1F4BE; Save Settings
+          </button>
+        </div>
       </div>
     </div>
 
@@ -2697,6 +2738,8 @@ function toggleSettingsPanel(){
     overlay.classList.add('visible');
     loadDetectionConfig();
     loadSettingsDbInfo();
+    loadLiveConfig();
+    pollLiveStatus();
   }
 }
 
@@ -2813,6 +2856,202 @@ function loadSettingsDbInfo(){
       document.getElementById('settingsDbInfo').textContent = 'Error loading stats';
     });
 }
+
+// ====================================================================
+// LIVE SCANNER
+// ====================================================================
+var _liveStatusTimer = null;
+var _liveLastEventCounts = null;  // for auto-refresh detection
+var _liveAutoRefreshTimer = null;
+
+function toggleLiveScanner(){
+  var btn = document.getElementById('btnLiveToggle');
+  fetch('/api/sweeps/live/status').then(function(r){return r.json();}).then(function(s){
+    if(s.running){
+      // Stop
+      btn.textContent = '...';
+      btn.disabled = true;
+      fetch('/api/sweeps/live/stop',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+        btn.disabled = false;
+        updateLiveUI({running:false,connected:false});
+        showToast(d.ok ? 'Live scanner stopped' : ('Error: ' + (d.error||'')));
+      });
+    } else {
+      // Start
+      btn.textContent = '...';
+      btn.disabled = true;
+      fetch('/api/sweeps/live/start',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
+        btn.disabled = false;
+        if(d.ok){
+          showToast('Live scanner starting...');
+          pollLiveStatus();
+        } else {
+          showToast('Error: ' + (d.error||''));
+          updateLiveUI({running:false});
+        }
+      });
+    }
+  });
+}
+
+function pollLiveStatus(){
+  if(_liveStatusTimer) clearTimeout(_liveStatusTimer);
+  fetch('/api/sweeps/live/status').then(function(r){return r.json();}).then(function(s){
+    updateLiveUI(s);
+    // Keep polling while settings panel is open or scanner is running
+    var panelOpen = document.getElementById('settingsPanel').classList.contains('visible');
+    if(panelOpen || s.running){
+      _liveStatusTimer = setTimeout(pollLiveStatus, 5000);
+    }
+  }).catch(function(){
+    _liveStatusTimer = setTimeout(pollLiveStatus, 10000);
+  });
+}
+
+function updateLiveUI(s){
+  var dot = document.getElementById('liveStatusDot');
+  var text = document.getElementById('liveStatusText');
+  var btn = document.getElementById('btnLiveToggle');
+  var stats = document.getElementById('liveStatsPanel');
+
+  if(s.running && s.connected){
+    dot.style.color = '#22c55e';
+    text.textContent = 'Connected (15-min delayed)';
+    text.style.color = '#22c55e';
+    btn.textContent = 'Stop';
+    stats.style.display = '';
+  } else if(s.running && !s.connected){
+    dot.style.color = '#f59e0b';
+    text.textContent = s.authenticated ? 'Subscribing...' : (s.error || 'Connecting...');
+    text.style.color = '#f59e0b';
+    btn.textContent = 'Stop';
+    stats.style.display = '';
+  } else {
+    dot.style.color = '#555';
+    text.textContent = s.error ? ('Error: ' + s.error.substring(0,40)) : 'Stopped';
+    text.style.color = s.error ? '#ef4444' : '#555';
+    btn.textContent = 'Start';
+    stats.style.display = 'none';
+  }
+
+  // Stats
+  if(s.running){
+    document.getElementById('liveTradesPerSec').textContent = (s.trades_per_sec || 0).toFixed(1);
+    document.getElementById('liveSweepsToday').textContent = fmtN(s.sweeps_today || 0);
+    document.getElementById('liveTickersActive').textContent = fmtN(s.tickers_active || 0);
+    document.getElementById('liveSweepsWritten').textContent = fmtN(s.sweeps_written || 0);
+    var ev = s.events_detected || {};
+    document.getElementById('liveCBs').textContent = ev.clusterbomb || 0;
+    document.getElementById('liveRares').textContent = ev.rare_sweep || 0;
+    document.getElementById('liveMonsters').textContent = ev.monster_sweep || 0;
+
+    if(s.last_sweep){
+      document.getElementById('liveLastSweep').textContent =
+        'Last: ' + s.last_sweep.ticker + ' ' + fmt$(s.last_sweep.notional) + ' @ ' + s.last_sweep.time;
+    }
+    if(s.last_detection_at){
+      var ago = _fmtAgo(s.last_detection_at);
+      document.getElementById('liveLastDetection').textContent = 'Last detection: ' + ago;
+    }
+  }
+
+  // Update header live indicator
+  updateLiveHeaderIndicator(s);
+}
+
+function _fmtAgo(iso){
+  try{
+    var d=new Date(iso);var diff=Math.round((Date.now()-d.getTime())/1000);
+    if(diff<60)return diff+'s ago';
+    if(diff<3600)return Math.round(diff/60)+'m ago';
+    if(diff<86400)return Math.round(diff/3600)+'h ago';
+    return Math.round(diff/86400)+'d ago';
+  }catch(e){return '';}
+}
+
+function updateLiveHeaderIndicator(s){
+  var existing = document.getElementById('liveIndicator');
+  if(s.running && s.connected){
+    if(!existing){
+      var statsGrid = document.querySelector('.stats-grid');
+      if(statsGrid){
+        var ind = document.createElement('span');
+        ind.id = 'liveIndicator';
+        ind.title = 'Live scanner active';
+        ind.style.cssText = 'color:#22c55e;font-size:10px;margin-left:8px;animation:livePulse 2s infinite;';
+        ind.textContent = '\u26A1 LIVE';
+        statsGrid.parentElement.insertBefore(ind, statsGrid.nextSibling);
+      }
+    }
+  } else if(existing){
+    existing.remove();
+  }
+}
+
+function loadLiveConfig(){
+  fetch('/api/sweeps/live/config').then(function(r){return r.json();}).then(function(cfg){
+    document.getElementById('liveAutoStart').checked = !!cfg.auto_start;
+    document.getElementById('liveDetectionInterval').value = cfg.detection_interval_minutes || 5;
+    document.getElementById('liveMinNotional').value = fmtSettingVal(cfg.min_notional || 500000);
+  }).catch(function(e){ console.error('Load live config error:', e); });
+}
+
+function saveLiveConfig(){
+  var cfg = {
+    auto_start: document.getElementById('liveAutoStart').checked,
+    detection_interval_minutes: parseInt(document.getElementById('liveDetectionInterval').value) || 5,
+    min_notional: parseMinInput(document.getElementById('liveMinNotional').value),
+    ws_url: DEFAULT_WS_URL_VAL,
+    buffer_flush_seconds: 30,
+    buffer_max_trades: 200,
+  };
+  fetch('/api/sweeps/live/config',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(cfg)
+  }).then(function(r){return r.json();}).then(function(d){
+    showToast(d.ok ? 'Live scanner settings saved' : ('Error: '+(d.error||'')));
+  }).catch(function(e){showToast('Error saving: '+e);});
+}
+var DEFAULT_WS_URL_VAL = 'wss://delayed.polygon.io/stocks';
+
+// Auto-refresh: poll for new events when live scanner is running
+function startLiveAutoRefresh(){
+  if(_liveAutoRefreshTimer) return;
+  _liveAutoRefreshTimer = setInterval(function(){
+    fetch('/api/sweeps/live/status').then(function(r){return r.json();}).then(function(s){
+      if(!s.running){
+        stopLiveAutoRefresh();
+        return;
+      }
+      var ev = s.events_detected || {};
+      var total = (ev.clusterbomb||0) + (ev.rare_sweep||0) + (ev.monster_sweep||0);
+      if(_liveLastEventCounts !== null && total > _liveLastEventCounts){
+        // New events detected — refresh tracker
+        loadAll();
+      }
+      _liveLastEventCounts = total;
+    }).catch(function(){});
+  }, 45000);  // 45 seconds
+}
+
+function stopLiveAutoRefresh(){
+  if(_liveAutoRefreshTimer){
+    clearInterval(_liveAutoRefreshTimer);
+    _liveAutoRefreshTimer = null;
+  }
+  _liveLastEventCounts = null;
+}
+
+// On page load: check if live scanner is running
+(function checkLiveOnLoad(){
+  fetch('/api/sweeps/live/status').then(function(r){return r.json();}).then(function(s){
+    if(s.running){
+      updateLiveHeaderIndicator(s);
+      startLiveAutoRefresh();
+    }
+  }).catch(function(){});
+})();
 
 // ====================================================================
 // SECTOR FILTER
