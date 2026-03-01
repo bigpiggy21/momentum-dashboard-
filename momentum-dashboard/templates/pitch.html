@@ -7,7 +7,7 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 html{scroll-snap-type:y mandatory;scroll-behavior:smooth;}
-body{background:#08080d;color:#fff;font-family:'Georgia','Times New Roman',serif;overflow-x:hidden;}
+body{background:#08080d;color:#fff;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;overflow-x:hidden;}
 ::-webkit-scrollbar{width:0;background:transparent;}
 
 /* ─── Slides ─── */
@@ -35,13 +35,14 @@ body{background:#08080d;color:#fff;font-family:'Georgia','Times New Roman',serif
   text-align:center;
 }
 .slide-text{
-  font-size:clamp(22px, 3.2vw, 38px);
-  line-height:1.5;
+  font-size:clamp(14px, 2vw, 22px);
+  line-height:1.8;
   color:#eee;
   font-weight:400;
-  font-style:italic;
+  font-style:normal;
+  text-transform:uppercase;
   text-shadow:0 2px 30px rgba(0,0,0,0.7), 0 0 60px rgba(0,0,0,0.4);
-  letter-spacing:0.2px;
+  letter-spacing:3px;
 }
 .slide-text em{font-style:normal;color:#f59e0b;font-weight:600;}
 .slide-attr{
@@ -49,7 +50,6 @@ body{background:#08080d;color:#fff;font-family:'Georgia','Times New Roman',serif
   font-size:clamp(13px, 1.6vw, 17px);
   color:#f59e0b;
   font-style:normal;
-  font-family:'Segoe UI',-apple-system,sans-serif;
   font-weight:600;
   letter-spacing:1.5px;
   text-transform:uppercase;
@@ -60,7 +60,6 @@ body{background:#08080d;color:#fff;font-family:'Georgia','Times New Roman',serif
   font-size:clamp(13px, 1.4vw, 16px);
   color:#999;
   font-style:normal;
-  font-family:'Segoe UI',-apple-system,sans-serif;
   line-height:1.6;
   text-shadow:0 1px 12px rgba(0,0,0,0.5);
 }
@@ -119,7 +118,56 @@ body{background:#08080d;color:#fff;font-family:'Georgia','Times New Roman',serif
 .nav-dot:hover{background:#666;}
 .nav-dot.active{background:#f59e0b;border-color:#f59e0b;box-shadow:0 0 8px rgba(245,158,11,0.4);}
 
+/* ─── Paragraph spacing within slides ─── */
+.slide-text + .slide-text{margin-top:28px;}
+
+/* ─── Portrait image row (slide 3 etc.) ─── */
+.portrait-row{
+  display:flex;justify-content:space-evenly;
+  width:100%;
+  margin-bottom:48px;
+}
+.portrait-col{
+  display:flex;flex-direction:column;align-items:center;gap:14px;
+}
+.portrait-slot{
+  width:200px;height:400px;
+  border-radius:8px;overflow:hidden;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.08);
+  box-shadow:0 8px 40px rgba(0,0,0,0.5);
+}
+.portrait-slot img{
+  width:100%;height:100%;object-fit:cover;
+  display:block;
+}
+.portrait-slot .portrait-placeholder{
+  width:100%;height:100%;
+  display:flex;align-items:center;justify-content:center;
+  color:#333;font-size:11px;letter-spacing:1px;text-transform:uppercase;
+}
+.portrait-label{
+  font-size:13px;font-weight:600;color:#ccc;
+  text-transform:uppercase;letter-spacing:2px;
+}
+.slide-title{
+  font-size:clamp(16px, 2.2vw, 24px);
+  font-weight:600;color:#fff;
+  text-transform:uppercase;letter-spacing:3px;
+  text-shadow:0 2px 30px rgba(0,0,0,0.7);
+  margin-bottom:14px;
+}
+.slide-title em{font-style:normal;color:#f59e0b;}
+.slide-body{
+  font-size:clamp(13px, 1.5vw, 17px);
+  line-height:1.9;color:#aaa;
+  font-weight:400;
+  text-shadow:0 1px 12px rgba(0,0,0,0.5);
+  max-width:640px;margin:0 auto;
+}
+
 /* ─── CTA slide (final) ─── */
+.slide.slide-cta{align-items:flex-start;padding-top:28vh;}
 .cta-wrap{display:flex;flex-direction:column;align-items:center;gap:30px;}
 .cta-logo svg{filter:drop-shadow(0 0 36px rgba(245,158,11,0.40));}
 .cta-brand{font-size:36px;font-weight:700;color:#fff;font-family:'Segoe UI',-apple-system,sans-serif;letter-spacing:-0.5px;}
@@ -135,10 +183,16 @@ body{background:#08080d;color:#fff;font-family:'Georgia','Times New Roman',serif
 .cta-btn:hover{background:#fbbf24;box-shadow:0 0 40px rgba(245,158,11,0.4);}
 
 /* ─── Responsive ─── */
+@media(max-width:900px){
+  .portrait-slot{width:150px;height:300px;}
+}
 @media(max-width:600px){
   .slide-content{padding:24px;}
   .nav-dots{right:10px;gap:8px;}
   .nav-dot{width:6px;height:6px;}
+  .portrait-row{flex-direction:column;align-items:center;gap:24px;}
+  .portrait-slot{width:160px;height:320px;}
+  .slide.slide-cta{padding-top:20vh;}
 }
 </style>
 </head>
@@ -157,12 +211,11 @@ body{background:#08080d;color:#fff;font-family:'Georgia','Times New Roman',serif
      2. Change the class (slide-bg-N) or add style="background-image:url('/static/img/yourimage.jpg')"
      3. Edit the text inside .slide-text
      ═══════════════════════════════════════════ -->
-
 <!-- Slide 1 -->
-<section class="slide slide-bg-1" data-slide="0">
+<section class="slide" style="background-image:url('/static/img/pitch1.jpg')" data-slide="0">
   <div class="slide-overlay"></div>
   <div class="slide-content">
-    <p class="slide-text">"They say you have to be first, be smarter, or cheat to win in financial markets"</p>
+    <p class="slide-text">The world is about to change in a big way.</p>
   </div>
   <div class="scroll-hint">
     <span>Scroll</span>
@@ -171,32 +224,68 @@ body{background:#08080d;color:#fff;font-family:'Georgia','Times New Roman',serif
 </section>
 
 <!-- Slide 2 -->
-<section class="slide slide-bg-2" data-slide="1">
+<section class="slide" style="background-image:url('/static/img/pitch2.jpg')" data-slide="0">
   <div class="slide-overlay"></div>
   <div class="slide-content">
-    <p class="slide-text">"There is no denying there's truth to that. <em>Lace Technologies</em> can't give you any of those things. But you don't have to be first. Second is good enough"</p>
+    <p class="slide-text">Technologies change. But markets don't. There is truth to being first, smarter, or cheating.</p>
+  </div>
+  <div class="scroll-hint">
+    <span>Scroll</span>
+    <div class="arrow"></div>
   </div>
 </section>
 
 <!-- Slide 3 -->
-<section class="slide slide-bg-3" data-slide="2">
+<section class="slide" style="background-image:url('/static/img/pitch3.jpg')" data-slide="0">
   <div class="slide-overlay"></div>
   <div class="slide-content">
-    <p class="slide-text">"We are giving you the way to follow the first, find the smartest money, and those that cheat."</p>
+    <p class="slide-text">We can't help you there. <em>But you can make sure you can come second.<em></p>
   </div>
 </section>
 
-<!-- Slide 4 -->
-<section class="slide slide-bg-4" data-slide="3">
+<!-- Slide 4 — Portrait images + title + text -->
+<section class="slide" style="background-image:url('/static/img/pitch4.jpg')" data-slide="0">
+  <div class="slide-overlay"></div>
+  <div class="slide-content" style="max-width:1100px;width:90%;">
+    <div class="portrait-row">
+      <div class="portrait-col">
+        <div class="portrait-slot"><img src="/static/img/portrait4a.png"></div>
+        <span class="portrait-label">Follow institutional demand</span>
+      </div>
+      <div class="portrait-col">
+        <div class="portrait-slot"><img src="/static/img/portrait4b.png"></div>
+        <span class="portrait-label">Find the next trends</span>
+      </div>
+      <div class="portrait-col">
+	<div class="portrait-slot"><img src="/static/img/portrait4c.png"></div>
+        <span class="portrait-label">And avoid the traps</span>
+      </div>
+    </div>
+    <h2 class="slide-title"><em>Follow those who know best </em> </h2>
+    <p class="slide-body">The smartest and fastest (and the cheaters) leave footsteps. Our platform allows you to track these events, giving you actionable insights on the future.</p>
+  </div>
+</section>
+
+<!-- Slide 5 -->
+<section class="slide" style="background-image:url('/static/img/pitch4.png')" data-slide="0">
   <div class="slide-overlay"></div>
   <div class="slide-content">
-    <p class="slide-text">"Good artists copy, great artists steal"</p>
+    <p class="slide-text">TBC</p>
+    <div class="slide-attr">TBC</div>
+  </div>
+</section>
+
+<!-- Slide 6 -->
+<section class="slide" style="background-image:url('/static/img/pitch5.png')" data-slide="0">
+  <div class="slide-overlay"></div>
+  <div class="slide-content">
+    <p class="slide-text">Good artists copy, great artists steal</p>
     <div class="slide-attr">Pablo Picasso</div>
   </div>
 </section>
 
 <!-- Final slide — CTA -->
-<section class="slide slide-bg-5" data-slide="4">
+<section class="slide slide-cta" style="background-image:url('/static/img/pitch6.png')" data-slide="0">
   <div class="slide-overlay"></div>
   <div class="slide-content">
     <div class="cta-wrap">
