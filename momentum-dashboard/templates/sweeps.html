@@ -2835,6 +2835,18 @@ document.getElementById('dateTo').addEventListener('change', function(){
 
 loadFilterProfiles();
 loadAll();
+
+// Resume fetch progress UI if a fetch is already running on the server
+(function checkFetchOnLoad(){
+  fetch('/api/sweeps/fetch-progress').then(function(r){return r.json();}).then(function(p){
+    if(p.running){
+      document.getElementById('fetchProgress').style.display = '';
+      document.getElementById('btnFetch').disabled = true;
+      document.getElementById('fetchTitle').textContent = 'Fetch in progress (reconnected)...';
+      pollFetchProgress();
+    }
+  }).catch(function(){});
+})();
 </script>
 </body>
 </html>
