@@ -326,6 +326,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_static(path[8:])  # strip "/static/"
         elif path == "/" or path == "/index.html" or path == "/home":
             self.serve_page("home.html")
+        elif path == "/pitch":
+            self.serve_page("pitch.html")
         elif path == "/bollingers":
             self.serve_dashboard()
         elif path == "/log":

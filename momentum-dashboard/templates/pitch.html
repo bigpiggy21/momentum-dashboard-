@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Our Story</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-snap-type:y mandatory;scroll-behavior:smooth;}
+body{background:#08080d;color:#fff;font-family:'Georgia','Times New Roman',serif;overflow-x:hidden;}
+::-webkit-scrollbar{width:0;background:transparent;}
+
+/* ─── Slides ─── */
+.slide{
+  position:relative;
+  width:100%;height:100vh;
+  scroll-snap-align:start;
+  display:flex;align-items:center;justify-content:center;
+  background-size:cover;background-position:center;
+  overflow:hidden;
+}
+.slide-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(180deg,
+    rgba(8,8,13,0.55) 0%,
+    rgba(8,8,13,0.35) 40%,
+    rgba(8,8,13,0.35) 60%,
+    rgba(8,8,13,0.55) 100%);
+  pointer-events:none;
+}
+.slide-content{
+  position:relative;z-index:1;
+  max-width:720px;
+  padding:40px;
+  text-align:center;
+}
+.slide-text{
+  font-size:clamp(22px, 3.2vw, 38px);
+  line-height:1.5;
+  color:#eee;
+  font-weight:400;
+  font-style:italic;
+  text-shadow:0 2px 30px rgba(0,0,0,0.7), 0 0 60px rgba(0,0,0,0.4);
+  letter-spacing:0.2px;
+}
+.slide-text em{font-style:normal;color:#f59e0b;font-weight:600;}
+.slide-attr{
+  margin-top:20px;
+  font-size:clamp(13px, 1.6vw, 17px);
+  color:#f59e0b;
+  font-style:normal;
+  font-family:'Segoe UI',-apple-system,sans-serif;
+  font-weight:600;
+  letter-spacing:1.5px;
+  text-transform:uppercase;
+  text-shadow:0 1px 12px rgba(0,0,0,0.5);
+}
+.slide-sub{
+  margin-top:14px;
+  font-size:clamp(13px, 1.4vw, 16px);
+  color:#999;
+  font-style:normal;
+  font-family:'Segoe UI',-apple-system,sans-serif;
+  line-height:1.6;
+  text-shadow:0 1px 12px rgba(0,0,0,0.5);
+}
+
+/* ─── Placeholder gradients (swap for real images later) ─── */
+.slide-bg-1{background:linear-gradient(135deg,#0a0a14 0%,#12101e 40%,#0d0d18 100%);}
+.slide-bg-2{background:linear-gradient(135deg,#0e0c18 0%,#141020 40%,#0a0812 100%);}
+.slide-bg-3{background:linear-gradient(135deg,#0c0c10 0%,#10121c 40%,#080a14 100%);}
+.slide-bg-4{background:linear-gradient(135deg,#0d0a10 0%,#14101a 40%,#0a0810 100%);}
+.slide-bg-5{background:linear-gradient(135deg,#08080d 0%,#101018 50%,#08080d 100%);}
+
+/* ─── Fixed nav buttons ─── */
+.nav-btn{
+  position:fixed;top:20px;z-index:10;
+  padding:7px 18px;border-radius:4px;
+  background:rgba(20,20,30,0.5);border:1px solid #2a2a3a;
+  color:#777;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;
+  text-decoration:none;cursor:pointer;
+  font-family:'Segoe UI',-apple-system,sans-serif;
+  transition:all 0.2s;
+}
+.nav-btn:hover{color:#f59e0b;border-color:#f59e0b66;background:rgba(26,26,36,0.8);}
+.nav-back{left:24px;}
+.nav-enter{right:24px;}
+
+/* ─── Scroll indicator (first slide) ─── */
+.scroll-hint{
+  position:absolute;bottom:40px;left:50%;transform:translateX(-50%);
+  z-index:2;
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  opacity:0.5;animation:hintPulse 2.5s ease-in-out infinite;
+}
+.scroll-hint span{
+  font-size:11px;color:#888;letter-spacing:2px;text-transform:uppercase;
+  font-family:'Segoe UI',-apple-system,sans-serif;font-weight:500;
+}
+.scroll-hint .arrow{
+  width:20px;height:20px;border-right:2px solid #888;border-bottom:2px solid #888;
+  transform:rotate(45deg);
+}
+@keyframes hintPulse{
+  0%,100%{opacity:0.3;transform:translateX(-50%) translateY(0);}
+  50%{opacity:0.7;transform:translateX(-50%) translateY(6px);}
+}
+
+/* ─── Nav dots ─── */
+.nav-dots{
+  position:fixed;right:20px;top:50%;transform:translateY(-50%);
+  z-index:10;display:flex;flex-direction:column;gap:10px;
+}
+.nav-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:#333;border:1px solid #444;
+  cursor:pointer;transition:all 0.3s;
+}
+.nav-dot:hover{background:#666;}
+.nav-dot.active{background:#f59e0b;border-color:#f59e0b;box-shadow:0 0 8px rgba(245,158,11,0.4);}
+
+/* ─── CTA slide (final) ─── */
+.cta-wrap{display:flex;flex-direction:column;align-items:center;gap:30px;}
+.cta-logo svg{filter:drop-shadow(0 0 36px rgba(245,158,11,0.40));}
+.cta-brand{font-size:36px;font-weight:700;color:#fff;font-family:'Segoe UI',-apple-system,sans-serif;letter-spacing:-0.5px;}
+.cta-brand .accent{color:#f59e0b;}
+.cta-btn{
+  display:inline-block;padding:14px 42px;border-radius:6px;
+  background:#f59e0b;color:#000;font-size:15px;font-weight:700;
+  letter-spacing:1.5px;text-transform:uppercase;text-decoration:none;
+  font-family:'Segoe UI',-apple-system,sans-serif;
+  transition:all 0.2s;
+  box-shadow:0 0 30px rgba(245,158,11,0.25);
+}
+.cta-btn:hover{background:#fbbf24;box-shadow:0 0 40px rgba(245,158,11,0.4);}
+
+/* ─── Responsive ─── */
+@media(max-width:600px){
+  .slide-content{padding:24px;}
+  .nav-dots{right:10px;gap:8px;}
+  .nav-dot{width:6px;height:6px;}
+}
+</style>
+</head>
+<body>
+
+<!-- Fixed nav -->
+<a class="nav-btn nav-back" href="/">Back</a>
+<a class="nav-btn nav-enter" href="/sweeps">Enter</a>
+
+<!-- Nav dots -->
+<div class="nav-dots" id="navDots"></div>
+
+<!-- ═══════════════════════════════════════════
+     SLIDES — To add a new slide:
+     1. Copy any <section class="slide"> block
+     2. Change the class (slide-bg-N) or add style="background-image:url('/static/img/yourimage.jpg')"
+     3. Edit the text inside .slide-text
+     ═══════════════════════════════════════════ -->
+
+<!-- Slide 1 -->
+<section class="slide slide-bg-1" data-slide="0">
+  <div class="slide-overlay"></div>
+  <div class="slide-content">
+    <p class="slide-text">"They say you have to be first, be smarter, or cheat to win in financial markets"</p>
+  </div>
+  <div class="scroll-hint">
+    <span>Scroll</span>
+    <div class="arrow"></div>
+  </div>
+</section>
+
+<!-- Slide 2 -->
+<section class="slide slide-bg-2" data-slide="1">
+  <div class="slide-overlay"></div>
+  <div class="slide-content">
+    <p class="slide-text">"There is no denying there's truth to that. <em>Lace Technologies</em> can't give you any of those things. But you don't have to be first. Second is good enough"</p>
+  </div>
+</section>
+
+<!-- Slide 3 -->
+<section class="slide slide-bg-3" data-slide="2">
+  <div class="slide-overlay"></div>
+  <div class="slide-content">
+    <p class="slide-text">"We are giving you the way to follow the first, find the smartest money, and those that cheat."</p>
+  </div>
+</section>
+
+<!-- Slide 4 -->
+<section class="slide slide-bg-4" data-slide="3">
+  <div class="slide-overlay"></div>
+  <div class="slide-content">
+    <p class="slide-text">"Good artists copy, great artists steal"</p>
+    <div class="slide-attr">Pablo Picasso</div>
+  </div>
+</section>
+
+<!-- Final slide — CTA -->
+<section class="slide slide-bg-5" data-slide="4">
+  <div class="slide-overlay"></div>
+  <div class="slide-content">
+    <div class="cta-wrap">
+      <div class="cta-logo">
+        <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 78 L30 38 L42 55 L52 32 L68 58 L92 78Z" fill="#b4842a" opacity="0.25"/>
+          <path d="M15 78 L42 22 L55 48 L62 18 L85 78Z" fill="#f59e0b" opacity="0.75"/>
+          <path d="M62 18 L55 42 L58 35 L65 46 L72 38 L78 52 L68 44Z" fill="#fde68a" opacity="0.6"/>
+          <path d="M42 22 L38 38 L44 32 L50 42 L55 48Z" fill="#fde68a" opacity="0.5"/>
+          <path d="M42 22 L62 18" stroke="#fbbf24" stroke-width="1" opacity="0.5"/>
+        </svg>
+      </div>
+      <div class="cta-brand" id="ctaBrand">Lace <span class="accent">Technologies</span></div>
+      <a class="cta-btn" href="/sweeps">Enter the Platform</a>
+    </div>
+  </div>
+</section>
+
+<script>
+// Nav dots — auto-generated from slides
+var slides=document.querySelectorAll('.slide');
+var dotsWrap=document.getElementById('navDots');
+slides.forEach(function(s,i){
+  var dot=document.createElement('div');
+  dot.className='nav-dot'+(i===0?' active':'');
+  dot.onclick=function(){s.scrollIntoView({behavior:'smooth'});};
+  dotsWrap.appendChild(dot);
+});
+
+// Update active dot on scroll
+var dots=document.querySelectorAll('.nav-dot');
+var observer=new IntersectionObserver(function(entries){
+  entries.forEach(function(e){
+    if(e.isIntersecting){
+      var idx=parseInt(e.target.getAttribute('data-slide'));
+      dots.forEach(function(d,i){d.classList.toggle('active',i===idx);});
+    }
+  });
+},{threshold:0.55});
+slides.forEach(function(s){observer.observe(s);});
+
+// Hide scroll hint after first scroll
+var hint=document.querySelector('.scroll-hint');
+if(hint){
+  window.addEventListener('scroll',function(){
+    if(window.scrollY>50&&hint){hint.style.opacity='0';hint.style.transition='opacity 0.5s';}
+  },{once:true});
+}
+
+// Brand sync from localStorage
+var _brands=[{prefix:'TBD'},{prefix:'Lace'},{prefix:'Pigs'}];
+var _bidx=parseInt(localStorage.getItem('brandIdx')||'0',10);
+if(_bidx>=0&&_bidx<_brands.length){
+  var el=document.getElementById('ctaBrand');
+  if(el)el.innerHTML=_brands[_bidx].prefix+' <span class="accent">Technologies</span>';
+}
+</script>
+</body>
+</html>
