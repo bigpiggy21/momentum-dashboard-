@@ -913,23 +913,23 @@ function renderDetailEvents(){
   updateDetailDateLabel();
   var events = _detailEvents;
   // Client-side type filter
-  // Filter by primary event_type. Monsters tab = standalone monster_sweep events only.
-  // A clusterbomb that also has is_monster=1 stays under Clusterbombs (with an M flag).
+  // Monsters tab shows ANY event with is_monster=1 (standalone OR CB+monster overlay).
+  // CB and Rare tabs filter by primary event_type only.
   if(_detailTypeFilter !== 'all'){
     events = events.filter(function(ev){
       var et = ev.event_type || 'clusterbomb';
-      if(_detailTypeFilter === 'monster_sweep') return et === 'monster_sweep';
+      if(_detailTypeFilter === 'monster_sweep') return ev.is_monster || et === 'monster_sweep';
       if(_detailTypeFilter === 'clusterbomb') return et === 'clusterbomb';
       if(_detailTypeFilter === 'rare_sweep') return et === 'rare_sweep';
       return true;
     });
   }
 
-  // Update tab counts — based on primary event_type, not is_monster flag
+  // Update tab counts — Monsters includes any event with is_monster flag
   var allCount = _detailEvents.length;
   var cbCount = _detailEvents.filter(function(ev){ return (ev.event_type||'clusterbomb')==='clusterbomb'; }).length;
   var rareCount = _detailEvents.filter(function(ev){ return (ev.event_type||'clusterbomb')==='rare_sweep'; }).length;
-  var monsterCount = _detailEvents.filter(function(ev){ return (ev.event_type||'clusterbomb')==='monster_sweep'; }).length;
+  var monsterCount = _detailEvents.filter(function(ev){ return ev.is_monster || (ev.event_type||'clusterbomb')==='monster_sweep'; }).length;
   var tabs = document.querySelectorAll('#detailTabBar .tab-btn');
   tabs[0].textContent = 'All (' + allCount + ')';
   tabs[1].textContent = 'Clusterbombs (' + cbCount + ')';
