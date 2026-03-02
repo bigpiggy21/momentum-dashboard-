@@ -525,7 +525,10 @@ class UnifiedLiveDaemon:
             on_error=self._on_error,
             on_close=self._on_close,
         )
-        self._ws.run_forever(ping_interval=60, ping_timeout=30)
+        # Polygon doesn't respond to client ping frames, so disable library
+        # ping/pong. We rely on the steady stream of T.*/AM.* messages as
+        # proof of liveness instead.
+        self._ws.run_forever(ping_interval=0)
 
     # ------------------------------------------------------------------
     # WebSocket callbacks
