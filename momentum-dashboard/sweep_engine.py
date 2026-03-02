@@ -2185,7 +2185,7 @@ def _merge_live_bars_into_df(df, ticker, timeframe, suffix):
         live_rows = []
         for b in all_bars:
             live_rows.append({
-                "timestamp": pd.Timestamp.utcfromtimestamp(b["t"]),
+                "timestamp": pd.Timestamp.utcfromtimestamp(b["t"]).tz_localize(None),
                 "open": b["o"], "high": b["h"], "low": b["l"],
                 "close": b["c"], "volume": b["v"],
             })

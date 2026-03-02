@@ -495,9 +495,9 @@ class LivePriceDaemon:
         live_rows = []
         for b in bars:
             ts = b["t"]
-            # Convert unix seconds to pandas Timestamp
+            # Convert unix seconds to pandas Timestamp (tz-naive to match CSV)
             live_rows.append({
-                "timestamp": pd.Timestamp.utcfromtimestamp(ts),
+                "timestamp": pd.Timestamp.utcfromtimestamp(ts).tz_localize(None),
                 "open": b["o"],
                 "high": b["h"],
                 "low": b["l"],
