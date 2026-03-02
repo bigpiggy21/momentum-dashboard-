@@ -515,6 +515,9 @@ class LivePriceDaemon:
         if os.path.exists(csv_path):
             try:
                 existing_df = pd.read_csv(csv_path, parse_dates=["timestamp"])
+                # Strip timezone if present (earlier flushes may have written tz-aware)
+                if existing_df["timestamp"].dt.tz is not None:
+                    existing_df["timestamp"] = existing_df["timestamp"].dt.tz_localize(None)
             except Exception:
                 existing_df = None
 
