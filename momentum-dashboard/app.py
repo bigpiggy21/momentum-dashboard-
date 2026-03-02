@@ -55,13 +55,9 @@ _ticker_backfill = {
 }
 _ticker_backfill_lock = threading.Lock()
 
-# Live sweep daemon instance (created on first start)
+# Unified live daemon instance (single WebSocket for price + sweeps)
 _live_daemon = None
 _live_daemon_lock = threading.Lock()
-
-# Live price daemon instance (created on first start)
-_live_price_daemon = None
-_live_price_daemon_lock = threading.Lock()
 
 # Server-side tracker response cache (60s TTL)
 _tracker_cache = {}       # {cache_key: {"data": response_dict, "ts": float}}
@@ -2644,7 +2640,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     # ------------------------------------------------------------------
 
     def serve_live_sweep_status(self):
-        """GET /api/sweeps/live/status — return live scanner daemon status."""
+        """GET /api/sweeps/live/status — return sweep-focused status from unified daemon."""
         global _live_daemon
         if _live_daemon is None:
             self.send_json({
@@ -2658,7 +2654,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "reconnect_count": 0, "error": None,
             })
             return
-        self.send_json(_live_daemon.get_status())
+        self.send_json(_live_daemon.get_sweep_status())
 
     def serve_live_sweep_events(self):
         """GET /api/sweeps/live/events — events detected today by live scanner."""
@@ -2679,9 +2675,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_json({"error": str(e)})
 
     def serve_live_sweep_start(self):
-        """POST /api/sweeps/live/start — start the live sweep daemon."""
+        """POST /api/sweeps/live/start — start the unified live daemon."""
+        self._start_unified_daemon()
+
+    def _start_unified_daemon(self):
+        """Start the unified daemon (shared by sweep and price start endpoints)."""
         global _live_daemon
-        from live_sweep_daemon import LiveSweepDaemon, load_live_config
+        from live_daemon import (UnifiedLiveDaemon, load_live_config,
+                                 load_live_price_config)
 
         with _live_daemon_lock:
             if _live_daemon is not None and _live_daemon.get_status().get("running"):
@@ -2690,16 +2691,21 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return
 
             try:
-                cfg = load_live_config()
-                _live_daemon = LiveSweepDaemon(config=cfg)
+                scfg = load_live_config()
+                pcfg = load_live_price_config()
+                _live_daemon = UnifiedLiveDaemon(price_config=pcfg, sweep_config=scfg)
                 _live_daemon.start()
-                self.send_json({"ok": True, "message": "Live scanner started",
+                self.send_json({"ok": True, "message": "Live daemon started",
                                 "status": _live_daemon.get_status()})
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e)})
 
     def serve_live_sweep_stop(self):
-        """POST /api/sweeps/live/stop — stop the live sweep daemon."""
+        """POST /api/sweeps/live/stop — stop the unified live daemon."""
+        self._stop_unified_daemon()
+
+    def _stop_unified_daemon(self):
+        """Stop the unified daemon (shared by sweep and price stop endpoints)."""
         global _live_daemon
         with _live_daemon_lock:
             if _live_daemon is None or not _live_daemon.get_status().get("running"):
@@ -2708,13 +2714,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
             try:
                 _live_daemon.stop()
-                self.send_json({"ok": True, "message": "Live scanner stopped"})
+                self.send_json({"ok": True, "message": "Live daemon stopped"})
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e)})
 
     def serve_live_sweep_get_config(self):
         """GET /api/sweeps/live/config — return current live scanner configuration."""
-        from live_sweep_daemon import load_live_config
+        from live_daemon import load_live_config
         try:
             self.send_json(load_live_config())
         except Exception as e:
@@ -2722,7 +2728,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def serve_live_sweep_save_config(self):
         """POST /api/sweeps/live/config — save live scanner configuration."""
-        from live_sweep_daemon import save_live_config
+        from live_daemon import save_live_config
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
@@ -2736,48 +2742,24 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     # ------------------------------------------------------------------
 
     def serve_live_price_status(self):
-        """GET /api/scheduler/live-price/status — return live price daemon status."""
-        global _live_price_daemon
-        if _live_price_daemon:
-            self.send_json(_live_price_daemon.get_status())
+        """GET /api/scheduler/live-price/status — return price-focused status from unified daemon."""
+        global _live_daemon
+        if _live_daemon:
+            self.send_json(_live_daemon.get_price_status())
         else:
             self.send_json({"running": False, "connected": False, "error": None})
 
     def serve_live_price_start(self):
-        """POST /api/scheduler/live-price/start — start the live price daemon."""
-        global _live_price_daemon
-        try:
-            from live_price_daemon import LivePriceDaemon, load_live_price_config
-
-            with _live_price_daemon_lock:
-                if _live_price_daemon and _live_price_daemon.get_status().get("running"):
-                    self.send_json(_live_price_daemon.get_status())
-                    return
-
-                cfg = load_live_price_config()
-                _live_price_daemon = LivePriceDaemon(config=cfg)
-                _live_price_daemon.start()
-
-            # Brief wait for connection
-            time.sleep(0.5)
-            self.send_json(_live_price_daemon.get_status())
-        except Exception as e:
-            self.send_json({"ok": False, "error": str(e)})
+        """POST /api/scheduler/live-price/start — start the unified live daemon."""
+        self._start_unified_daemon()
 
     def serve_live_price_stop(self):
-        """POST /api/scheduler/live-price/stop — stop the live price daemon."""
-        global _live_price_daemon
-        try:
-            with _live_price_daemon_lock:
-                if _live_price_daemon:
-                    _live_price_daemon.stop()
-            self.send_json({"ok": True, "running": False})
-        except Exception as e:
-            self.send_json({"ok": False, "error": str(e)})
+        """POST /api/scheduler/live-price/stop — stop the unified live daemon."""
+        self._stop_unified_daemon()
 
     def serve_live_price_get_config(self):
         """GET /api/scheduler/live-price/config — return current live price feed config."""
-        from live_price_daemon import load_live_price_config
+        from live_daemon import load_live_price_config
         try:
             self.send_json(load_live_price_config())
         except Exception as e:
@@ -2785,7 +2767,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def serve_live_price_save_config(self):
         """POST /api/scheduler/live-price/config — save live price feed config."""
-        from live_price_daemon import save_live_price_config
+        from live_daemon import save_live_price_config
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
@@ -3596,29 +3578,20 @@ def main():
         except Exception as _e:
             print(f"⚠️  Cache rebuild skipped: {_e}")
 
-        # Auto-start live sweep daemon if configured
+        # Auto-start unified live daemon if either price or sweep auto_start is set
         try:
-            from live_sweep_daemon import LiveSweepDaemon, load_live_config
-            _live_cfg = load_live_config()
-            if _live_cfg.get("auto_start", False):
-                global _live_daemon
-                _live_daemon = LiveSweepDaemon(config=_live_cfg)
-                _live_daemon.start()
-                print("⚡ Live sweep scanner auto-started")
-        except Exception as _e:
-            print(f"⚠️  Live scanner auto-start skipped: {_e}")
-
-        # Auto-start live price daemon if configured
-        try:
-            from live_price_daemon import LivePriceDaemon, load_live_price_config
+            from live_daemon import (UnifiedLiveDaemon, load_live_config,
+                                     load_live_price_config)
+            _sweep_cfg = load_live_config()
             _price_cfg = load_live_price_config()
-            if _price_cfg.get("auto_start", False):
-                global _live_price_daemon
-                _live_price_daemon = LivePriceDaemon(config=_price_cfg)
-                _live_price_daemon.start()
-                print("📡 Live price feed auto-started")
+            if _sweep_cfg.get("auto_start", False) or _price_cfg.get("auto_start", False):
+                global _live_daemon
+                _live_daemon = UnifiedLiveDaemon(
+                    price_config=_price_cfg, sweep_config=_sweep_cfg)
+                _live_daemon.start()
+                print("⚡ Unified live daemon auto-started (price + sweeps)")
         except Exception as _e:
-            print(f"⚠️  Live price feed auto-start skipped: {_e}")
+            print(f"⚠️  Live daemon auto-start skipped: {_e}")
 
         start_server(args.port)
         return
