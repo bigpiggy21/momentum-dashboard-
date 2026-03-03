@@ -41,8 +41,9 @@ CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
 # Sweep filtering (match sweep_engine.py)
 FINRA_TRF_EXCHANGE_ID = 4
 INTERMARKET_SWEEP_CONDITION = 14
-TRADE_THRU_EXEMPT_CONDITION = 41  # ISOs grant trade-through exemption
-QUALIFIED_CONTINGENT_TRADE = 53   # QCT — block/structured trades, NOT sweeps
+# Condition 41 (Trade Thru Exempt) and 53 (QCT) are NOT used for filtering.
+# Only condition 14 (ISO) reliably identifies intermarket sweeps.
+# Condition 41 appears on closing crosses, VWAP fills, late blocks, QCTs, etc.
 MIN_SWEEP_NOTIONAL = 500_000  # $500K
 
 DEFAULT_WS_URL = "wss://delayed.polygon.io/stocks"
@@ -706,12 +707,13 @@ class UnifiedLiveDaemon:
         notional = price * size
 
         is_darkpool = (exchange == FINRA_TRF_EXCHANGE_ID)
-        # Condition 14 (ISO) = definitive sweep.  Condition 41 (Trade Thru
-        # Exempt) is a weaker signal — ISOs carry it, but so do block trades
-        # and QCTs.  Accept 41 only if condition 53 (QCT) is absent.
-        is_qct = (QUALIFIED_CONTINGENT_TRADE in conditions)
-        is_sweep = (INTERMARKET_SWEEP_CONDITION in conditions
-                    or (TRADE_THRU_EXEMPT_CONDITION in conditions and not is_qct))
+        # Condition 14 (ISO) = the ONLY reliable sweep identifier.
+        # Condition 41 (Trade Thru Exempt) is NOT sufficient alone — it appears
+        # on closing crosses [12,22,41], VWAP fills [12,2,41], late blocks [12,41],
+        # after-hours fills [10,2,41], and QCTs [53,41].  Real sweeps always
+        # carry condition 14; condition 41 just means they're exempt from
+        # trade-through rules (which ISOs are by definition).
+        is_sweep = (INTERMARKET_SWEEP_CONDITION in conditions)
 
         if not (is_darkpool and is_sweep and notional >= self._min_notional):
             return
