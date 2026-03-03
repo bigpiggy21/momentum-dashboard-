@@ -140,6 +140,7 @@ from sweep_engine import (
     get_sweep_summary, get_sweep_detail, get_clusterbombs,
     get_sweep_stats, get_sweep_chart_data, check_api_access,
     get_tracker_data, rebuild_stats_cache, rebuild_daily_summary,
+    refresh_etf_cache, load_etf_set, purge_etf_events,
 )
 
 # Global scheduler instance
@@ -3558,6 +3559,13 @@ def main():
     # Initialize database
     init_db()
     init_sweep_db()
+
+    # Refresh ETF ticker cache (skips if < 7 days old) and purge stale ETF events
+    try:
+        refresh_etf_cache()
+        purge_etf_events()
+    except Exception as _e:
+        print(f"⚠️  ETF cache/purge failed: {_e}")
 
     # Clear cache if requested
     if args.clear_cache:

@@ -99,6 +99,124 @@ def get_sectors():
 
 
 # ---------------------------------------------------------------------------
+# ETF ticker cache — fetched from Polygon reference API, cached to JSON
+# ---------------------------------------------------------------------------
+
+_ETF_CACHE_PATH = os.path.join(PRICE_CACHE_DIR, "etf_tickers.json")
+_etf_set = None  # Lazy-loaded in-memory set
+_ETF_CACHE_MAX_AGE_DAYS = 7
+
+def load_etf_set():
+    """Load the cached ETF ticker set. Returns empty set if no cache."""
+    global _etf_set
+    if _etf_set is not None:
+        return _etf_set
+    if os.path.isfile(_ETF_CACHE_PATH):
+        try:
+            with open(_ETF_CACHE_PATH, "r") as f:
+                data = json.load(f)
+            _etf_set = set(data.get("tickers", []))
+            return _etf_set
+        except Exception as e:
+            print(f"[ETF] Failed to load cache: {e}")
+    _etf_set = set()
+    return _etf_set
+
+def refresh_etf_cache(force=False):
+    """Fetch all active ETF tickers from Polygon reference API and cache to JSON.
+    Skips if cache is fresh (< 7 days old) unless force=True.
+    Returns the ETF set."""
+    global _etf_set
+
+    # Check if cache is fresh enough
+    if not force and os.path.isfile(_ETF_CACHE_PATH):
+        try:
+            mtime = os.path.getmtime(_ETF_CACHE_PATH)
+            age_days = (_time.time() - mtime) / 86400
+            if age_days < _ETF_CACHE_MAX_AGE_DAYS:
+                return load_etf_set()
+        except Exception:
+            pass
+
+    print("[ETF] Refreshing ETF ticker cache from Polygon...")
+    api_key = MASSIVE_API_KEY
+    base = MASSIVE_BASE_URL.replace("/v2", "/v3")
+    all_tickers = []
+    url = f"{base}/reference/tickers?type=ETF&market=stocks&active=true&limit=1000&apiKey={api_key}"
+
+    session = _get_session()
+    pages = 0
+    while url:
+        try:
+            resp = session.get(url, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            results = data.get("results", [])
+            all_tickers.extend(r["ticker"] for r in results if "ticker" in r)
+            pages += 1
+            # Follow pagination cursor
+            next_url = data.get("next_url")
+            if next_url:
+                url = f"{next_url}&apiKey={api_key}" if "apiKey" not in next_url else next_url
+            else:
+                url = None
+        except Exception as e:
+            print(f"[ETF] API error on page {pages + 1}: {e}")
+            break
+
+    if all_tickers:
+        os.makedirs(PRICE_CACHE_DIR, exist_ok=True)
+        cache_data = {
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "count": len(all_tickers),
+            "tickers": sorted(set(all_tickers)),
+        }
+        with open(_ETF_CACHE_PATH, "w") as f:
+            json.dump(cache_data, f)
+        _etf_set = set(all_tickers)
+        print(f"[ETF] Cached {len(_etf_set)} ETF tickers ({pages} API pages)")
+    else:
+        print("[ETF] Warning: got 0 ETF tickers from API, keeping old cache")
+        return load_etf_set()
+
+    return _etf_set
+
+def is_etf(ticker):
+    """Check if a ticker is an ETF."""
+    return ticker in load_etf_set()
+
+def purge_etf_events():
+    """Remove ETF-based events from clusterbomb_events table.
+    Returns count of deleted events."""
+    etf_tickers = load_etf_set()
+    if not etf_tickers:
+        print("[ETF] No ETF cache loaded, skipping purge")
+        return 0
+    conn = _get_db()
+    placeholders = ",".join("?" * len(etf_tickers))
+    tickers_list = sorted(etf_tickers)
+    c = conn.cursor()
+    # Find which ETFs have events
+    rows = c.execute(f"""
+        SELECT DISTINCT ticker FROM clusterbomb_events
+        WHERE ticker IN ({placeholders})
+    """, tickers_list).fetchall()
+    etf_event_tickers = [r["ticker"] for r in rows]
+    if not etf_event_tickers:
+        conn.close()
+        print("[ETF] No ETF events found in clusterbomb_events")
+        return 0
+    # Delete them
+    ph2 = ",".join("?" * len(etf_event_tickers))
+    c.execute(f"DELETE FROM clusterbomb_events WHERE ticker IN ({ph2})", etf_event_tickers)
+    deleted = c.rowcount
+    conn.commit()
+    conn.close()
+    print(f"[ETF] Purged {deleted} events for {len(etf_event_tickers)} ETF tickers: {etf_event_tickers}")
+    return deleted
+
+
+# ---------------------------------------------------------------------------
 # Sector resolution — canonical GICS-aligned sector per ticker
 # ---------------------------------------------------------------------------
 
@@ -1150,6 +1268,7 @@ def detect_clusterbombs(
     tickers=None,
     date_from=None,
     date_to=None,
+    exclude_etfs=True,
 ):
     """
     Scan sweep_trades for clusterbomb events.
@@ -1205,6 +1324,12 @@ def detect_clusterbombs(
         HAVING COUNT(*) >= ? AND SUM(notional) >= ?
         ORDER BY trade_date DESC, total_notional DESC
     """, params + [min_sweeps, min_total]).fetchall()
+
+    # Filter out ETF tickers
+    if exclude_etfs:
+        etf_tickers = load_etf_set()
+        if etf_tickers:
+            rows = [r for r in rows if r["ticker"] not in etf_tickers]
 
     events = []
     detected_at = datetime.now(timezone.utc).isoformat()
@@ -1362,7 +1487,7 @@ def _check_rarity(conn, ticker, event_date, min_notional, rarity_days):
 
 
 def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None,
-                           date_from=None, date_to=None):
+                           date_from=None, date_to=None, exclude_etfs=True):
     """
     Detect days where a ticker had sweep activity after a long quiet period,
     regardless of whether it meets clusterbomb thresholds (min_sweeps / min_total).
@@ -1406,6 +1531,12 @@ def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None,
         GROUP BY ticker, trade_date
         ORDER BY ticker, trade_date
     """, params).fetchall()
+
+    # Filter out ETF tickers
+    if exclude_etfs:
+        etf_tickers = load_etf_set()
+        if etf_tickers:
+            rows = [r for r in rows if r["ticker"] not in etf_tickers]
 
     # Group by ticker
     from collections import defaultdict
@@ -1470,7 +1601,7 @@ def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None,
 
 
 def detect_monster_sweeps(monster_min_notional=DEFAULT_MONSTER_MIN_NOTIONAL, tickers=None,
-                          date_from=None, date_to=None):
+                          date_from=None, date_to=None, exclude_etfs=True):
     """
     Detect days where a single dark pool sweep exceeds the monster threshold.
 
@@ -1519,6 +1650,12 @@ def detect_monster_sweeps(monster_min_notional=DEFAULT_MONSTER_MIN_NOTIONAL, tic
         GROUP BY ticker, trade_date
         ORDER BY trade_date DESC, total_notional DESC
     """, params).fetchall()
+
+    # Filter out ETF tickers
+    if exclude_etfs:
+        etf_tickers = load_etf_set()
+        if etf_tickers:
+            rows = [r for r in rows if r["ticker"] not in etf_tickers]
 
     updated = 0
     inserted = 0
@@ -1785,11 +1922,18 @@ def get_ticker_day_ranks(tickers=None):
 
 
 def get_clusterbombs(ticker=None, date_from=None, date_to=None,
-                     rare_only=False, limit=100, min_total=None):
+                     rare_only=False, limit=100, min_total=None,
+                     exclude_etfs=True):
     """Get detected clusterbomb events, optionally filtered by min_total."""
     conn = _get_db()
     where = []
     params = []
+
+    if exclude_etfs and not ticker:
+        etf_tickers = load_etf_set()
+        if etf_tickers:
+            where.append(f"ticker NOT IN ({','.join('?' * len(etf_tickers))})")
+            params.extend(sorted(etf_tickers))
 
     if ticker:
         where.append("ticker = ?")
@@ -1926,7 +2070,8 @@ def get_clusterbombs(ticker=None, date_from=None, date_to=None,
 
 
 def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
-                    min_sweeps=None, monster_min=None, rare_min=None, rare_days=None):
+                    min_sweeps=None, monster_min=None, rare_min=None, rare_days=None,
+                    exclude_etfs=True):
     """Get overview stats for the sweeps page header.
     Supports filtering by min_total, tickers list, date range, and per-type
     display filters so the stats bar reflects the currently active page filters.
@@ -1941,9 +2086,17 @@ def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
     if not date_from:
         date_from = (datetime.now() - timedelta(days=730)).strftime("%Y-%m-%d")
 
+    # --- ETF exclusion ---
+    _etf_exclude_tickers = []
+    if exclude_etfs:
+        _etf_exclude_tickers = sorted(load_etf_set())
+
     # --- Single sweep_trades query for all stats ---
     sw_where = ["is_darkpool=1", "is_sweep=1"]
     sw_params = []
+    if _etf_exclude_tickers:
+        sw_where.append(f"ticker NOT IN ({','.join('?' * len(_etf_exclude_tickers))})")
+        sw_params.extend(_etf_exclude_tickers)
     if tickers:
         placeholders = ",".join("?" * len(tickers))
         sw_where.append(f"ticker IN ({placeholders})")
@@ -1968,6 +2121,9 @@ def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
     # --- Single clusterbomb_events query for CB + rare + monster counts ---
     cb_where = []
     cb_params = []
+    if _etf_exclude_tickers:
+        cb_where.append(f"ticker NOT IN ({','.join('?' * len(_etf_exclude_tickers))})")
+        cb_params.extend(_etf_exclude_tickers)
     if min_total is not None:
         cb_where.append("(total_notional >= ? OR COALESCE(is_monster, 0) = 1 OR is_rare = 1)")
         cb_params.append(min_total)
@@ -2296,7 +2452,8 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
                      date_from=None, date_to=None,
                      limit=200, offset=0,
                      min_sweeps=None, monster_min=None,
-                     rare_min=None, rare_days=None):
+                     rare_min=None, rare_days=None,
+                     exclude_etfs=True):
     """
     Get clusterbomb events with current price, % gain, days since, and bias.
     Returns (events_list, total_count) sorted by date descending.
@@ -2342,6 +2499,14 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
     if date_to:
         where.append("event_date <= ?")
         params.append(date_to)
+
+    # Exclude ETF tickers from results
+    if exclude_etfs:
+        etf_tickers = load_etf_set()
+        if etf_tickers:
+            placeholders_etf = ",".join("?" * len(etf_tickers))
+            where.append(f"ticker NOT IN ({placeholders_etf})")
+            params.extend(sorted(etf_tickers))
 
     # Fallback: if no tickers AND no date_from, default to current month
     if not tickers and not date_from:
