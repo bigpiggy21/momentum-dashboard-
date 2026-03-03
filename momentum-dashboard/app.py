@@ -2772,6 +2772,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
             save_live_price_config(body)
+            # Hot-reload compute_watchlists on running daemon (no restart needed)
+            if _live_daemon is not None:
+                try:
+                    wl = body.get("compute_watchlists", ["Leverage"])
+                    _live_daemon._compute_watchlists = list(wl)
+                    with _live_daemon._lock:
+                        _live_daemon._status["compute_watchlists"] = list(wl)
+                except Exception:
+                    pass
             self.send_json({"ok": True})
         except Exception as e:
             self.send_json({"ok": False, "error": str(e)})

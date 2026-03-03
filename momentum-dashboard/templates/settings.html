@@ -81,6 +81,16 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 .live-price-save:hover{background:#334155;color:#fff;}
 .live-price-save-status{font-size:10px;color:#555;}
 
+/* Compute watchlist chips */
+.lp-compute-row{border-top:1px solid #1a1a24;padding-top:10px;margin-top:10px;}
+.lp-compute-row .lp-compute-label{font-size:11px;color:#666;margin-bottom:6px;}
+.lp-compute-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+.lp-compute-chip{padding:3px 10px;border-radius:12px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid #2a2a3a;background:#14141e;color:#666;transition:all 0.15s;user-select:none;}
+.lp-compute-chip:hover{border-color:#444;color:#aaa;}
+.lp-compute-chip.active{background:#f59e0b22;border-color:#f59e0b;color:#f59e0b;}
+.lp-compute-stats{display:flex;gap:14px;font-size:10px;color:#555;}
+.lp-compute-stats .val{color:#999;font-weight:600;}
+
 /* Architecture details */
 .arch-details{margin-top:24px;border-top:1px solid #2a2a3a;padding-top:16px;}
 .arch-details summary{cursor:pointer;color:#666;font-size:12px;font-weight:600;}
@@ -149,6 +159,19 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
     <label><input type="checkbox" id="lpFlushOnClose" checked> Flush on market close</label>
     <button class="live-price-save" onclick="saveLivePriceConfig()">Save</button>
     <span class="live-price-save-status" id="lpSaveStatus"></span>
+  </div>
+  <!-- Post-flush compute -->
+  <div class="lp-compute-row">
+    <div class="lp-compute-label">Compute indicators after flush:</div>
+    <div class="lp-compute-chips" id="lpComputeChips">
+      <span style="font-size:10px;color:#444;">Loading watchlists...</span>
+    </div>
+    <div class="lp-compute-stats" id="lpComputeStats" style="display:none;">
+      <span>Last compute: <span class="val" id="lpCompAt">--</span></span>
+      <span>Tickers: <span class="val" id="lpCompTickers">0</span></span>
+      <span>Events: <span class="val" id="lpCompEvents">0</span></span>
+      <span>Duration: <span class="val" id="lpCompDuration">--</span></span>
+    </div>
   </div>
 </div>
 
@@ -566,6 +589,27 @@ function updateLivePriceUI(s){
     stats.style.display='none';
   }
 
+  // Compute stats
+  var compStats=document.getElementById('lpComputeStats');
+  if(s.compute_last_at||s.compute_last_tickers>0){
+    compStats.style.display='flex';
+    if(s.compute_last_at){
+      try{
+        var cd=new Date(s.compute_last_at);
+        var cdiff=Math.round((Date.now()-cd.getTime())/1000);
+        document.getElementById('lpCompAt').textContent=cdiff<60?cdiff+'s ago':Math.round(cdiff/60)+'m ago';
+      }catch(e){document.getElementById('lpCompAt').textContent='--';}
+    }else{document.getElementById('lpCompAt').textContent='--';}
+    document.getElementById('lpCompTickers').textContent=s.compute_last_tickers||0;
+    var evN=s.compute_last_events||0;
+    var evEl=document.getElementById('lpCompEvents');
+    evEl.textContent=evN;
+    evEl.style.color=evN>0?'#f59e0b':'#999';
+    document.getElementById('lpCompDuration').textContent=s.compute_last_duration_s?s.compute_last_duration_s+'s':'--';
+  }else{
+    compStats.style.display='none';
+  }
+
   // Keep polling if running
   if(s.running&&!_lpPollTimer){
     startLivePricePoll();
@@ -582,11 +626,62 @@ function stopLivePricePoll(){
   if(_lpPollTimer){clearInterval(_lpPollTimer);_lpPollTimer=null;}
 }
 
+var _lpComputeWatchlists=[];  // Currently saved compute watchlists
+
+function loadComputeWatchlistOptions(){
+  // Fetch available watchlists, then fetch saved config to check active ones
+  Promise.all([
+    fetch('/api/watchlists').then(function(r){return r.json();}),
+    fetch('/api/scheduler/live-price/config').then(function(r){return r.json();})
+  ]).then(function(results){
+    var watchlists=results[0];
+    var cfg=results[1];
+    _lpComputeWatchlists=(cfg.compute_watchlists||['Leverage']).slice();
+    var container=document.getElementById('lpComputeChips');
+    container.innerHTML='';
+    watchlists.forEach(function(wl){
+      var chip=document.createElement('span');
+      chip.className='lp-compute-chip';
+      chip.textContent=wl.name;
+      chip.setAttribute('data-wl',wl.name);
+      // Count tickers for tooltip
+      var count=0;
+      wl.groups.forEach(function(g){count+=g.tickers.length;});
+      chip.title=count+' tickers';
+      if(_lpComputeWatchlists.indexOf(wl.name)>=0){
+        chip.classList.add('active');
+      }
+      chip.onclick=function(){
+        chip.classList.toggle('active');
+      };
+      container.appendChild(chip);
+    });
+    if(watchlists.length===0){
+      container.innerHTML='<span style="font-size:10px;color:#444;">No watchlists found</span>';
+    }
+  }).catch(function(){});
+}
+
+function getSelectedComputeWatchlists(){
+  var selected=[];
+  document.querySelectorAll('#lpComputeChips .lp-compute-chip.active').forEach(function(el){
+    selected.push(el.getAttribute('data-wl'));
+  });
+  return selected;
+}
+
 function loadLivePriceConfig(){
   fetch('/api/scheduler/live-price/config').then(function(r){return r.json();}).then(function(cfg){
     document.getElementById('lpAutoStart').checked=!!cfg.auto_start;
     document.getElementById('lpFlushInterval').value=cfg.flush_interval_minutes||5;
     document.getElementById('lpFlushOnClose').checked=cfg.flush_on_close!==false;
+    // Update compute chips if already loaded
+    _lpComputeWatchlists=(cfg.compute_watchlists||['Leverage']).slice();
+    document.querySelectorAll('#lpComputeChips .lp-compute-chip').forEach(function(el){
+      var wl=el.getAttribute('data-wl');
+      if(_lpComputeWatchlists.indexOf(wl)>=0){el.classList.add('active');}
+      else{el.classList.remove('active');}
+    });
   }).catch(function(){});
 }
 
@@ -596,20 +691,23 @@ function saveLivePriceConfig(){
     auto_start:document.getElementById('lpAutoStart').checked,
     ws_url:'wss://delayed.polygon.io/stocks',
     flush_interval_minutes:parseInt(document.getElementById('lpFlushInterval').value)||5,
-    flush_on_close:document.getElementById('lpFlushOnClose').checked
+    flush_on_close:document.getElementById('lpFlushOnClose').checked,
+    compute_watchlists:getSelectedComputeWatchlists()
   };
   fetch('/api/scheduler/live-price/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)
   }).then(function(r){return r.json();}).then(function(r){
     var st=document.getElementById('lpSaveStatus');
     st.textContent=r.ok?'Saved!':'Error';
     st.style.color=r.ok?'#22c55e':'#ef4444';
+    if(r.ok)_lpComputeWatchlists=cfg.compute_watchlists.slice();
     setTimeout(function(){st.textContent='';},3000);
   });
 }
 
-// Init: check live price status + load config on page load
+// Init: check live price status + load config + load compute watchlists
 pollLivePriceStatus();
 loadLivePriceConfig();
+loadComputeWatchlistOptions();
 
 // Load scheduler UI on page load
 refreshSchedulerUI();
