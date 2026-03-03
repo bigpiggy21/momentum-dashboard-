@@ -74,6 +74,7 @@ def load_live_price_config():
         "ws_url": DEFAULT_WS_URL,
         "flush_interval_minutes": DEFAULT_FLUSH_INTERVAL,
         "flush_on_close": True,
+        "compute_watchlists": ["Leverage"],
     }
     try:
         with open(SCHEDULER_CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -312,6 +313,7 @@ class UnifiedLiveDaemon:
         # Price settings
         self._flush_interval = pcfg.get("flush_interval_minutes", DEFAULT_FLUSH_INTERVAL)
         self._flush_on_close = pcfg.get("flush_on_close", True)
+        self._compute_watchlists = pcfg.get("compute_watchlists", ["Leverage"])
 
         # Sweep settings
         self._min_notional = scfg.get("min_notional", MIN_SWEEP_NOTIONAL)
@@ -362,6 +364,12 @@ class UnifiedLiveDaemon:
             "events_detected": {"clusterbomb": 0, "rare_sweep": 0, "monster_sweep": 0},
             "last_detection_at": None,
             "last_sweep_flush_at": None,
+            # Compute stats
+            "compute_last_at": None,
+            "compute_last_tickers": 0,
+            "compute_last_events": 0,
+            "compute_last_duration_s": 0,
+            "compute_watchlists": self._compute_watchlists,
         }
 
     # ------------------------------------------------------------------
@@ -466,6 +474,12 @@ class UnifiedLiveDaemon:
             "last_message_at": full["price_last_message_at"],
             "reconnect_count": full["reconnect_count"],
             "error": full["error"],
+            # Compute stats
+            "compute_last_at": full["compute_last_at"],
+            "compute_last_tickers": full["compute_last_tickers"],
+            "compute_last_events": full["compute_last_events"],
+            "compute_last_duration_s": full["compute_last_duration_s"],
+            "compute_watchlists": full["compute_watchlists"],
         }
 
     def get_latest_bars(self, ticker):
@@ -763,16 +777,25 @@ class UnifiedLiveDaemon:
         while not self._stop_event.is_set():
             self._stop_event.wait(timeout=interval_s)
             if not self._stop_event.is_set():
+                flushed = set()
                 try:
-                    self._flush_price_csv()
+                    flushed = self._flush_price_csv()
                 except Exception as e:
                     print(f"[LIVE] Price flush error: {e}", flush=True)
                     traceback.print_exc()
+                # Post-flush: compute indicators for watchlist tickers
+                if flushed:
+                    try:
+                        self._compute_indicators(flushed)
+                    except Exception as e:
+                        print(f"[LIVE] Post-flush compute error: {e}", flush=True)
+                        traceback.print_exc()
 
     def _flush_price_csv(self):
+        """Flush in-memory bars to CSV files. Returns set of flushed ticker symbols."""
         with self._bars_lock:
             if not self._bars:
-                return
+                return set()
             tickers_data = {}
             for ticker, tb in self._bars.items():
                 snap = tb.snapshot()
@@ -780,7 +803,7 @@ class UnifiedLiveDaemon:
                     tickers_data[ticker] = snap
 
         if not tickers_data:
-            return
+            return set()
 
         t0 = time.time()
         flushed_hourly = 0
@@ -824,6 +847,8 @@ class UnifiedLiveDaemon:
         print(f"[LIVE] Price flush: {flushed_hourly} hourly + {flushed_daily} daily "
               f"CSVs in {elapsed:.1f}s ({len(tickers_data)} tickers)", flush=True)
 
+        return set(tickers_data.keys())
+
     def _merge_bars_to_csv(self, csv_path, bars, trade_date):
         live_rows = []
         for b in bars:
@@ -863,6 +888,94 @@ class UnifiedLiveDaemon:
         keep_cols = [c for c in ["timestamp", "open", "high", "low", "close",
                                   "volume", "vwap", "n_trades"] if c in merged.columns]
         merged[keep_cols].to_csv(csv_path, index=False)
+
+    # ------------------------------------------------------------------
+    # Post-flush indicator computation
+    # ------------------------------------------------------------------
+
+    def _compute_indicators(self, flushed_tickers):
+        """Compute indicators for watchlist tickers that were just flushed to CSV.
+
+        After each price CSV flush, we intersect the flushed tickers with the
+        configured watchlists and run the full indicator pipeline (Bollingers,
+        HVC, 30WMA, etc.) for each matching ticker.  Results go straight to
+        SQLite so the dashboard picks them up on next refresh.
+        """
+        if not self._compute_watchlists or not flushed_tickers:
+            return
+
+        # Lazy imports — keeps module lightweight at import time
+        try:
+            from config import WATCHLISTS
+            from engine import compute_ticker
+        except ImportError as e:
+            print(f"[LIVE] Compute import error: {e}", flush=True)
+            return
+
+        # Build api_ticker -> display_ticker map for configured watchlists
+        api_to_display = {}
+        for wl_name in self._compute_watchlists:
+            wl_groups = WATCHLISTS.get(wl_name)
+            if not wl_groups:
+                print(f"[LIVE] Compute: watchlist '{wl_name}' not found, skipping",
+                      flush=True)
+                continue
+            for _group_name, group_tickers in wl_groups:
+                for display, api, _atype in group_tickers:
+                    api_to_display[api.upper()] = display
+
+        # Intersect with flushed tickers
+        flushed_upper = {t.upper() for t in flushed_tickers}
+        to_compute = []
+        for api_tk in flushed_upper:
+            if api_tk in api_to_display:
+                to_compute.append(api_to_display[api_tk])
+
+        if not to_compute:
+            return
+
+        t0 = time.time()
+        computed = 0
+        skipped = 0
+        total_events = 0
+        errors = 0
+
+        for i, display_ticker in enumerate(to_compute):
+            if self._stop_event.is_set():
+                break
+            try:
+                result = compute_ticker(display_ticker)
+                status = result.get("status", "unknown")
+                if status == "ok":
+                    computed += 1
+                    n_ev = result.get("events", 0)
+                    total_events += n_ev
+                    if n_ev > 0:
+                        print(f"[LIVE] Compute ⚡ {display_ticker}: "
+                              f"{n_ev} event(s) detected", flush=True)
+                elif status == "skipped":
+                    skipped += 1
+                else:
+                    # no_data or other
+                    skipped += 1
+            except Exception as e:
+                errors += 1
+                print(f"[LIVE] Compute error for {display_ticker}: {e}",
+                      flush=True)
+
+        elapsed = time.time() - t0
+
+        with self._lock:
+            self._status["compute_last_at"] = datetime.now(timezone.utc).isoformat()
+            self._status["compute_last_tickers"] = computed
+            self._status["compute_last_events"] = total_events
+            self._status["compute_last_duration_s"] = round(elapsed, 1)
+
+        print(f"[LIVE] Indicator compute: {computed} computed, {skipped} skipped"
+              f"{f', {errors} errors' if errors else ''} "
+              f"out of {len(to_compute)} tickers in {elapsed:.1f}s"
+              f"{f' ({total_events} events)' if total_events else ''}",
+              flush=True)
 
     # ------------------------------------------------------------------
     # Sweep buffer flush
