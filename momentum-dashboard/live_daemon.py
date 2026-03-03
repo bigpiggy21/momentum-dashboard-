@@ -791,13 +791,45 @@ class UnifiedLiveDaemon:
                         print(f"[LIVE] Post-flush compute error: {e}", flush=True)
                         traceback.print_exc()
 
+    def _get_flush_tickers(self):
+        """Build set of API ticker symbols that should be flushed to CSV.
+
+        Only tickers belonging to configured compute_watchlists are flushed,
+        so we don't waste time writing CSVs for 7000+ tickers when we only
+        compute indicators on ~80.
+        """
+        try:
+            from config import WATCHLISTS
+        except ImportError:
+            return None  # flush all if we can't resolve watchlists
+        if not self._compute_watchlists:
+            return None  # flush all
+        tickers = set()
+        for wl_name in self._compute_watchlists:
+            wl_groups = WATCHLISTS.get(wl_name)
+            if not wl_groups:
+                continue
+            for _group_name, group_tickers in wl_groups:
+                for _display, api, _atype in group_tickers:
+                    tickers.add(api.upper())
+        return tickers if tickers else None
+
     def _flush_price_csv(self):
-        """Flush in-memory bars to CSV files. Returns set of flushed ticker symbols."""
+        """Flush in-memory bars to CSV files. Returns set of flushed ticker symbols.
+
+        Only flushes tickers in configured compute_watchlists to keep flush
+        fast (~80 tickers vs 7000+).
+        """
+        flush_filter = self._get_flush_tickers()
+
         with self._bars_lock:
             if not self._bars:
                 return set()
             tickers_data = {}
             for ticker, tb in self._bars.items():
+                # Only flush tickers we'll compute indicators for
+                if flush_filter is not None and ticker.upper() not in flush_filter:
+                    continue
                 snap = tb.snapshot()
                 if snap:
                     tickers_data[ticker] = snap
@@ -808,6 +840,10 @@ class UnifiedLiveDaemon:
         t0 = time.time()
         flushed_hourly = 0
         flushed_daily = 0
+        total_bars = len(self._bars)
+
+        print(f"[LIVE] Price flush starting: {len(tickers_data)} tickers to write "
+              f"(of {total_bars} in memory)...", flush=True)
 
         os.makedirs(CACHE_DIR, exist_ok=True)
 
