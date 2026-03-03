@@ -41,6 +41,7 @@ CACHE_DIR = os.path.join(os.path.dirname(__file__), "cache")
 # Sweep filtering (match sweep_engine.py)
 FINRA_TRF_EXCHANGE_ID = 4
 INTERMARKET_SWEEP_CONDITION = 14
+TRADE_THRU_EXEMPT_CONDITION = 41  # ISOs grant trade-through exemption
 MIN_SWEEP_NOTIONAL = 500_000  # $500K
 
 DEFAULT_WS_URL = "wss://delayed.polygon.io/stocks"
@@ -690,7 +691,11 @@ class UnifiedLiveDaemon:
         notional = price * size
 
         is_darkpool = (exchange == FINRA_TRF_EXCHANGE_ID)
-        is_sweep = (INTERMARKET_SWEEP_CONDITION in conditions)
+        # WebSocket feed doesn't carry condition 14 (ISO) on FINRA TRF prints
+        # like the REST API does. But it DOES carry condition 41 (Trade Thru
+        # Exempt) which ISOs grant.  Accept either as proof of sweep.
+        is_sweep = (INTERMARKET_SWEEP_CONDITION in conditions
+                    or TRADE_THRU_EXEMPT_CONDITION in conditions)
 
         if not (is_darkpool and is_sweep and notional >= self._min_notional):
             return
