@@ -704,13 +704,20 @@ class UnifiedLiveDaemon:
         sip_ts = msg.get("t", 0)
         trf_id = msg.get("trfi")
 
-        if sip_ts > 1e15:
+        # Polygon WebSocket sends SIP timestamp — detect precision:
+        #   Nanoseconds  (2025-2030): ~1.74e18 – 1.90e18
+        #   Microseconds (2025-2030): ~1.74e15 – 1.90e15
+        #   Milliseconds (2025-2030): ~1.74e12 – 1.90e12
+        if sip_ts > 1e17:
+            # Nanoseconds
             trade_dt = datetime.fromtimestamp(sip_ts / 1e9, tz=timezone.utc)
             sip_ts_ns = sip_ts
-        elif sip_ts > 1e12:
+        elif sip_ts > 1e14:
+            # Microseconds (what the delayed feed actually sends)
             trade_dt = datetime.fromtimestamp(sip_ts / 1e6, tz=timezone.utc)
             sip_ts_ns = sip_ts * 1000
         else:
+            # Milliseconds
             trade_dt = datetime.fromtimestamp(sip_ts / 1e3, tz=timezone.utc)
             sip_ts_ns = sip_ts * 1000000
 
