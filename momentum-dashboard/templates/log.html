@@ -396,7 +396,7 @@ function getSinceISO(){
 }
 
 function fetchEvents(){
-  var url='/api/events?limit=20000';
+  var url='/api/events?limit=2000';
   var since=getSinceISO();
   if(since)url+='&since='+encodeURIComponent(since);
   if(barStatusFilter!=='all')url+='&bar_status='+barStatusFilter;

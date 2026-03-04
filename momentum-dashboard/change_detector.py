@@ -101,6 +101,7 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_events_ticker ON events(ticker)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_events_timeframe ON events(timeframe)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_events_composite ON events(timestamp DESC, bar_status, div_adj)")
     
     # Migration: add div_adj column if missing (existing DBs)
     try:
@@ -659,96 +660,93 @@ def get_latest_full_state(div_adj=0, tickers=None):
     """
     conn = _get_db()
     c = conn.cursor()
-    
-    # First get the latest timestamp per ticker+timeframe (fast with index)
-    if tickers:
-        placeholders = ",".join("?" * len(tickers))
-        c.execute(f"""
-            SELECT ticker, timeframe, MAX(timestamp) as max_ts
-            FROM snapshots
-            WHERE div_adj = ? AND ticker IN ({placeholders})
-            GROUP BY ticker, timeframe
-        """, [div_adj] + list(tickers))
-    else:
-        c.execute("""
-            SELECT ticker, timeframe, MAX(timestamp) as max_ts
-            FROM snapshots
-            WHERE div_adj = ?
-            GROUP BY ticker, timeframe
-        """, (div_adj,))
-    
-    latest = c.fetchall()
-    
-    full_state = {}
-    # Now fetch each row by its exact primary key
-    for ticker, tf, max_ts in latest:
-        c.execute("""
-            SELECT mom_color, mom_rising, sqz_state, band_pos, band_flip,
-                   acc_state, acc_impulse, dev_signal, bar_status
-            FROM snapshots
-            WHERE ticker = ? AND timeframe = ? AND div_adj = ? AND timestamp = ?
-            LIMIT 1
-        """, (ticker, tf, div_adj, max_ts))
-        
-        row = c.fetchone()
-        if row:
-            if ticker not in full_state:
-                full_state[ticker] = {}
-            full_state[ticker][tf] = {
-                "mom_color": row[0],
-                "mom_rising": bool(row[1]) if row[1] is not None else None,
-                "sqz_state": row[2],
-                "band_pos": row[3],
-                "band_flip": bool(row[4]) if row[4] is not None else False,
-                "acc_state": row[5],
-                "acc_impulse": row[6],
-                "dev_signal": row[7],
-                "bar_status": row[8] or "confirmed",
-                "snapshot_time": max_ts,
-            }
-    
-    # Meta - same approach
-    if tickers:
-        placeholders = ",".join("?" * len(tickers))
-        c.execute(f"""
-            SELECT ticker, MAX(timestamp) as max_ts
-            FROM meta_snapshots
-            WHERE ticker IN ({placeholders})
-            GROUP BY ticker
-        """, list(tickers))
-    else:
-        c.execute("""
-            SELECT ticker, MAX(timestamp) as max_ts
-            FROM meta_snapshots
-            GROUP BY ticker
-        """)
-    
-    meta_latest = c.fetchall()
-    for ticker, max_ts in meta_latest:
-        c.execute("""
-            SELECT price, price_change_pct, above_wma30, wma30_value, wma30_cross,
-                   hvc_triggered, hvc_volume_ratio, hvc_candle_dir
-            FROM meta_snapshots
-            WHERE ticker = ? AND timestamp = ?
-            LIMIT 1
-        """, (ticker, max_ts))
 
-        meta_row = c.fetchone()
-        if meta_row:
-            if ticker not in full_state:
-                full_state[ticker] = {}
-            full_state[ticker]["_meta"] = {
-                "price": meta_row[0],
-                "price_change_pct": meta_row[1],
-                "above_wma30": bool(meta_row[2]) if meta_row[2] is not None else None,
-                "wma30_value": meta_row[3],
-                "wma30_cross": meta_row[4],
-                "hvc_triggered": bool(meta_row[5]) if meta_row[5] is not None else False,
-                "hvc_volume_ratio": meta_row[6],
-                "hvc_candle_dir": meta_row[7] or "",
-                "snapshot_time": max_ts,
-            }
-    
+    # Single query: JOIN snapshots against their per-ticker/timeframe max timestamp.
+    # Replaces the old N+1 pattern (GROUP BY then 14,500 individual SELECTs).
+    ticker_filter = ""
+    params = [div_adj]
+    if tickers:
+        placeholders = ",".join("?" * len(tickers))
+        ticker_filter = f" AND s.ticker IN ({placeholders})"
+        params.extend(list(tickers))
+    params.append(div_adj)
+    if tickers:
+        params.extend(list(tickers))
+
+    rows = c.execute(f"""
+        SELECT s.ticker, s.timeframe, s.timestamp,
+               s.mom_color, s.mom_rising, s.sqz_state, s.band_pos, s.band_flip,
+               s.acc_state, s.acc_impulse, s.dev_signal, s.bar_status
+        FROM snapshots s
+        INNER JOIN (
+            SELECT ticker, timeframe, MAX(timestamp) as max_ts
+            FROM snapshots
+            WHERE div_adj = ?{ticker_filter}
+            GROUP BY ticker, timeframe
+        ) latest ON s.ticker = latest.ticker
+                 AND s.timeframe = latest.timeframe
+                 AND s.timestamp = latest.max_ts
+        WHERE s.div_adj = ?{ticker_filter}
+    """, params).fetchall()
+
+    full_state = {}
+    for row in rows:
+        ticker, tf = row[0], row[1]
+        if ticker not in full_state:
+            full_state[ticker] = {}
+        full_state[ticker][tf] = {
+            "mom_color": row[3],
+            "mom_rising": bool(row[4]) if row[4] is not None else None,
+            "sqz_state": row[5],
+            "band_pos": row[6],
+            "band_flip": bool(row[7]) if row[7] is not None else False,
+            "acc_state": row[8],
+            "acc_impulse": row[9],
+            "dev_signal": row[10],
+            "bar_status": row[11] or "confirmed",
+            "snapshot_time": row[2],
+        }
+
+    # Meta snapshots — same single-query approach
+    meta_params = []
+    meta_filter = ""
+    if tickers:
+        meta_filter = f" AND m.ticker IN ({placeholders})"
+        meta_params.extend(list(tickers))
+    if tickers:
+        meta_params.extend(list(tickers))
+
+    meta_rows = c.execute(f"""
+        SELECT m.ticker, m.timestamp,
+               m.price, m.price_change_pct, m.above_wma30, m.wma30_value, m.wma30_cross,
+               m.hvc_triggered, m.hvc_volume_ratio, m.hvc_candle_dir
+        FROM meta_snapshots m
+        INNER JOIN (
+            SELECT ticker, MAX(timestamp) as max_ts
+            FROM meta_snapshots
+            {"WHERE ticker IN (" + placeholders + ")" if tickers else ""}
+            GROUP BY ticker
+        ) latest ON m.ticker = latest.ticker
+                 AND m.timestamp = latest.max_ts
+        {"WHERE m.ticker IN (" + placeholders + ")" if tickers else ""}
+    """, meta_params).fetchall()
+
+    for row in meta_rows:
+        ticker = row[0]
+        if ticker not in full_state:
+            full_state[ticker] = {}
+        full_state[ticker]["_meta"] = {
+            "price": row[2],
+            "price_change_pct": row[3],
+            "above_wma30": bool(row[4]) if row[4] is not None else None,
+            "wma30_value": row[5],
+            "wma30_cross": row[6],
+            "hvc_triggered": bool(row[7]) if row[7] is not None else False,
+            "hvc_volume_ratio": row[8],
+            "hvc_candle_dir": row[9] or "",
+            "snapshot_time": row[1],
+        }
+
     conn.close()
     return full_state
 
@@ -761,53 +759,54 @@ def get_state_at_time(before_timestamp, div_adj=0, tickers=None):
     """
     conn = _get_db()
     c = conn.cursor()
-    
-    # Filter for confirmed bars only in historical comparisons
+
+    # Single query with JOIN — replaces N+1 pattern
+    ticker_filter = ""
+    params = [div_adj, before_timestamp]
     if tickers:
         placeholders = ",".join("?" * len(tickers))
-        c.execute(f"""
-            SELECT ticker, timeframe, MAX(timestamp) as max_ts
-            FROM snapshots
-            WHERE div_adj = ? AND timestamp <= ? AND ticker IN ({placeholders})
-              AND (bar_status = 'confirmed' OR bar_status IS NULL)
-            GROUP BY ticker, timeframe
-        """, [div_adj, before_timestamp] + list(tickers))
-    else:
-        c.execute("""
+        ticker_filter = f" AND s.ticker IN ({placeholders})"
+        params.extend(list(tickers))
+    params.extend([div_adj, before_timestamp])
+    if tickers:
+        params.extend(list(tickers))
+
+    rows = c.execute(f"""
+        SELECT s.ticker, s.timeframe,
+               s.mom_color, s.mom_rising, s.sqz_state, s.band_pos, s.band_flip,
+               s.acc_state, s.acc_impulse, s.dev_signal
+        FROM snapshots s
+        INNER JOIN (
             SELECT ticker, timeframe, MAX(timestamp) as max_ts
             FROM snapshots
             WHERE div_adj = ? AND timestamp <= ?
               AND (bar_status = 'confirmed' OR bar_status IS NULL)
+              {ticker_filter}
             GROUP BY ticker, timeframe
-        """, (div_adj, before_timestamp))
-    
-    latest = c.fetchall()
-    
+        ) latest ON s.ticker = latest.ticker
+                 AND s.timeframe = latest.timeframe
+                 AND s.timestamp = latest.max_ts
+        WHERE s.div_adj = ? AND s.timestamp <= ?
+          AND (s.bar_status = 'confirmed' OR s.bar_status IS NULL)
+          {ticker_filter}
+    """, params).fetchall()
+
     old_state = {}
-    for ticker, tf, max_ts in latest:
-        c.execute("""
-            SELECT mom_color, mom_rising, sqz_state, band_pos, band_flip,
-                   acc_state, acc_impulse, dev_signal
-            FROM snapshots
-            WHERE ticker = ? AND timeframe = ? AND div_adj = ? AND timestamp = ?
-            LIMIT 1
-        """, (ticker, tf, div_adj, max_ts))
-        
-        row = c.fetchone()
-        if row:
-            if ticker not in old_state:
-                old_state[ticker] = {}
-            old_state[ticker][tf] = {
-                "mom_color": row[0],
-                "mom_rising": bool(row[1]) if row[1] is not None else None,
-                "sqz_state": row[2],
-                "band_pos": row[3],
-                "band_flip": bool(row[4]) if row[4] is not None else False,
-                "acc_state": row[5],
-                "acc_impulse": row[6],
-                "dev_signal": row[7],
-            }
-    
+    for row in rows:
+        ticker, tf = row[0], row[1]
+        if ticker not in old_state:
+            old_state[ticker] = {}
+        old_state[ticker][tf] = {
+            "mom_color": row[2],
+            "mom_rising": bool(row[3]) if row[3] is not None else None,
+            "sqz_state": row[4],
+            "band_pos": row[5],
+            "band_flip": bool(row[6]) if row[6] is not None else False,
+            "acc_state": row[7],
+            "acc_impulse": row[8],
+            "dev_signal": row[9],
+        }
+
     conn.close()
     return old_state
 
