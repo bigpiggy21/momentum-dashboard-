@@ -2560,8 +2560,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     from sweep_engine import get_detection_config as _get_cfg, detect_rare_sweep_days, detect_monster_sweeps
                     stats = fetch_and_store_sweeps(tickers, start_date, end_date,
                                                    progress_callback=_progress_cb,
-                                                   cancel_event=_sweep_fetch_cancel,
-                                                   force=True)
+                                                   cancel_event=_sweep_fetch_cancel)
                     if _sweep_fetch_cancel.is_set():
                         _clear_fetch_job()
                         with _sweep_fetch_lock:

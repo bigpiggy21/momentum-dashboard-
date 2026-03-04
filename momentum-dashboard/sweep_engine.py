@@ -1029,7 +1029,7 @@ def _batch_store(conn, trades_batch, log_batch):
 _DB_FLUSH_INTERVAL = 5
 
 
-def fetch_and_store_sweeps(tickers, start_date, end_date=None, progress_callback=None, cancel_event=None, force=False):
+def fetch_and_store_sweeps(tickers, start_date, end_date=None, progress_callback=None, cancel_event=None):
     """
     Fetch dark pool sweep data for multiple tickers over a date range.
     Stores results in DB. Returns summary stats.
@@ -1077,25 +1077,24 @@ def fetch_and_store_sweeps(tickers, start_date, end_date=None, progress_callback
 
     # Today's date should ALWAYS be re-fetched (market day may still be open,
     # or the previous fetch ran pre-market and found nothing).
-    # force=True skips the fetch log entirely (used by manual UI fetches).
+    # Historical dates respect the fetch log — no redundant re-fetching.
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    refetch_count = 0
+    today_refetch = 0
 
     work = []
     skipped = 0
     for ticker in tickers:
         for date_str in dates:
             if (ticker, date_str) in fetched_set:
-                if force or date_str == today_str:
+                if date_str == today_str:
                     work.append((ticker, date_str))
-                    refetch_count += 1
+                    today_refetch += 1
                 else:
                     skipped += 1
                 continue
             work.append((ticker, date_str))
-    if refetch_count:
-        reason = "force=True" if force else f"today ({today_str})"
-        print(f"  Re-fetching {refetch_count} already-logged entries ({reason})", flush=True)
+    if today_refetch:
+        print(f"  Re-fetching {today_refetch} ticker(s) for today ({today_str})", flush=True)
 
     stats["dates"] = len(dates)
     total_jobs = len(work)
