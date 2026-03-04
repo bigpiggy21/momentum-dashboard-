@@ -2927,11 +2927,19 @@ function updateLiveUI(s){
     btn.textContent = 'Stop';
     stats.style.display = '';
   } else {
-    dot.style.color = '#555';
-    text.textContent = s.error ? ('Error: ' + s.error.substring(0,40)) : 'Stopped';
-    text.style.color = s.error ? '#ef4444' : '#555';
-    btn.textContent = 'Start';
-    stats.style.display = 'none';
+    if(s.watchdog_active && s.error){
+      // Watchdog will restart — show "Restarting" state
+      dot.style.color = '#f59e0b';
+      text.textContent = 'Restarting... (' + (s.error || '').substring(0,30) + ')';
+      text.style.color = '#f59e0b';
+      btn.textContent = 'Stop';
+    } else {
+      dot.style.color = '#555';
+      text.textContent = s.error ? ('Error: ' + s.error.substring(0,40)) : 'Stopped';
+      text.style.color = s.error ? '#ef4444' : '#555';
+      btn.textContent = 'Start';
+      stats.style.display = 'none';
+    }
   }
 
   // Stats
@@ -2977,11 +2985,31 @@ function updateLiveHeaderIndicator(s){
       if(statsGrid){
         var ind = document.createElement('span');
         ind.id = 'liveIndicator';
-        ind.title = 'Live scanner active';
         ind.style.cssText = 'color:#22c55e;font-size:10px;margin-left:8px;animation:livePulse 2s infinite;';
         ind.textContent = '\u26A1 LIVE';
         statsGrid.parentElement.insertBefore(ind, statsGrid.nextSibling);
       }
+    }
+    if(existing && s.crash_count > 0){
+      existing.title = 'Live scanner active (' + s.crash_count + ' restart' + (s.crash_count > 1 ? 's' : '') + ')';
+    } else if(existing){
+      existing.title = 'Live scanner active';
+    }
+  } else if(s.watchdog_active && s.error){
+    // Watchdog restarting — show amber indicator
+    if(!existing){
+      var statsGrid = document.querySelector('.stats-grid');
+      if(statsGrid){
+        var ind = document.createElement('span');
+        ind.id = 'liveIndicator';
+        ind.style.cssText = 'color:#f59e0b;font-size:10px;margin-left:8px;animation:livePulse 2s infinite;';
+        ind.textContent = '\u26A1 RESTARTING';
+        statsGrid.parentElement.insertBefore(ind, statsGrid.nextSibling);
+      }
+    } else {
+      existing.style.color = '#f59e0b';
+      existing.textContent = '\u26A1 RESTARTING';
+      existing.title = 'Watchdog restarting daemon...';
     }
   } else if(existing){
     existing.remove();

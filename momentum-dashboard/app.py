@@ -58,10 +58,74 @@ _ticker_backfill_lock = threading.Lock()
 # Unified live daemon instance (single WebSocket for price + sweeps)
 _live_daemon = None
 _live_daemon_lock = threading.Lock()
+_daemon_intentionally_stopped = True  # True until user starts or auto-start fires
 
 # Server-side tracker response cache (60s TTL)
 _tracker_cache = {}       # {cache_key: {"data": response_dict, "ts": float}}
 _TRACKER_CACHE_TTL = 60   # seconds
+
+# ── Daemon watchdog ──────────────────────────────────────────────────────
+_WATCHDOG_INTERVAL = 30         # seconds between health checks
+_WATCHDOG_MAX_RESTARTS = 5      # max restarts per stability window
+_WATCHDOG_STABILITY_WINDOW = 600  # seconds (10 min) — resets restart counter
+
+
+def _daemon_watchdog():
+    """Background thread: auto-restarts the live daemon if it dies unexpectedly.
+
+    Respects _daemon_intentionally_stopped — if the user clicked Stop, the
+    watchdog stays dormant until the user clicks Start again.
+    """
+    global _live_daemon, _daemon_intentionally_stopped
+    restart_count = 0
+    last_restart_time = 0
+
+    while True:
+        time.sleep(_WATCHDOG_INTERVAL)
+
+        # Reset counter after a period of stability
+        if time.time() - last_restart_time > _WATCHDOG_STABILITY_WINDOW:
+            restart_count = 0
+
+        with _live_daemon_lock:
+            if _daemon_intentionally_stopped:
+                continue  # user stopped it — don't restart
+
+            if _live_daemon is None:
+                continue  # never started
+
+            status = _live_daemon.get_status()
+            if status.get("running"):
+                continue  # healthy
+
+            # Daemon was running but has died
+            if restart_count >= _WATCHDOG_MAX_RESTARTS:
+                if restart_count == _WATCHDOG_MAX_RESTARTS:  # log once
+                    print(f"[WATCHDOG] Daemon has crashed {restart_count} times in "
+                          f"{_WATCHDOG_STABILITY_WINDOW}s — giving up. "
+                          f"Manual restart required.", flush=True)
+                    restart_count += 1  # prevent repeat logging
+                continue
+
+            restart_count += 1
+            last_restart_time = time.time()
+            error_msg = status.get("error", "unknown")
+            print(f"[WATCHDOG] Daemon died (error: {error_msg}). "
+                  f"Restarting (attempt {restart_count}/{_WATCHDOG_MAX_RESTARTS})...",
+                  flush=True)
+
+            try:
+                from live_daemon import (UnifiedLiveDaemon, load_live_config,
+                                         load_live_price_config)
+                scfg = load_live_config()
+                pcfg = load_live_price_config()
+                _live_daemon = UnifiedLiveDaemon(price_config=pcfg, sweep_config=scfg)
+                _live_daemon.start()
+                print(f"[WATCHDOG] Daemon restarted successfully.", flush=True)
+            except Exception as e:
+                print(f"[WATCHDOG] Restart failed: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
 
 
 def _save_fetch_job(tickers, start_date, end_date):
@@ -2642,7 +2706,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def serve_live_sweep_status(self):
         """GET /api/sweeps/live/status — return sweep-focused status from unified daemon."""
-        global _live_daemon
+        global _live_daemon, _daemon_intentionally_stopped
         if _live_daemon is None:
             self.send_json({
                 "running": False, "connected": False, "authenticated": False,
@@ -2653,9 +2717,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "events_detected": {"clusterbomb": 0, "rare_sweep": 0, "monster_sweep": 0},
                 "last_detection_at": None, "last_flush_at": None,
                 "reconnect_count": 0, "error": None,
+                "watchdog_active": not _daemon_intentionally_stopped,
             })
             return
-        self.send_json(_live_daemon.get_sweep_status())
+        status = _live_daemon.get_sweep_status()
+        status["watchdog_active"] = not _daemon_intentionally_stopped
+        self.send_json(status)
 
     def serve_live_sweep_events(self):
         """GET /api/sweeps/live/events — events detected today by live scanner."""
@@ -2681,7 +2748,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def _start_unified_daemon(self):
         """Start the unified daemon (shared by sweep and price start endpoints)."""
-        global _live_daemon
+        global _live_daemon, _daemon_intentionally_stopped
         from live_daemon import (UnifiedLiveDaemon, load_live_config,
                                  load_live_price_config)
 
@@ -2696,6 +2763,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 pcfg = load_live_price_config()
                 _live_daemon = UnifiedLiveDaemon(price_config=pcfg, sweep_config=scfg)
                 _live_daemon.start()
+                _daemon_intentionally_stopped = False  # watchdog should protect it
                 self.send_json({"ok": True, "message": "Live daemon started",
                                 "status": _live_daemon.get_status()})
             except Exception as e:
@@ -2707,8 +2775,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def _stop_unified_daemon(self):
         """Stop the unified daemon (shared by sweep and price stop endpoints)."""
-        global _live_daemon
+        global _live_daemon, _daemon_intentionally_stopped
         with _live_daemon_lock:
+            _daemon_intentionally_stopped = True  # don't let watchdog restart it
             if _live_daemon is None or not _live_daemon.get_status().get("running"):
                 self.send_json({"ok": True, "message": "Not running"})
                 return
@@ -3602,13 +3671,19 @@ def main():
             _sweep_cfg = load_live_config()
             _price_cfg = load_live_price_config()
             if _sweep_cfg.get("auto_start", False) or _price_cfg.get("auto_start", False):
-                global _live_daemon
+                global _live_daemon, _daemon_intentionally_stopped
                 _live_daemon = UnifiedLiveDaemon(
                     price_config=_price_cfg, sweep_config=_sweep_cfg)
                 _live_daemon.start()
+                _daemon_intentionally_stopped = False  # watchdog should protect it
                 print("⚡ Unified live daemon auto-started (price + sweeps)")
         except Exception as _e:
             print(f"⚠️  Live daemon auto-start skipped: {_e}")
+
+        # Start daemon watchdog — auto-restarts the daemon if it crashes
+        _wd = threading.Thread(target=_daemon_watchdog, daemon=True,
+                               name="daemon-watchdog")
+        _wd.start()
 
         start_server(args.port)
         return

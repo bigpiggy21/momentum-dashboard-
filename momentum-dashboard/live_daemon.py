@@ -326,6 +326,9 @@ class UnifiedLiveDaemon:
         # Connection state
         self._ws = None
         self._thread = None
+        self._price_flush_thread = None
+        self._sweep_flush_thread = None
+        self._detection_thread = None
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
 
@@ -372,6 +375,10 @@ class UnifiedLiveDaemon:
             "compute_last_events": 0,
             "compute_last_duration_s": 0,
             "compute_watchlists": self._compute_watchlists,
+            # Crash tracking
+            "crash_count": 0,
+            "last_crash_at": None,
+            "last_crash_error": None,
         }
 
     # ------------------------------------------------------------------
@@ -430,6 +437,28 @@ class UnifiedLiveDaemon:
         """Return full combined status dict (JSON-safe)."""
         with self._lock:
             s = dict(self._status)
+
+        # Truthful status: if main thread is dead but status says running, correct it
+        if s["running"] and (self._thread is None or not self._thread.is_alive()):
+            with self._lock:
+                self._status["running"] = False
+                self._status["connected"] = False
+                if not self._status.get("error"):
+                    self._status["error"] = "Main thread died unexpectedly"
+            s["running"] = False
+            s["connected"] = False
+            s["error"] = self._status["error"]
+
+        # Compute uptime
+        if s["running"] and s.get("started_at"):
+            try:
+                started = datetime.fromisoformat(s["started_at"])
+                s["uptime_seconds"] = int((datetime.now(timezone.utc) - started).total_seconds())
+            except Exception:
+                s["uptime_seconds"] = 0
+        else:
+            s["uptime_seconds"] = 0
+
         with self._bars_lock:
             s["price_tickers_active"] = len(self._bars)
         s["sweep_tickers_active"] = len(s["sweep_tickers_active"])
@@ -458,6 +487,10 @@ class UnifiedLiveDaemon:
             "last_flush_at": full["last_sweep_flush_at"],
             "reconnect_count": full["reconnect_count"],
             "error": full["error"],
+            "uptime_seconds": full.get("uptime_seconds", 0),
+            "crash_count": full.get("crash_count", 0),
+            "last_crash_at": full.get("last_crash_at"),
+            "last_crash_error": full.get("last_crash_error"),
         }
 
     def get_price_status(self):
@@ -505,17 +538,51 @@ class UnifiedLiveDaemon:
     # ------------------------------------------------------------------
 
     def _run_loop(self):
+        """Top-level wrapper — catches fatal exceptions so status is always correct."""
+        try:
+            self._run_loop_inner()
+        except Exception as e:
+            print(f"[LIVE] FATAL: _run_loop crashed: {e}", flush=True)
+            traceback.print_exc()
+            with self._lock:
+                self._status["running"] = False
+                self._status["connected"] = False
+                self._status["error"] = f"Fatal crash: {e}"
+                self._status["crash_count"] = self._status.get("crash_count", 0) + 1
+                self._status["last_crash_at"] = datetime.now(timezone.utc).isoformat()
+                self._status["last_crash_error"] = str(e)
+
+    def _start_sub_thread(self, attr, target, name):
+        """Start (or restart) a sub-thread, storing its reference."""
+        t = threading.Thread(target=target, daemon=True, name=name)
+        t.start()
+        setattr(self, attr, t)
+
+    def _revive_sub_threads(self):
+        """Check sub-threads and restart any that have died."""
+        threads = [
+            ("_price_flush_thread", self._price_flush_loop, "live-price-flush"),
+            ("_sweep_flush_thread", self._sweep_flush_loop, "live-sweep-flush"),
+            ("_detection_thread", self._detection_loop, "live-detection"),
+        ]
+        for attr, target, name in threads:
+            t = getattr(self, attr, None)
+            if t is None or not t.is_alive():
+                print(f"[LIVE] Sub-thread '{name}' is dead — restarting", flush=True)
+                self._start_sub_thread(attr, target, name)
+
+    def _run_loop_inner(self):
         reconnect_wait = RECONNECT_MIN_WAIT
 
-        # Start background timer threads
-        threading.Thread(target=self._price_flush_loop, daemon=True,
-                         name="live-price-flush").start()
-        threading.Thread(target=self._sweep_flush_loop, daemon=True,
-                         name="live-sweep-flush").start()
-        threading.Thread(target=self._detection_loop, daemon=True,
-                         name="live-detection").start()
+        # Start background timer threads (store references for health checks)
+        self._start_sub_thread("_price_flush_thread", self._price_flush_loop, "live-price-flush")
+        self._start_sub_thread("_sweep_flush_thread", self._sweep_flush_loop, "live-sweep-flush")
+        self._start_sub_thread("_detection_thread", self._detection_loop, "live-detection")
 
         while not self._stop_event.is_set():
+            # Revive any dead sub-threads before each connection attempt
+            self._revive_sub_threads()
+
             try:
                 self._connect_and_run()
             except Exception as e:
@@ -779,21 +846,26 @@ class UnifiedLiveDaemon:
     def _price_flush_loop(self):
         interval_s = self._flush_interval * 60
         while not self._stop_event.is_set():
-            self._stop_event.wait(timeout=interval_s)
-            if not self._stop_event.is_set():
-                flushed = set()
-                try:
-                    flushed = self._flush_price_csv()
-                except Exception as e:
-                    print(f"[LIVE] Price flush error: {e}", flush=True)
-                    traceback.print_exc()
-                # Post-flush: compute indicators for watchlist tickers
-                if flushed:
+            try:
+                self._stop_event.wait(timeout=interval_s)
+                if not self._stop_event.is_set():
+                    flushed = set()
                     try:
-                        self._compute_indicators(flushed)
+                        flushed = self._flush_price_csv()
                     except Exception as e:
-                        print(f"[LIVE] Post-flush compute error: {e}", flush=True)
+                        print(f"[LIVE] Price flush error: {e}", flush=True)
                         traceback.print_exc()
+                    # Post-flush: compute indicators for watchlist tickers
+                    if flushed:
+                        try:
+                            self._compute_indicators(flushed)
+                        except Exception as e:
+                            print(f"[LIVE] Post-flush compute error: {e}", flush=True)
+                            traceback.print_exc()
+            except Exception as e:
+                print(f"[LIVE] CRITICAL: price_flush_loop unexpected error: {e}", flush=True)
+                traceback.print_exc()
+                self._stop_event.wait(timeout=10)  # cooldown before retry
 
     def _get_flush_tickers(self):
         """Build set of API ticker symbols that should be flushed to CSV.
@@ -1023,9 +1095,14 @@ class UnifiedLiveDaemon:
 
     def _sweep_flush_loop(self):
         while not self._stop_event.is_set():
-            self._stop_event.wait(timeout=self._sweep_flush_seconds)
-            if not self._stop_event.is_set():
-                self._flush_sweep_buffer()
+            try:
+                self._stop_event.wait(timeout=self._sweep_flush_seconds)
+                if not self._stop_event.is_set():
+                    self._flush_sweep_buffer()
+            except Exception as e:
+                print(f"[LIVE] CRITICAL: sweep_flush_loop unexpected error: {e}", flush=True)
+                traceback.print_exc()
+                self._stop_event.wait(timeout=10)  # cooldown before retry
 
     def _flush_sweep_buffer(self):
         with self._sweep_buffer_lock:
@@ -1075,7 +1152,12 @@ class UnifiedLiveDaemon:
             except Exception as e:
                 print(f"[LIVE] Detection error: {e}", flush=True)
                 traceback.print_exc()
-            self._stop_event.wait(timeout=self._detection_interval * 60)
+            try:
+                self._stop_event.wait(timeout=self._detection_interval * 60)
+            except Exception as e:
+                print(f"[LIVE] CRITICAL: detection_loop unexpected error: {e}", flush=True)
+                traceback.print_exc()
+                self._stop_event.wait(timeout=10)  # cooldown before retry
 
     def _run_detection(self):
         self._flush_sweep_buffer()
