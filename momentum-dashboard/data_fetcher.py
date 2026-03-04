@@ -234,17 +234,32 @@ def fetch_with_cache(api_ticker, timespan, asset_type="stock", full_history_days
             earliest_cached = earliest_cached.tz_localize(None)
         backfill_gap_days = (earliest_cached - history_start_ts).days
         if backfill_gap_days > 30 and (timespan == "hour" or _is_backfill_enabled()):
-            backfill_end = (earliest_cached + timedelta(days=1)).strftime("%Y-%m-%d")
-            print(f"    ⏪ Backfilling {api_ticker} {timespan}: {history_start} → {backfill_end} "
-                  f"({backfill_gap_days} days of older data)", flush=True)
-            old_results = _api_fetch(api_ticker, 1, timespan, history_start, backfill_end, asset_type)
-            old_data = _results_to_df(old_results)
-            if not old_data.empty:
-                # Prepend old data before existing cache
-                cached = pd.concat([old_data, cached], ignore_index=True)
-                cached = cached.drop_duplicates(subset=["timestamp"], keep="last")
-                cached = cached.sort_values("timestamp").reset_index(drop=True)
-                print(f"    ✅ Backfilled {len(old_data)} older {timespan} bars for {api_ticker}", flush=True)
+            # Check marker file — if a previous backfill attempt already found
+            # nothing, the ticker likely didn't exist before its cache start date
+            # (e.g. SPOT IPO'd Apr 2018, no data before that).  Don't keep asking.
+            marker = _cache_path(api_ticker, timespan) + ".no_backfill"
+            if not os.path.exists(marker):
+                backfill_end = (earliest_cached + timedelta(days=1)).strftime("%Y-%m-%d")
+                print(f"    ⏪ Backfilling {api_ticker} {timespan}: {history_start} → {backfill_end} "
+                      f"({backfill_gap_days} days of older data)", flush=True)
+                old_results = _api_fetch(api_ticker, 1, timespan, history_start, backfill_end, asset_type)
+                old_data = _results_to_df(old_results)
+                if not old_data.empty and len(old_data) > 5:
+                    # Genuine older data — prepend to cache
+                    cached = pd.concat([old_data, cached], ignore_index=True)
+                    cached = cached.drop_duplicates(subset=["timestamp"], keep="last")
+                    cached = cached.sort_values("timestamp").reset_index(drop=True)
+                    print(f"    ✅ Backfilled {len(old_data)} older {timespan} bars for {api_ticker}", flush=True)
+                else:
+                    # ≤5 bars for a huge gap — ticker didn't exist yet, stop retrying
+                    n = 0 if old_data is None or (hasattr(old_data, 'empty') and old_data.empty) else len(old_data)
+                    print(f"    ⛔ Backfill got only {n} bars for {backfill_gap_days}-day gap — "
+                          f"ticker likely didn't exist. Skipping future backfill.", flush=True)
+                    try:
+                        with open(marker, "w") as _mf:
+                            _mf.write(f"{api_ticker} {timespan} — no data before {earliest_cached.strftime('%Y-%m-%d')}\n")
+                    except Exception:
+                        pass
 
         # During market closed hours, skip forward API fetch if cache is fresh
         if not _is_market_hours():
