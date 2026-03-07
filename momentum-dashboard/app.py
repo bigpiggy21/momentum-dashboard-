@@ -3103,81 +3103,98 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_json({"data": [], "error": str(e)})
 
     def serve_sweep_redetect(self):
-        """POST /api/sweeps/redetect — re-run clusterbomb detection with dual profiles."""
+        """POST /api/sweeps/redetect — re-run clusterbomb detection.
+        Accepts optional 'profile' param: 'stock' (default), 'etf', or 'both'.
+        Only wipes and rebuilds events for the requested profile."""
         try:
             init_sweep_db()
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
 
-            from sweep_engine import _get_db, get_detection_config as _get_cfg
+            from sweep_engine import _get_db, get_detection_config as _get_cfg, load_etf_set
+            from sweep_engine import detect_rare_sweep_days, detect_monster_sweeps
             cfg = _get_cfg()
-            stock_params = body.get("stock", body) if body else cfg["stock"]
+            profile = body.get("profile", "stock")  # 'stock', 'etf', or 'both'
 
             # Get all tickers with sweep data
             conn = _get_db()
             all_tickers = [r[0] for r in conn.execute(
                 "SELECT DISTINCT ticker FROM sweep_trades WHERE is_darkpool=1 AND is_sweep=1"
             ).fetchall()]
-            # Clear all existing events before full re-detect
-            conn.execute("DELETE FROM clusterbomb_events")
+
+            # Profile-aware delete: only wipe events for the relevant tickers
+            etf_set = load_etf_set()
+            if profile == "both":
+                conn.execute("DELETE FROM clusterbomb_events")
+            elif profile == "etf":
+                etf_in = ",".join(f"'{t}'" for t in all_tickers if t in etf_set)
+                if etf_in:
+                    conn.execute(f"DELETE FROM clusterbomb_events WHERE ticker IN ({etf_in})")
+            else:  # stock
+                stock_in = ",".join(f"'{t}'" for t in all_tickers if t not in etf_set)
+                if stock_in:
+                    conn.execute(f"DELETE FROM clusterbomb_events WHERE ticker IN ({stock_in})")
             conn.commit()
             conn.close()
 
-            # Single-profile detection for all tickers
-            from sweep_engine import detect_rare_sweep_days, detect_monster_sweeps
-            events = detect_clusterbombs(
-                tickers=all_tickers,
-                min_sweeps=int(stock_params.get("min_sweeps", 3)),
-                min_notional=float(stock_params.get("min_notional", 1_000_000)),
-                min_total=float(stock_params.get("min_total", 10_000_000)),
-                rarity_days=int(stock_params.get("rarity_days", 60)),
-                rare_min_notional=float(stock_params.get("rare_min_notional", 1_000_000)),
-            )
-
-            rare_sweep_events = detect_rare_sweep_days(
-                min_notional=float(stock_params.get("rare_min_notional", 1_000_000)),
-                rarity_days=int(stock_params.get("rarity_days", 60)),
-                tickers=all_tickers,
-            )
-
+            events = []
+            rare_sweep_events = []
             monster_events = []
-            _sm = stock_params.get("monster_min_notional")
-            if _sm:
-                monster_events = detect_monster_sweeps(
-                    monster_min_notional=float(_sm),
-                    tickers=all_tickers,
-                )
-
-            # ETF detection pass — re-detect with ETF config + etf_only filter
-            etf_params = body.get("etf") if body else None
-            if not etf_params:
-                etf_params = cfg.get("etf", {})
             etf_events = []
             etf_rare = []
             etf_monsters = []
-            if etf_params:
-                etf_events = detect_clusterbombs(
+
+            # --- Stock detection ---
+            if profile in ("stock", "both"):
+                stock_params = body.get("stock", body) if body else cfg["stock"]
+                events = detect_clusterbombs(
                     tickers=all_tickers,
-                    min_sweeps=int(etf_params.get("min_sweeps", 3)),
-                    min_notional=float(etf_params.get("min_notional", 5_000_000)),
-                    min_total=float(etf_params.get("min_total", 75_000_000)),
-                    rarity_days=int(etf_params.get("rarity_days", 60)),
-                    rare_min_notional=float(etf_params.get("rare_min_notional", 3_000_000)),
-                    exclude_etfs=False, etf_only=True,
+                    min_sweeps=int(stock_params.get("min_sweeps", 3)),
+                    min_notional=float(stock_params.get("min_notional", 1_000_000)),
+                    min_total=float(stock_params.get("min_total", 10_000_000)),
+                    rarity_days=int(stock_params.get("rarity_days", 60)),
+                    rare_min_notional=float(stock_params.get("rare_min_notional", 1_000_000)),
                 )
-                etf_rare = detect_rare_sweep_days(
-                    min_notional=float(etf_params.get("rare_min_notional", 3_000_000)),
-                    rarity_days=int(etf_params.get("rarity_days", 60)),
+                rare_sweep_events = detect_rare_sweep_days(
+                    min_notional=float(stock_params.get("rare_min_notional", 1_000_000)),
+                    rarity_days=int(stock_params.get("rarity_days", 60)),
                     tickers=all_tickers,
-                    exclude_etfs=False, etf_only=True,
                 )
-                _em = etf_params.get("monster_min_notional")
-                if _em:
-                    etf_monsters = detect_monster_sweeps(
-                        monster_min_notional=float(_em),
+                _sm = stock_params.get("monster_min_notional")
+                if _sm:
+                    monster_events = detect_monster_sweeps(
+                        monster_min_notional=float(_sm),
+                        tickers=all_tickers,
+                    )
+
+            # --- ETF detection ---
+            if profile in ("etf", "both"):
+                etf_params = body.get("etf") if body else None
+                if not etf_params:
+                    etf_params = cfg.get("etf", {})
+                if etf_params:
+                    etf_events = detect_clusterbombs(
+                        tickers=all_tickers,
+                        min_sweeps=int(etf_params.get("min_sweeps", 3)),
+                        min_notional=float(etf_params.get("min_notional", 5_000_000)),
+                        min_total=float(etf_params.get("min_total", 75_000_000)),
+                        rarity_days=int(etf_params.get("rarity_days", 60)),
+                        rare_min_notional=float(etf_params.get("rare_min_notional", 3_000_000)),
+                        exclude_etfs=False, etf_only=True,
+                    )
+                    etf_rare = detect_rare_sweep_days(
+                        min_notional=float(etf_params.get("rare_min_notional", 3_000_000)),
+                        rarity_days=int(etf_params.get("rarity_days", 60)),
                         tickers=all_tickers,
                         exclude_etfs=False, etf_only=True,
                     )
+                    _em = etf_params.get("monster_min_notional")
+                    if _em:
+                        etf_monsters = detect_monster_sweeps(
+                            monster_min_notional=float(_em),
+                            tickers=all_tickers,
+                            exclude_etfs=False, etf_only=True,
+                        )
 
             _tracker_cache.clear()  # invalidate tracker cache after redetect
 
@@ -3187,6 +3204,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             total_monsters = len(monster_events) + len(etf_monsters)
             self.send_json({
                 "ok": True,
+                "profile": profile,
                 "events_detected": total_events,
                 "rare_cb_count": rare_cb_count,
                 "rare_sweep_days": total_rare,
@@ -3194,7 +3212,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "etf_events": len(etf_events),
                 "etf_rare": len(etf_rare),
                 "etf_monsters": len(etf_monsters),
-                "message": f"Re-detected {len(events)} stock + {len(etf_events)} ETF clusterbombs, "
+                "message": f"Re-detected ({profile}): {len(events)} stock + {len(etf_events)} ETF clusterbombs, "
                            f"{total_rare} rare sweep days, {total_monsters} monster sweeps",
             })
         except Exception as e:

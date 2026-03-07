@@ -134,9 +134,25 @@ _ETF_CACHE_MAX_AGE_DAYS = 7
 
 # Manual ETF overrides — tickers Polygon classifies as trusts/funds but we treat as ETFs
 _ETF_MANUAL_OVERRIDES = {"IAU"}
+_ETF_CATEGORIES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "etf_categories.json")
+
+def _load_etf_category_tickers():
+    """Load all tickers from etf_categories.json — these are always treated as ETFs."""
+    if os.path.isfile(_ETF_CATEGORIES_PATH):
+        try:
+            with open(_ETF_CATEGORIES_PATH, "r") as f:
+                cats = json.load(f)
+            tickers = set()
+            for cat_tickers in cats.values():
+                tickers.update(cat_tickers)
+            return tickers
+        except Exception:
+            pass
+    return set()
 
 def load_etf_set():
-    """Load the cached ETF ticker set. Returns empty set if no cache."""
+    """Load the cached ETF ticker set. Returns empty set if no cache.
+    Includes: Polygon ETF cache + manual overrides + etf_categories.json tickers."""
     global _etf_set
     if _etf_set is not None:
         return _etf_set
@@ -146,10 +162,11 @@ def load_etf_set():
                 data = json.load(f)
             _etf_set = set(data.get("tickers", []))
             _etf_set |= _ETF_MANUAL_OVERRIDES
+            _etf_set |= _load_etf_category_tickers()
             return _etf_set
         except Exception as e:
             print(f"[ETF] Failed to load cache: {e}")
-    _etf_set = set(_ETF_MANUAL_OVERRIDES)
+    _etf_set = set(_ETF_MANUAL_OVERRIDES) | _load_etf_category_tickers()
     return _etf_set
 
 def refresh_etf_cache(force=False):

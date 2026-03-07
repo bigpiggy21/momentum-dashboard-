@@ -2778,6 +2778,7 @@ function fmtSettingVal(n){
 
 function getDetectionParams(){
   return {
+    profile: "etf",
     etf: {
       min_sweeps: parseInt(document.getElementById('settMinSweepsStock').value) || 3,
       min_notional: parseMinInput(document.getElementById('settMinNotionalStock').value) || 1000000,
