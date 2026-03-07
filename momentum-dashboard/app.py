@@ -2671,6 +2671,21 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     _sm = cfg["stock"].get("monster_min_notional")
                     if _sm:
                         detect_monster_sweeps(monster_min_notional=float(_sm), tickers=tickers)
+                    # ETF detection pass — same tickers, ETF config + etf_only filter
+                    ecfg = cfg.get("etf", {})
+                    _ecb_keys = ("min_sweeps", "min_notional", "min_total", "rarity_days", "rare_min_notional")
+                    _ep = {k: ecfg[k] for k in _ecb_keys if k in ecfg}
+                    if _ep:
+                        detect_clusterbombs(tickers=tickers, exclude_etfs=False, etf_only=True, **_ep)
+                        detect_rare_sweep_days(
+                            min_notional=ecfg.get("rare_min_notional", ecfg.get("min_notional", 3_000_000)),
+                            rarity_days=ecfg.get("rarity_days", 60),
+                            tickers=tickers, exclude_etfs=False, etf_only=True,
+                        )
+                        _em = ecfg.get("monster_min_notional")
+                        if _em:
+                            detect_monster_sweeps(monster_min_notional=float(_em),
+                                                  tickers=tickers, exclude_etfs=False, etf_only=True)
                     _clear_fetch_job()  # fetch complete — remove job file
                     with _sweep_fetch_lock:
                         _sweep_fetch_progress["phase"] = "done"
@@ -3133,16 +3148,54 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     tickers=all_tickers,
                 )
 
+            # ETF detection pass — re-detect with ETF config + etf_only filter
+            etf_params = body.get("etf") if body else None
+            if not etf_params:
+                etf_params = cfg.get("etf", {})
+            etf_events = []
+            etf_rare = []
+            etf_monsters = []
+            if etf_params:
+                etf_events = detect_clusterbombs(
+                    tickers=all_tickers,
+                    min_sweeps=int(etf_params.get("min_sweeps", 3)),
+                    min_notional=float(etf_params.get("min_notional", 5_000_000)),
+                    min_total=float(etf_params.get("min_total", 75_000_000)),
+                    rarity_days=int(etf_params.get("rarity_days", 60)),
+                    rare_min_notional=float(etf_params.get("rare_min_notional", 3_000_000)),
+                    exclude_etfs=False, etf_only=True,
+                )
+                etf_rare = detect_rare_sweep_days(
+                    min_notional=float(etf_params.get("rare_min_notional", 3_000_000)),
+                    rarity_days=int(etf_params.get("rarity_days", 60)),
+                    tickers=all_tickers,
+                    exclude_etfs=False, etf_only=True,
+                )
+                _em = etf_params.get("monster_min_notional")
+                if _em:
+                    etf_monsters = detect_monster_sweeps(
+                        monster_min_notional=float(_em),
+                        tickers=all_tickers,
+                        exclude_etfs=False, etf_only=True,
+                    )
+
             _tracker_cache.clear()  # invalidate tracker cache after redetect
 
             rare_cb_count = sum(1 for e in events if e.get("is_rare"))
+            total_events = len(events) + len(etf_events)
+            total_rare = len(rare_sweep_events) + len(etf_rare)
+            total_monsters = len(monster_events) + len(etf_monsters)
             self.send_json({
                 "ok": True,
-                "events_detected": len(events),
+                "events_detected": total_events,
                 "rare_cb_count": rare_cb_count,
-                "rare_sweep_days": len(rare_sweep_events),
-                "monster_sweeps": len(monster_events),
-                "message": f"Re-detected {len(events)} clusterbombs, {len(rare_sweep_events)} rare sweep days, {len(monster_events)} monster sweeps",
+                "rare_sweep_days": total_rare,
+                "monster_sweeps": total_monsters,
+                "etf_events": len(etf_events),
+                "etf_rare": len(etf_rare),
+                "etf_monsters": len(etf_monsters),
+                "message": f"Re-detected {len(events)} stock + {len(etf_events)} ETF clusterbombs, "
+                           f"{total_rare} rare sweep days, {total_monsters} monster sweeps",
             })
         except Exception as e:
             self.send_json({"ok": False, "error": str(e)})

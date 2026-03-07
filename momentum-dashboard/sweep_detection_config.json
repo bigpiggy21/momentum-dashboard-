@@ -6,5 +6,13 @@
     "rarity_days": 60,
     "rare_min_notional": 1000000,
     "monster_min_notional": 100000000
+  },
+  "etf": {
+    "min_sweeps": 3,
+    "min_notional": 5000000,
+    "min_total": 75000000,
+    "rarity_days": 60,
+    "rare_min_notional": 3000000,
+    "monster_min_notional": 50000000
   }
 }
