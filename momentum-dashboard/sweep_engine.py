@@ -2262,7 +2262,8 @@ def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
         cb_where.append("(COALESCE(event_type,'clusterbomb') != 'clusterbomb' OR sweep_count >= ?)")
         cb_params.append(min_sweeps)
     if monster_min:
-        cb_where.append("(COALESCE(event_type,'clusterbomb') != 'monster_sweep' OR total_notional >= ?)")
+        # Filter any event with is_monster flag (standalone OR CB+monster overlay)
+        cb_where.append("(COALESCE(is_monster, 0) = 0 AND COALESCE(event_type,'clusterbomb') != 'monster_sweep' OR total_notional >= ?)")
         cb_params.append(monster_min)
     if rare_min:
         cb_where.append("(COALESCE(event_type,'clusterbomb') != 'rare_sweep' OR total_notional >= ?)")
@@ -2610,7 +2611,8 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
         where.append("(COALESCE(event_type,'clusterbomb') != 'clusterbomb' OR sweep_count >= ?)")
         params.append(min_sweeps)
     if monster_min:
-        where.append("(COALESCE(event_type,'clusterbomb') != 'monster_sweep' OR total_notional >= ?)")
+        # Filter any event with is_monster flag (standalone OR CB+monster overlay)
+        where.append("(COALESCE(is_monster, 0) = 0 AND COALESCE(event_type,'clusterbomb') != 'monster_sweep' OR total_notional >= ?)")
         params.append(monster_min)
     if rare_min:
         where.append("(COALESCE(event_type,'clusterbomb') != 'rare_sweep' OR total_notional >= ?)")
