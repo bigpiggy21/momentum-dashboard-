@@ -403,8 +403,8 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
       <div class="stat-item"><div class="stat-label">Tickers</div><div class="stat-value" id="statTickers">—</div></div>
       <div class="stat-item"><div class="stat-label">Sweeps</div><div class="stat-value accent" id="statSweeps">—</div></div>
       <div class="stat-item"><div class="stat-label">Notional</div><div class="stat-value green" id="statNotional">—</div></div>
-      <div class="stat-item"><div class="stat-label">Clusterbombs</div><div class="stat-value purple" id="statCBs">—</div></div>
-      <div class="stat-item"><div class="stat-label">Rare</div><div class="stat-value text-amber" id="statRare">—</div></div>
+      <div class="stat-item"><div class="stat-label">Clusterbombs</div><div class="stat-value text-amber" id="statCBs">—</div></div>
+      <div class="stat-item"><div class="stat-label">Rare</div><div class="stat-value purple" id="statRare">—</div></div>
       <div class="stat-item"><div class="stat-label">Monster</div><div class="stat-value" style="color:#f97316;" id="statMonster">—</div></div>
     </div>
   </div>
@@ -667,7 +667,7 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
           <div><span style="color:#555;">Active tickers</span> <span id="liveTickersActive" style="color:#ccc;float:right;">0</span></div>
           <div><span style="color:#555;">Written to DB</span> <span id="liveSweepsWritten" style="color:#ccc;float:right;">0</span></div>
         </div>
-        <div id="liveLastSweep" style="font-size:9px;color:#555;margin-top:4px;"></div>
+        <div id="liveLastSweep" style="font-size:9px;color:#555;margin-top:6px;max-height:120px;overflow-y:auto;"></div>
         <!-- Events detected -->
         <div style="margin-top:6px;padding-top:6px;border-top:1px solid #1e1e2e;">
           <div style="font-size:9px;color:#555;margin-bottom:3px;">Events detected today:</div>
@@ -2330,21 +2330,32 @@ function saveChartPNG(){
   var screenshotCanvas = chartInstance.takeScreenshot();
   screenshotCanvas.toBlob(function(blob){
     if(!blob){ showToast('Failed to capture chart'); return; }
-    navigator.clipboard.write([
-      new ClipboardItem({'image/png': blob})
-    ]).then(function(){
-      showToast('Chart copied to clipboard');
-    }).catch(function(err){
-      // Fallback: download if clipboard fails
-      var link = document.createElement('a');
-      var ticker = _lastChartTicker || 'chart';
-      var date = new Date().toISOString().slice(0,10);
-      link.download = ticker + '_sweeps_' + date + '.png';
-      link.href = screenshotCanvas.toDataURL('image/png');
-      link.click();
-      showToast('Clipboard failed — saved as file instead');
-    });
+    // Try clipboard — requires focus + secure context + user gesture
+    if(navigator.clipboard && typeof ClipboardItem !== 'undefined'){
+      try {
+        navigator.clipboard.write([
+          new ClipboardItem({'image/png': blob})
+        ]).then(function(){
+          showToast('Chart copied to clipboard');
+        }).catch(function(){
+          _downloadChartBlob(screenshotCanvas);
+        });
+      } catch(e){
+        _downloadChartBlob(screenshotCanvas);
+      }
+    } else {
+      _downloadChartBlob(screenshotCanvas);
+    }
   }, 'image/png');
+}
+function _downloadChartBlob(canvas){
+  var link = document.createElement('a');
+  var ticker = _lastChartTicker || 'chart';
+  var date = new Date().toISOString().slice(0,10);
+  link.download = ticker + '_sweeps_' + date + '.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+  showToast('Chart saved as PNG');
 }
 
 function copyPineScript(){
@@ -2839,7 +2850,7 @@ function saveDetectionConfig(){
 }
 
 function loadSettingsDbInfo(){
-  fetch('/api/sweeps/stats')
+  fetch('/api/sweeps/stats?full_db=1')
     .then(function(r){return r.json();})
     .then(function(d){
       var info = document.getElementById('settingsDbInfo');
@@ -2953,9 +2964,14 @@ function updateLiveUI(s){
     document.getElementById('liveRares').textContent = ev.rare_sweep || 0;
     document.getElementById('liveMonsters').textContent = ev.monster_sweep || 0;
 
-    if(s.last_sweep){
-      document.getElementById('liveLastSweep').textContent =
-        'Last: ' + s.last_sweep.ticker + ' ' + fmt$(s.last_sweep.notional) + ' @ ' + s.last_sweep.time;
+    var sweepList = s.recent_sweeps || (s.last_sweep ? [s.last_sweep] : []);
+    if(sweepList.length){
+      var html = '<div style="color:#444;margin-bottom:2px;">Recent sweeps:</div>';
+      sweepList.forEach(function(sw){
+        html += '<div style="color:#888;line-height:1.6;"><span style="color:#f59e0b;font-weight:600;">' + sw.ticker + '</span> '
+          + fmt$(sw.notional) + ' <span style="color:#555;">@ ' + sw.time + '</span></div>';
+      });
+      document.getElementById('liveLastSweep').innerHTML = html;
     }
     if(s.last_detection_at){
       var ago = _fmtAgo(s.last_detection_at);

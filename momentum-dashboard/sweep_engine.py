@@ -2083,7 +2083,7 @@ def get_clusterbombs(ticker=None, date_from=None, date_to=None,
 
 def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
                     min_sweeps=None, monster_min=None, rare_min=None, rare_days=None,
-                    exclude_etfs=True):
+                    exclude_etfs=True, full_db=False):
     """Get overview stats for the sweeps page header.
     Supports filtering by min_total, tickers list, date range, and per-type
     display filters so the stats bar reflects the currently active page filters.
@@ -2094,8 +2094,8 @@ def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
     conn = _get_db()
     stats = {}
 
-    # Server-side fallback: if no date range, default to 2 years
-    if not date_from:
+    # Server-side fallback: if no date range and not requesting full DB, default to 2 years
+    if not date_from and not full_db:
         date_from = (datetime.now() - timedelta(days=730)).strftime("%Y-%m-%d")
 
     # --- ETF exclusion ---

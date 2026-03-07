@@ -170,10 +170,6 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 <script>window._activePage='bollingers';</script>
 <div id="headerRow1"></div>
 <script src="/static/header.js"></script>
-<script>
-// Add scheduler badge to settings section
-(function(){ var sc = document.querySelectorAll('.section-controls')[0]; if(sc){ var badge = document.createElement('span'); badge.id='schedulerBadge'; badge.onclick=function(){window.location.href='/settings';}; badge.style.cssText='font-size:13px;padding:4px 14px;border-radius:4px;background:#1e293b;color:#555;border:1px solid #334155;cursor:pointer;white-space:nowrap;min-width:140px;text-align:center;display:inline-flex;align-items:center;justify-content:center;height:31px;'; badge.textContent='Scheduler: --'; sc.appendChild(badge); }})();
-</script>
 
 <!-- ROW 2: Page Controls (Lookup + Refresh) -->
 <div class="header-row2">
@@ -387,24 +383,5 @@ function refreshAll(){var rb=document.getElementById('refreshBtn');var ri=docume
 
 refreshAll().then(setStickyOffsets);setInterval(refreshAll,60000);
 
-// Update scheduler badge every 30s
-function updateSchedulerBadge(){
-  fetch('/api/scheduler/status').then(function(r){return r.json();}).then(function(s){
-    var badge=document.getElementById('schedulerBadge');
-    if(!badge)return;
-    var cur=s.current_watchlists||[];
-    if(cur.length){
-      badge.textContent='Scanning: '+cur.join(', ');
-      badge.style.color='#f59e0b';badge.style.borderColor='#f59e0b';
-    }else if(!s.enabled){
-      badge.textContent='Scheduler: OFF';
-      badge.style.color='#ef4444';badge.style.borderColor='#334155';
-    }else{
-      badge.textContent='Scheduler: Idle';
-      badge.style.color='#22c55e';badge.style.borderColor='#334155';
-    }
-  }).catch(function(){});
-}
-updateSchedulerBadge();setInterval(updateSchedulerBadge,30000);
 </script>
 </body></html>

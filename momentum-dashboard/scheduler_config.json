@@ -104,5 +104,22 @@
       "market_hours_only": false,
       "after_close_delay_minutes": 30
     }
+  },
+  "eod_compute": {
+    "enabled": true,
+    "rs": {
+      "enabled": true,
+      "delay_minutes": 30,
+      "universe": "Russell3000",
+      "workers": 8
+    },
+    "hvc": {
+      "enabled": true,
+      "delay_minutes": 30,
+      "watchlists": [
+        "Leverage"
+      ],
+      "workers": 8
+    }
   }
 }

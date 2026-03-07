@@ -493,6 +493,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_live_price_status()
         elif path == "/api/scheduler/live-price/config":
             self.serve_live_price_get_config()
+        elif path == "/api/eod-compute/config":
+            self.serve_eod_compute_config()
+        elif path == "/api/eod-compute/status":
+            self.serve_eod_compute_status()
         # ── TradingView UDF Datafeed Endpoints ──────────────────────
         elif path == "/api/tv/config":
             self.serve_tv_config()
@@ -571,6 +575,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_live_price_stop()
         elif path == "/api/scheduler/live-price/config":
             self.serve_live_price_save_config()
+        elif path == "/api/eod-compute/config":
+            self.save_eod_compute_config_handler()
+        elif path == "/api/eod-compute/trigger":
+            self.trigger_eod_compute()
         else:
             self.send_response(404)
             self.end_headers()
@@ -2443,11 +2451,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             monster_min = float((query or {}).get("monster_min", ["0"])[0]) or None
             rare_min = float((query or {}).get("rare_min", ["0"])[0]) or None
             rare_days = int((query or {}).get("rare_days", ["0"])[0]) or None
+            full_db = (query or {}).get("full_db", ["0"])[0] == "1"
 
             stats = get_sweep_stats(min_total=min_total, tickers=tickers,
                                     date_from=date_from, date_to=date_to,
                                     min_sweeps=min_sweeps, monster_min=monster_min,
-                                    rare_min=rare_min, rare_days=rare_days)
+                                    rare_min=rare_min, rare_days=rare_days,
+                                    full_db=full_db)
             self.send_json(stats)
         except Exception as e:
             self.send_json({"error": str(e)})
@@ -2854,6 +2864,138 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_json({"ok": True})
         except Exception as e:
             self.send_json({"ok": False, "error": str(e)})
+
+    # ------------------------------------------------------------------
+    # EOD Compute endpoints
+    # ------------------------------------------------------------------
+
+    def serve_eod_compute_config(self):
+        """GET /api/eod-compute/config — return current EOD compute config."""
+        from live_daemon import load_eod_compute_config
+        try:
+            self.send_json(load_eod_compute_config())
+        except Exception as e:
+            self.send_json({"error": str(e)})
+
+    def save_eod_compute_config_handler(self):
+        """POST /api/eod-compute/config — save EOD compute config."""
+        from live_daemon import save_eod_compute_config
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            save_eod_compute_config(body)
+            if _live_daemon is not None:
+                try:
+                    _live_daemon._eod_config = body
+                except Exception:
+                    pass
+            self.send_json({"ok": True})
+        except Exception as e:
+            self.send_json({"ok": False, "error": str(e)})
+
+    def serve_eod_compute_status(self):
+        """GET /api/eod-compute/status — return last run status for RS and HVC."""
+        global _live_daemon
+        if _live_daemon:
+            self.send_json(_live_daemon.get_eod_status())
+        else:
+            self.send_json({
+                "rs": {"last_at": None, "last_result": None, "last_duration_s": 0,
+                       "last_error": None, "last_date": None},
+                "hvc": {"last_at": None, "last_result": None, "last_duration_s": 0,
+                        "last_error": None, "last_date": None},
+            })
+
+    def trigger_eod_compute(self):
+        """POST /api/eod-compute/trigger — manually trigger EOD compute now.
+        Works with or without the live daemon running."""
+        global _live_daemon
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            compute_type = body.get("type", "both")
+
+            if _live_daemon is not None:
+                # Use daemon's methods (tracks status in daemon state)
+                cfg = _live_daemon._eod_config or {}
+
+                def _run_via_daemon():
+                    if compute_type in ("rs", "both"):
+                        _live_daemon._run_eod_rs(cfg.get("rs", {}))
+                    if compute_type in ("hvc", "both"):
+                        _live_daemon._run_eod_hvc(cfg.get("hvc", {}))
+
+                t = threading.Thread(target=_run_via_daemon, daemon=True)
+                t.start()
+            else:
+                # Daemon not running — run directly
+                from live_daemon import load_eod_compute_config
+                cfg = load_eod_compute_config()
+
+                def _run_direct():
+                    self._run_eod_direct(compute_type, cfg)
+
+                t = threading.Thread(target=_run_direct, daemon=True)
+                t.start()
+
+            self.send_json({"ok": True, "message": f"EOD compute ({compute_type}) triggered"})
+        except Exception as e:
+            self.send_json({"ok": False, "error": str(e)})
+
+    def _run_eod_direct(self, compute_type, cfg):
+        """Run EOD compute directly without the live daemon."""
+        import subprocess as sp
+
+        if compute_type in ("rs", "both"):
+            rs_cfg = cfg.get("rs", {})
+            universe = rs_cfg.get("universe", "Russell3000")
+            workers = rs_cfg.get("workers", 8)
+            print(f"[EOD] Direct: Starting RS computation for {universe}...", flush=True)
+            try:
+                engine_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rs_engine.py")
+                result = sp.run(
+                    [sys.executable, engine_path, "--universe", universe,
+                     "--workers", str(workers), "--once"],
+                    capture_output=True, timeout=600,
+                    cwd=os.path.dirname(engine_path),
+                    encoding="utf-8", errors="replace"
+                )
+                if result.returncode == 0:
+                    print(f"[EOD] Direct: RS computation complete", flush=True)
+                else:
+                    print(f"[EOD] Direct: RS FAILED: {(result.stderr or '')[-200:]}", flush=True)
+            except Exception as e:
+                print(f"[EOD] Direct: RS error: {e}", flush=True)
+
+        if compute_type in ("hvc", "both"):
+            hvc_cfg = cfg.get("hvc", {})
+            watchlists = hvc_cfg.get("watchlists", ["Leverage"])
+            workers = hvc_cfg.get("workers", 8)
+            print(f"[EOD] Direct: Starting HVC computation for {watchlists}...", flush=True)
+            try:
+                from config import WATCHLISTS
+                from engine import compute_all
+                from change_detector import init_db
+                init_db()
+                tickers = []
+                seen = set()
+                for wl_name in watchlists:
+                    wl_groups = WATCHLISTS.get(wl_name)
+                    if not wl_groups:
+                        continue
+                    for _gn, gt in wl_groups:
+                        for display, _api, _at in gt:
+                            if display not in seen:
+                                seen.add(display)
+                                tickers.append(display)
+                if tickers:
+                    results = compute_all(tickers, workers=workers)
+                    ok = sum(1 for r in results if r.get("status") == "ok")
+                    print(f"[EOD] Direct: HVC complete ({ok}/{len(tickers)} computed)", flush=True)
+                else:
+                    print(f"[EOD] Direct: No tickers found in watchlists", flush=True)
+            except Exception as e:
+                print(f"[EOD] Direct: HVC error: {e}", flush=True)
 
     def serve_sweep_detection_config(self):
         """GET /api/sweeps/detection-config — return current detection parameters."""

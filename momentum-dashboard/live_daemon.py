@@ -16,11 +16,13 @@ Usage (standalone test):
 
 import json
 import os
+import subprocess
 import sqlite3
+import sys
 import threading
 import time
 import traceback
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime, timezone, timedelta
 
 import pandas as pd
@@ -98,6 +100,59 @@ def save_live_price_config(config):
     except (FileNotFoundError, json.JSONDecodeError):
         full = {}
     full["live_price_feed"] = config
+    with open(SCHEDULER_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(full, f, indent=2, ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------------
+# Config helpers — End of Day compute (scheduler_config.json)
+# ---------------------------------------------------------------------------
+
+def load_eod_compute_config():
+    """Load end-of-day compute config from scheduler_config.json."""
+    defaults = {
+        "enabled": True,
+        "rs": {
+            "enabled": True,
+            "delay_minutes": 30,
+            "universe": "Russell3000",
+            "workers": 8,
+        },
+        "hvc": {
+            "enabled": True,
+            "delay_minutes": 30,
+            "watchlists": ["Leverage"],
+            "workers": 8,
+        },
+    }
+    try:
+        with open(SCHEDULER_CONFIG_PATH, "r", encoding="utf-8") as f:
+            saved = json.load(f)
+        if "eod_compute" in saved and isinstance(saved["eod_compute"], dict):
+            result = dict(defaults)
+            for k in ("enabled",):
+                if k in saved["eod_compute"]:
+                    result[k] = saved["eod_compute"][k]
+            if "rs" in saved["eod_compute"] and isinstance(saved["eod_compute"]["rs"], dict):
+                result["rs"] = dict(defaults["rs"])
+                result["rs"].update(saved["eod_compute"]["rs"])
+            if "hvc" in saved["eod_compute"] and isinstance(saved["eod_compute"]["hvc"], dict):
+                result["hvc"] = dict(defaults["hvc"])
+                result["hvc"].update(saved["eod_compute"]["hvc"])
+            return result
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return defaults
+
+
+def save_eod_compute_config(config):
+    """Save end-of-day compute config to scheduler_config.json (merges with existing)."""
+    try:
+        with open(SCHEDULER_CONFIG_PATH, "r", encoding="utf-8") as f:
+            full = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        full = {}
+    full["eod_compute"] = config
     with open(SCHEDULER_CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(full, f, indent=2, ensure_ascii=False)
 
@@ -365,6 +420,7 @@ class UnifiedLiveDaemon:
             "sweeps_buffered": 0,
             "sweeps_written": 0,
             "last_sweep": None,
+            "recent_sweeps": deque(maxlen=10),
             "sweep_tickers_active": set(),
             "events_detected": {"clusterbomb": 0, "rare_sweep": 0, "monster_sweep": 0},
             "last_detection_at": None,
@@ -379,7 +435,20 @@ class UnifiedLiveDaemon:
             "crash_count": 0,
             "last_crash_at": None,
             "last_crash_error": None,
+            # EOD compute status
+            "eod_rs_last_at": None,
+            "eod_rs_last_result": None,
+            "eod_rs_last_duration_s": 0,
+            "eod_rs_last_error": None,
+            "eod_rs_last_date": None,
+            "eod_hvc_last_at": None,
+            "eod_hvc_last_result": None,
+            "eod_hvc_last_duration_s": 0,
+            "eod_hvc_last_error": None,
+            "eod_hvc_last_date": None,
         }
+        self._eod_compute_thread = None
+        self._eod_config = load_eod_compute_config()
 
     # ------------------------------------------------------------------
     # Public interface
@@ -462,6 +531,7 @@ class UnifiedLiveDaemon:
         with self._bars_lock:
             s["price_tickers_active"] = len(self._bars)
         s["sweep_tickers_active"] = len(s["sweep_tickers_active"])
+        s["recent_sweeps"] = list(s.get("recent_sweeps", []))
         with self._sweep_buffer_lock:
             s["sweeps_buffered"] = len(self._sweep_buffer)
         return s
@@ -481,6 +551,7 @@ class UnifiedLiveDaemon:
             "sweeps_buffered": full["sweeps_buffered"],
             "sweeps_written": full["sweeps_written"],
             "last_sweep": full["last_sweep"],
+            "recent_sweeps": full.get("recent_sweeps", []),
             "tickers_active": full["sweep_tickers_active"],
             "events_detected": full["events_detected"],
             "last_detection_at": full["last_detection_at"],
@@ -564,6 +635,7 @@ class UnifiedLiveDaemon:
             ("_price_flush_thread", self._price_flush_loop, "live-price-flush"),
             ("_sweep_flush_thread", self._sweep_flush_loop, "live-sweep-flush"),
             ("_detection_thread", self._detection_loop, "live-detection"),
+            ("_eod_compute_thread", self._eod_compute_loop, "live-eod-compute"),
         ]
         for attr, target, name in threads:
             t = getattr(self, attr, None)
@@ -578,6 +650,7 @@ class UnifiedLiveDaemon:
         self._start_sub_thread("_price_flush_thread", self._price_flush_loop, "live-price-flush")
         self._start_sub_thread("_sweep_flush_thread", self._sweep_flush_loop, "live-sweep-flush")
         self._start_sub_thread("_detection_thread", self._detection_loop, "live-detection")
+        self._start_sub_thread("_eod_compute_thread", self._eod_compute_loop, "live-eod-compute")
 
         while not self._stop_event.is_set():
             # Revive any dead sub-threads before each connection attempt
@@ -828,12 +901,14 @@ class UnifiedLiveDaemon:
         with self._lock:
             self._status["sweeps_today"] += 1
             self._status["sweep_tickers_active"].add(ticker)
-            self._status["last_sweep"] = {
+            sweep_entry = {
                 "ticker": ticker,
                 "notional": round(notional, 2),
                 "time": trade_dt.strftime("%H:%M:%S"),
                 "price": price,
             }
+            self._status["last_sweep"] = sweep_entry
+            self._status["recent_sweeps"].appendleft(sweep_entry)
 
         with self._sweep_buffer_lock:
             if len(self._sweep_buffer) >= self._sweep_flush_max:
@@ -1182,6 +1257,202 @@ class UnifiedLiveDaemon:
               f"{results.get('clusterbomb', 0)} CBs, "
               f"{results.get('rare_sweep', 0)} rare, "
               f"{results.get('monster_sweep', 0)} monsters", flush=True)
+
+    # ------------------------------------------------------------------
+    # End of Day compute — RS + HVC after market close
+    # ------------------------------------------------------------------
+
+    def _eod_compute_loop(self):
+        """Thread that checks every 60s whether EOD compute should trigger."""
+        self._stop_event.wait(timeout=60)
+        while not self._stop_event.is_set():
+            try:
+                self._check_eod_compute()
+            except Exception as e:
+                print(f"[LIVE] EOD compute check error: {e}", flush=True)
+                traceback.print_exc()
+            self._stop_event.wait(timeout=60)
+
+    def _check_eod_compute(self):
+        """Check if market closed + delay elapsed, then run enabled computations."""
+        try:
+            cfg = load_eod_compute_config()
+        except Exception:
+            cfg = self._eod_config
+        self._eod_config = cfg
+
+        if not cfg.get("enabled", True):
+            return
+
+        from trading_calendar import is_trading_day
+        from scheduler import MarketClock
+
+        now = datetime.now(timezone.utc)
+        today = now.date()
+
+        if not is_trading_day(today):
+            return
+
+        market_close = MarketClock.market_close_utc(today)
+
+        # --- RS ---
+        rs_cfg = cfg.get("rs", {})
+        if rs_cfg.get("enabled", True):
+            rs_delay = rs_cfg.get("delay_minutes", 30)
+            rs_trigger_time = market_close + timedelta(minutes=rs_delay)
+            rs_last_date = self._status.get("eod_rs_last_date")
+            if now >= rs_trigger_time and rs_last_date != today.isoformat():
+                self._run_eod_rs(rs_cfg)
+
+        # --- HVC ---
+        hvc_cfg = cfg.get("hvc", {})
+        if hvc_cfg.get("enabled", True):
+            hvc_delay = hvc_cfg.get("delay_minutes", 30)
+            hvc_trigger_time = market_close + timedelta(minutes=hvc_delay)
+            hvc_last_date = self._status.get("eod_hvc_last_date")
+            if now >= hvc_trigger_time and hvc_last_date != today.isoformat():
+                self._run_eod_hvc(hvc_cfg)
+
+    def _run_eod_rs(self, rs_cfg):
+        """Run RS computation as subprocess."""
+        universe = rs_cfg.get("universe", "Russell3000")
+        workers = rs_cfg.get("workers", 8)
+        today_str = datetime.now(timezone.utc).date().isoformat()
+
+        print(f"[LIVE] EOD: Starting RS computation for {universe}...", flush=True)
+        t0 = time.time()
+
+        try:
+            engine_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rs_engine.py")
+            result = subprocess.run(
+                [sys.executable, engine_path, "--universe", universe,
+                 "--workers", str(workers), "--once"],
+                capture_output=True, timeout=600,
+                cwd=os.path.dirname(engine_path),
+                encoding="utf-8", errors="replace"
+            )
+            elapsed = time.time() - t0
+
+            if result.returncode == 0:
+                with self._lock:
+                    self._status["eod_rs_last_at"] = datetime.now(timezone.utc).isoformat()
+                    self._status["eod_rs_last_result"] = "success"
+                    self._status["eod_rs_last_duration_s"] = round(elapsed, 1)
+                    self._status["eod_rs_last_error"] = None
+                    self._status["eod_rs_last_date"] = today_str
+                print(f"[LIVE] EOD: RS computation complete in {elapsed:.1f}s", flush=True)
+                if result.stdout:
+                    for line in result.stdout.strip().split("\n")[-5:]:
+                        print(f"  [RS] {line}", flush=True)
+            else:
+                error_msg = (result.stderr or "Unknown error")[-200:]
+                with self._lock:
+                    self._status["eod_rs_last_at"] = datetime.now(timezone.utc).isoformat()
+                    self._status["eod_rs_last_result"] = "error"
+                    self._status["eod_rs_last_duration_s"] = round(elapsed, 1)
+                    self._status["eod_rs_last_error"] = error_msg
+                    self._status["eod_rs_last_date"] = today_str
+                print(f"[LIVE] EOD: RS computation FAILED (exit {result.returncode}): {error_msg}", flush=True)
+
+        except subprocess.TimeoutExpired:
+            with self._lock:
+                self._status["eod_rs_last_at"] = datetime.now(timezone.utc).isoformat()
+                self._status["eod_rs_last_result"] = "error"
+                self._status["eod_rs_last_error"] = "Timeout (600s)"
+                self._status["eod_rs_last_date"] = today_str
+            print("[LIVE] EOD: RS computation timed out after 600s", flush=True)
+
+        except Exception as e:
+            with self._lock:
+                self._status["eod_rs_last_at"] = datetime.now(timezone.utc).isoformat()
+                self._status["eod_rs_last_result"] = "error"
+                self._status["eod_rs_last_error"] = str(e)
+                self._status["eod_rs_last_date"] = today_str
+            print(f"[LIVE] EOD: RS computation error: {e}", flush=True)
+
+    def _run_eod_hvc(self, hvc_cfg):
+        """Run HVC/indicator computation for configured watchlists."""
+        watchlists = hvc_cfg.get("watchlists", ["Leverage"])
+        workers = hvc_cfg.get("workers", 8)
+        today_str = datetime.now(timezone.utc).date().isoformat()
+
+        print(f"[LIVE] EOD: Starting HVC computation for {watchlists}...", flush=True)
+        t0 = time.time()
+
+        try:
+            from config import WATCHLISTS
+            from engine import compute_all
+            from change_detector import init_db
+
+            init_db()
+
+            tickers = []
+            seen = set()
+            for wl_name in watchlists:
+                wl_groups = WATCHLISTS.get(wl_name)
+                if not wl_groups:
+                    print(f"[LIVE] EOD HVC: watchlist '{wl_name}' not found, skipping", flush=True)
+                    continue
+                for _group_name, group_tickers in wl_groups:
+                    for display, _api, _atype in group_tickers:
+                        if display not in seen:
+                            seen.add(display)
+                            tickers.append(display)
+
+            if not tickers:
+                with self._lock:
+                    self._status["eod_hvc_last_at"] = datetime.now(timezone.utc).isoformat()
+                    self._status["eod_hvc_last_result"] = "skipped"
+                    self._status["eod_hvc_last_error"] = "No tickers in configured watchlists"
+                    self._status["eod_hvc_last_date"] = today_str
+                return
+
+            results = compute_all(tickers, workers=workers)
+            elapsed = time.time() - t0
+
+            ok_count = sum(1 for r in results if r.get("status") == "ok")
+            total_events = sum(r.get("events", 0) for r in results if r.get("status") == "ok")
+
+            with self._lock:
+                self._status["eod_hvc_last_at"] = datetime.now(timezone.utc).isoformat()
+                self._status["eod_hvc_last_result"] = "success"
+                self._status["eod_hvc_last_duration_s"] = round(elapsed, 1)
+                self._status["eod_hvc_last_error"] = None
+                self._status["eod_hvc_last_date"] = today_str
+
+            print(f"[LIVE] EOD: HVC computation complete in {elapsed:.1f}s "
+                  f"({ok_count}/{len(tickers)} computed, {total_events} events)", flush=True)
+
+        except Exception as e:
+            elapsed = time.time() - t0
+            with self._lock:
+                self._status["eod_hvc_last_at"] = datetime.now(timezone.utc).isoformat()
+                self._status["eod_hvc_last_result"] = "error"
+                self._status["eod_hvc_last_duration_s"] = round(elapsed, 1)
+                self._status["eod_hvc_last_error"] = str(e)
+                self._status["eod_hvc_last_date"] = today_str
+            print(f"[LIVE] EOD: HVC computation error: {e}", flush=True)
+            traceback.print_exc()
+
+    def get_eod_status(self):
+        """Return EOD compute status dict."""
+        with self._lock:
+            return {
+                "rs": {
+                    "last_at": self._status.get("eod_rs_last_at"),
+                    "last_result": self._status.get("eod_rs_last_result"),
+                    "last_duration_s": self._status.get("eod_rs_last_duration_s", 0),
+                    "last_error": self._status.get("eod_rs_last_error"),
+                    "last_date": self._status.get("eod_rs_last_date"),
+                },
+                "hvc": {
+                    "last_at": self._status.get("eod_hvc_last_at"),
+                    "last_result": self._status.get("eod_hvc_last_result"),
+                    "last_duration_s": self._status.get("eod_hvc_last_duration_s", 0),
+                    "last_error": self._status.get("eod_hvc_last_error"),
+                    "last_date": self._status.get("eod_hvc_last_date"),
+                },
+            }
 
 
 # ---------------------------------------------------------------------------

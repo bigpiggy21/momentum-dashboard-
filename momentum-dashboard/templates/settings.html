@@ -91,6 +91,30 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 .lp-compute-stats{display:flex;gap:14px;font-size:10px;color:#555;}
 .lp-compute-stats .val{color:#999;font-weight:600;}
 
+/* EOD Compute section */
+.eod-section{margin-bottom:20px;padding:16px;background:#0e0e16;border:1px solid #1e1e2e;border-radius:8px;}
+.eod-header{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.eod-header h3{font-size:13px;color:#ccc;margin:0;display:flex;align-items:center;gap:6px;}
+.eod-table{width:100%;border-collapse:collapse;font-size:12px;}
+.eod-table th{text-align:left;padding:6px 8px;color:#555;font-size:10px;font-weight:700;text-transform:uppercase;border-bottom:1px solid #1a1a24;}
+.eod-table td{padding:8px 8px;border-bottom:1px solid #1a1a24;vertical-align:middle;}
+.eod-table td:first-child{color:#ccc;font-weight:600;width:110px;}
+.eod-toggle{padding:3px 12px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid #334155;background:#1e293b;color:#aaa;}
+.eod-toggle:hover{background:#334155;color:#fff;}
+.eod-toggle.active{background:#22c55e;color:#000;border-color:#22c55e;}
+.eod-table input[type="number"]{width:50px;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;}
+.eod-table select{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 6px;border-radius:4px;font-size:11px;}
+.eod-status{font-size:10px;padding:2px 8px;border-radius:3px;display:inline-block;}
+.eod-status.success{background:#22c55e22;color:#22c55e;}
+.eod-status.error{background:#ef444422;color:#ef4444;}
+.eod-status.pending{background:#1e293b;color:#555;}
+.eod-status.skipped{background:#f59e0b22;color:#f59e0b;}
+.eod-save-bar{display:flex;gap:8px;align-items:center;margin-top:10px;}
+.eod-chips{display:flex;flex-wrap:wrap;gap:4px;}
+.eod-chip{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid #2a2a3a;background:#14141e;color:#666;user-select:none;transition:all 0.15s;}
+.eod-chip:hover{border-color:#444;color:#aaa;}
+.eod-chip.active{background:#f59e0b22;border-color:#f59e0b;color:#f59e0b;}
+
 /* Architecture details */
 .arch-details{margin-top:24px;border-top:1px solid #2a2a3a;padding-top:16px;}
 .arch-details summary{cursor:pointer;color:#666;font-size:12px;font-weight:600;}
@@ -172,6 +196,67 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
       <span>Events: <span class="val" id="lpCompEvents">0</span></span>
       <span>Duration: <span class="val" id="lpCompDuration">--</span></span>
     </div>
+  </div>
+</div>
+
+<!-- End of Day Compute -->
+<div class="eod-section" id="eodSection">
+  <div class="eod-header">
+    <h3>&#x1F552; End of Day Compute</h3>
+    <button class="eod-toggle" id="eodGlobalToggle" onclick="toggleEodEnabled()">ON</button>
+    <span style="font-size:10px;color:#555;margin-left:auto;" id="eodNextRun"></span>
+  </div>
+  <table class="eod-table">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>On</th>
+        <th>Delay</th>
+        <th>Target</th>
+        <th>Workers</th>
+        <th>Last Run</th>
+        <th>Status</th>
+        <th>Duration</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>RS Ratings</td>
+        <td><button class="eod-toggle" id="eodRsToggle" onclick="toggleEodRow('rs')">ON</button></td>
+        <td><input type="number" id="eodRsDelay" min="0" max="240" value="30"> <span style="font-size:10px;color:#555;">min</span></td>
+        <td>
+          <select id="eodRsUniverse">
+            <option value="Russell3000">Russell3000</option>
+            <option value="Russell2000">Russell2000</option>
+            <option value="Russell1000">Russell1000</option>
+            <option value="SP500">SP500</option>
+          </select>
+        </td>
+        <td><input type="number" id="eodRsWorkers" min="1" max="16" value="8"></td>
+        <td id="eodRsLastAt" style="font-size:10px;color:#555;">--</td>
+        <td id="eodRsStatus"><span class="eod-status pending">No data</span></td>
+        <td id="eodRsDuration" style="font-size:10px;color:#555;">--</td>
+      </tr>
+      <tr>
+        <td>HVC / Indicators</td>
+        <td><button class="eod-toggle" id="eodHvcToggle" onclick="toggleEodRow('hvc')">ON</button></td>
+        <td><input type="number" id="eodHvcDelay" min="0" max="240" value="30"> <span style="font-size:10px;color:#555;">min</span></td>
+        <td>
+          <div class="eod-chips" id="eodHvcChips"><span style="font-size:10px;color:#444;">Loading...</span></div>
+        </td>
+        <td><input type="number" id="eodHvcWorkers" min="1" max="16" value="8"></td>
+        <td id="eodHvcLastAt" style="font-size:10px;color:#555;">--</td>
+        <td id="eodHvcStatus"><span class="eod-status pending">No data</span></td>
+        <td id="eodHvcDuration" style="font-size:10px;color:#555;">--</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="eod-save-bar">
+    <button class="sched-save-btn" onclick="saveEodConfig()" style="padding:5px 14px;font-size:11px;">Save</button>
+    <button class="backfill-btn" onclick="triggerEodCompute('both')" style="font-size:10px;">Run Now</button>
+    <button class="backfill-btn" onclick="triggerEodCompute('rs')" style="font-size:10px;">Run RS Only</button>
+    <button class="backfill-btn" onclick="triggerEodCompute('hvc')" style="font-size:10px;">Run HVC Only</button>
+    <span class="sched-save-status" id="eodSaveStatus"></span>
   </div>
 </div>
 
@@ -708,6 +793,148 @@ function saveLivePriceConfig(){
 pollLivePriceStatus();
 loadLivePriceConfig();
 loadComputeWatchlistOptions();
+
+// ---------- End of Day Compute ----------
+var _eodConfig = null;
+var _eodStatusTimer = null;
+
+function loadEodConfig(){
+  fetch('/api/eod-compute/config').then(function(r){return r.json();}).then(function(cfg){
+    _eodConfig = cfg;
+    var gt = document.getElementById('eodGlobalToggle');
+    gt.textContent = cfg.enabled ? 'ON' : 'OFF';
+    gt.classList.toggle('active', !!cfg.enabled);
+    // RS
+    var rs = cfg.rs || {};
+    var rsT = document.getElementById('eodRsToggle');
+    rsT.textContent = rs.enabled !== false ? 'ON' : 'OFF';
+    rsT.classList.toggle('active', rs.enabled !== false);
+    document.getElementById('eodRsDelay').value = rs.delay_minutes || 30;
+    document.getElementById('eodRsWorkers').value = rs.workers || 8;
+    document.getElementById('eodRsUniverse').value = rs.universe || 'Russell3000';
+    // HVC
+    var hvc = cfg.hvc || {};
+    var hvcT = document.getElementById('eodHvcToggle');
+    hvcT.textContent = hvc.enabled !== false ? 'ON' : 'OFF';
+    hvcT.classList.toggle('active', hvc.enabled !== false);
+    document.getElementById('eodHvcDelay').value = hvc.delay_minutes || 30;
+    document.getElementById('eodHvcWorkers').value = hvc.workers || 8;
+    loadEodHvcChips(hvc.watchlists || ['Leverage']);
+  }).catch(function(e){ console.error('EOD config load error:', e); });
+}
+
+function loadEodHvcChips(activeWatchlists){
+  fetch('/api/watchlists').then(function(r){return r.json();}).then(function(watchlists){
+    var container = document.getElementById('eodHvcChips');
+    container.innerHTML = '';
+    watchlists.forEach(function(wl){
+      var chip = document.createElement('span');
+      chip.className = 'eod-chip';
+      chip.textContent = wl.name;
+      chip.setAttribute('data-wl', wl.name);
+      if(activeWatchlists.indexOf(wl.name) >= 0) chip.classList.add('active');
+      chip.onclick = function(){ chip.classList.toggle('active'); };
+      container.appendChild(chip);
+    });
+  }).catch(function(){});
+}
+
+function toggleEodEnabled(){
+  if(!_eodConfig) return;
+  _eodConfig.enabled = !_eodConfig.enabled;
+  var gt = document.getElementById('eodGlobalToggle');
+  gt.textContent = _eodConfig.enabled ? 'ON' : 'OFF';
+  gt.classList.toggle('active', _eodConfig.enabled);
+}
+
+function toggleEodRow(type){
+  if(!_eodConfig) return;
+  if(!_eodConfig[type]) _eodConfig[type] = {};
+  var cur = _eodConfig[type].enabled !== false;
+  _eodConfig[type].enabled = !cur;
+  var btn = document.getElementById(type === 'rs' ? 'eodRsToggle' : 'eodHvcToggle');
+  btn.textContent = !cur ? 'ON' : 'OFF';
+  btn.classList.toggle('active', !cur);
+}
+
+function saveEodConfig(){
+  var hvcWatchlists = [];
+  document.querySelectorAll('#eodHvcChips .eod-chip.active').forEach(function(el){
+    hvcWatchlists.push(el.getAttribute('data-wl'));
+  });
+  var cfg = {
+    enabled: _eodConfig ? _eodConfig.enabled : true,
+    rs: {
+      enabled: document.getElementById('eodRsToggle').classList.contains('active'),
+      delay_minutes: parseInt(document.getElementById('eodRsDelay').value) || 30,
+      universe: document.getElementById('eodRsUniverse').value,
+      workers: parseInt(document.getElementById('eodRsWorkers').value) || 8
+    },
+    hvc: {
+      enabled: document.getElementById('eodHvcToggle').classList.contains('active'),
+      delay_minutes: parseInt(document.getElementById('eodHvcDelay').value) || 30,
+      watchlists: hvcWatchlists,
+      workers: parseInt(document.getElementById('eodHvcWorkers').value) || 8
+    }
+  };
+  fetch('/api/eod-compute/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(cfg)
+  }).then(function(r){return r.json();}).then(function(r){
+    var st = document.getElementById('eodSaveStatus');
+    st.textContent = r.ok ? 'Saved!' : ('Error: ' + r.error);
+    st.style.color = r.ok ? '#22c55e' : '#ef4444';
+    if(r.ok) _eodConfig = cfg;
+    setTimeout(function(){ st.textContent = ''; }, 3000);
+  });
+}
+
+function triggerEodCompute(type){
+  fetch('/api/eod-compute/trigger', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({type: type})
+  }).then(function(r){return r.json();}).then(function(r){
+    var st = document.getElementById('eodSaveStatus');
+    if(r.ok){
+      st.textContent = 'Triggered ' + type;
+      st.style.color = '#f59e0b';
+    } else {
+      st.textContent = 'Error: ' + (r.error || '');
+      st.style.color = '#ef4444';
+    }
+    setTimeout(function(){ st.textContent = ''; }, 5000);
+  });
+}
+
+function pollEodStatus(){
+  fetch('/api/eod-compute/status').then(function(r){return r.json();}).then(function(s){
+    // RS
+    var rs = s.rs || {};
+    if(rs.last_at) document.getElementById('eodRsLastAt').textContent = _fmtAgo(rs.last_at);
+    if(rs.last_result){
+      var cls = rs.last_result === 'success' ? 'success' : rs.last_result === 'error' ? 'error' : 'skipped';
+      var label = rs.last_result === 'success' ? 'OK' : rs.last_result === 'error' ? (rs.last_error || 'Error').substring(0, 40) : 'Skipped';
+      document.getElementById('eodRsStatus').innerHTML = '<span class="eod-status ' + cls + '">' + label + '</span>';
+    }
+    if(rs.last_duration_s) document.getElementById('eodRsDuration').textContent = rs.last_duration_s + 's';
+    // HVC
+    var hvc = s.hvc || {};
+    if(hvc.last_at) document.getElementById('eodHvcLastAt').textContent = _fmtAgo(hvc.last_at);
+    if(hvc.last_result){
+      var cls2 = hvc.last_result === 'success' ? 'success' : hvc.last_result === 'error' ? 'error' : 'skipped';
+      var label2 = hvc.last_result === 'success' ? 'OK' : hvc.last_result === 'error' ? (hvc.last_error || 'Error').substring(0, 40) : 'Skipped';
+      document.getElementById('eodHvcStatus').innerHTML = '<span class="eod-status ' + cls2 + '">' + label2 + '</span>';
+    }
+    if(hvc.last_duration_s) document.getElementById('eodHvcDuration').textContent = hvc.last_duration_s + 's';
+  }).catch(function(){});
+}
+
+// Init EOD
+loadEodConfig();
+pollEodStatus();
+setInterval(pollEodStatus, 10000);
 
 // Load scheduler UI on page load
 refreshSchedulerUI();
