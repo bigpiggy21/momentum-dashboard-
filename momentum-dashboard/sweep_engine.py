@@ -106,6 +106,9 @@ _ETF_CACHE_PATH = os.path.join(PRICE_CACHE_DIR, "etf_tickers.json")
 _etf_set = None  # Lazy-loaded in-memory set
 _ETF_CACHE_MAX_AGE_DAYS = 7
 
+# Manual ETF overrides — tickers Polygon classifies as trusts/funds but we treat as ETFs
+_ETF_MANUAL_OVERRIDES = {"IAU"}
+
 def load_etf_set():
     """Load the cached ETF ticker set. Returns empty set if no cache."""
     global _etf_set
@@ -116,10 +119,11 @@ def load_etf_set():
             with open(_ETF_CACHE_PATH, "r") as f:
                 data = json.load(f)
             _etf_set = set(data.get("tickers", []))
+            _etf_set |= _ETF_MANUAL_OVERRIDES
             return _etf_set
         except Exception as e:
             print(f"[ETF] Failed to load cache: {e}")
-    _etf_set = set()
+    _etf_set = set(_ETF_MANUAL_OVERRIDES)
     return _etf_set
 
 def refresh_etf_cache(force=False):
@@ -267,6 +271,7 @@ _ANALYSIS_EXCLUDE = {
     "ARKK", "ARKW", "ARKF", "ARKG",
     "TQQQ", "SQQQ", "SPXL", "SPXS", "SOXL", "SOXS", "UPRO", "SPXU",
     "TLT", "HYG", "GLD", "SLV", "USO", "VXX", "UVXY",
+    "IAU",
 }
 
 
