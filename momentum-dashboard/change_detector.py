@@ -307,16 +307,18 @@ def invalidate_scan_cache():
     conn.close()
 
 
-def get_previous_snapshot(ticker, timeframe, div_adj=0):
-    """Get the most recent snapshot for a ticker/timeframe pair."""
+def get_previous_snapshot(ticker, timeframe, div_adj=0, confirmed_only=False):
+    """Get the most recent snapshot for a ticker/timeframe pair.
+    If confirmed_only=True, only return the last confirmed (closed candle) snapshot."""
     conn = _get_db()
     c = conn.cursor()
-    
-    c.execute("""
-        SELECT mom_color, mom_rising, sqz_state, band_pos, band_flip, 
+
+    status_filter = " AND bar_status = 'confirmed'" if confirmed_only else ""
+    c.execute(f"""
+        SELECT mom_color, mom_rising, sqz_state, band_pos, band_flip,
                acc_state, acc_impulse, dev_signal
-        FROM snapshots 
-        WHERE ticker = ? AND timeframe = ? AND div_adj = ?
+        FROM snapshots
+        WHERE ticker = ? AND timeframe = ? AND div_adj = ?{status_filter}
         ORDER BY timestamp DESC LIMIT 1
     """, (ticker, timeframe, div_adj))
     
@@ -459,13 +461,17 @@ def detect_changes(ticker, current_results, timestamp=None, div_adj=0):
             continue
 
         current = current_results[tf]
-        previous = get_previous_snapshot(ticker, tf, div_adj=div_adj)
-
-        if previous is None:
-            continue  # First run, no comparison
 
         # Determine bar status for this timeframe's events
         tf_bar_status = current.get("bar_status", "confirmed")
+
+        # When bar is confirmed, compare against last CONFIRMED snapshot
+        # so live signals don't consume the transition
+        previous = get_previous_snapshot(ticker, tf, div_adj=div_adj,
+                                         confirmed_only=(tf_bar_status == "confirmed"))
+
+        if previous is None:
+            continue  # First run, no comparison
 
         # Check each indicator for changes
 

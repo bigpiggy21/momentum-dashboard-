@@ -157,8 +157,8 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 <button class="filter-toggle" data-status="live" onclick="setBarStatus('live')">Live</button>
 <div class="filter-divider"></div>
 <label>ADJ:</label>
-<button class="filter-toggle active" data-adj="all" onclick="setDivAdj('all')">Both</button>
-<button class="filter-toggle" data-adj="0" onclick="setDivAdj('0')">Off</button>
+<button class="filter-toggle" data-adj="all" onclick="setDivAdj('all')">Both</button>
+<button class="filter-toggle active" data-adj="0" onclick="setDivAdj('0')">Off</button>
 <button class="filter-toggle" data-adj="1" onclick="setDivAdj('1')">On</button>
 <div class="filter-divider"></div>
 <label>Indicators:</label>
@@ -238,7 +238,7 @@ var filteredEvents=[];
 var displayedCount=0;
 var timeScope='24h';
 var barStatusFilter='all';
-var divAdjFilter='all';
+var divAdjFilter='0';
 var activeInds={};
 var activeTFs=new Set(ALL_TFS);
 var tickerFilter='';

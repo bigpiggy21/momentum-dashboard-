@@ -366,9 +366,9 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
 <input type="date" id="dateTo" value="">
 <div class="filter-divider"></div>
 <div id="periodBtns" style="display:inline-flex;gap:2px;">
-<button class="filter-toggle" onclick="setTrackerPeriod('week',this)">Week</button>
+<button class="filter-toggle active" onclick="setTrackerPeriod('week',this)">Week</button>
 <button class="filter-toggle" onclick="setTrackerPeriod('month',this)">Month</button>
-<button class="filter-toggle active" onclick="setTrackerPeriod('year',this)">YTD</button>
+<button class="filter-toggle" onclick="setTrackerPeriod('year',this)">YTD</button>
 <button class="filter-toggle" onclick="setTrackerPeriod('2y',this)">2Y</button>
 <button class="filter-toggle" onclick="setTrackerPeriod('3y',this)">3Y</button>
 <button class="filter-toggle" onclick="setTrackerPeriod('5y',this)">5Y</button>
@@ -2672,11 +2672,7 @@ function loadWatchlists(){
       opt.textContent = wl.name + ' (' + watchlistData[wl.name].length + ')';
       sel.appendChild(opt);
     });
-    // Default to SP500 if available
-    if(watchlistData['SP500'] && !sel.value){
-      sel.value = 'SP500';
-      updateSectorDropdown('SP500');
-    }
+    // No default watchlist — show all tickers
   });
 }
 
@@ -3146,10 +3142,14 @@ checkApiAccess();
 loadWatchlists();
 loadSectors();
 
-// Default period: YTD, To = today
+// Default period: Week, To = today
 (function(){
   var now = new Date();
-  document.getElementById('dateFrom').value = now.getFullYear() + '-01-01';
+  var day = now.getDay();
+  var diff = (day === 0 ? 6 : day - 1);
+  var mon = new Date(now);
+  mon.setDate(now.getDate() - diff);
+  document.getElementById('dateFrom').value = mon.getFullYear() + '-' + pad2(mon.getMonth()+1) + '-' + pad2(mon.getDate());
   document.getElementById('dateTo').value = now.getFullYear() + '-' + pad2(now.getMonth()+1) + '-' + pad2(now.getDate());
 })();
 

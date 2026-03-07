@@ -300,14 +300,25 @@ function renderRiver(data, sectors, metric){
       textStyle: {color: '#d0d0d8', fontSize: 11},
       formatter: function(params){
         if(!params || params.length === 0) return '';
-        var html = '<div style="font-weight:700;margin-bottom:4px;color:#f59e0b">' + params[0].axisValue + '</div>';
+        // axisValue is a timestamp (ms) when singleAxis type=time — format as date
+        var av = params[0].axisValue;
+        var dateStr;
+        if(typeof av === 'number'){
+          var dt = new Date(av);
+          dateStr = dt.toLocaleDateString('en-US', {year:'numeric', month:'short', day:'numeric'});
+        } else {
+          dateStr = av;
+        }
+        var html = '<div style="font-weight:700;margin-bottom:4px;color:#f59e0b">' + dateStr + '</div>';
         var items = [];
         var total = 0;
         for(var i = 0; i < params.length; i++){
           var p = params[i];
           var val = p.value ? p.value[1] : 0;
           if(val > 0){
-            items.push({name: p.seriesName || (p.value ? p.value[2] : ''), val: val, marker: p.marker});
+            // themeRiver: sector name is in value[2], not seriesName
+            var name = (p.value && p.value[2]) ? p.value[2] : (p.seriesName || '');
+            items.push({name: name, val: val, marker: p.marker});
             total += val;
           }
         }
