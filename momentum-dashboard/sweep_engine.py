@@ -657,6 +657,24 @@ def init_sweep_db():
         conn.commit()
         print("Added dormancy_days column to clusterbomb_events.")
 
+    if "max_notional" not in existing_cols:
+        c.execute("ALTER TABLE clusterbomb_events ADD COLUMN max_notional REAL")
+        conn.commit()
+        print("Added max_notional column to clusterbomb_events.")
+        # Backfill from sweep_trades — set max_notional to the largest individual
+        # dark pool sweep on that (ticker, date)
+        c.execute("""
+            UPDATE clusterbomb_events SET max_notional = (
+                SELECT MAX(notional) FROM sweep_trades
+                WHERE sweep_trades.ticker = clusterbomb_events.ticker
+                AND sweep_trades.trade_date = clusterbomb_events.event_date
+                AND is_darkpool = 1 AND is_sweep = 1
+            )
+        """)
+        conn.commit()
+        backfilled = c.execute("SELECT COUNT(*) FROM clusterbomb_events WHERE max_notional IS NOT NULL").fetchone()[0]
+        print(f"  Backfilled max_notional for {backfilled} existing events.")
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS sweep_meta (
             key TEXT PRIMARY KEY,
@@ -1392,6 +1410,7 @@ def detect_clusterbombs(
             trade_date,
             COUNT(*) as sweep_count,
             SUM(notional) as total_notional,
+            MAX(notional) as max_notional,
             SUM(price * size) / SUM(size) as vwap,
             MIN(price) as min_price,
             MAX(price) as max_price,
@@ -1437,6 +1456,7 @@ def detect_clusterbombs(
             "event_date": event_date,
             "sweep_count": row["sweep_count"],
             "total_notional": round(row["total_notional"], 2),
+            "max_notional": round(row["max_notional"], 2) if row["max_notional"] else None,
             "avg_price": round(row["vwap"], 2) if row["vwap"] else None,
             "min_price": row["min_price"],
             "max_price": row["max_price"],
@@ -1455,14 +1475,15 @@ def detect_clusterbombs(
         try:
             c.execute("""
                 INSERT OR REPLACE INTO clusterbomb_events
-                (ticker, event_date, sweep_count, total_notional, avg_price,
-                 min_price, max_price, direction, is_rare, threshold_notional,
-                 threshold_sweeps, threshold_total, sweep_ids, detected_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (ticker, event_date, sweep_count, total_notional, max_notional,
+                 avg_price, min_price, max_price, direction, is_rare,
+                 threshold_notional, threshold_sweeps, threshold_total,
+                 sweep_ids, detected_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 ev["ticker"], ev["event_date"], ev["sweep_count"],
-                ev["total_notional"], ev["avg_price"], ev["min_price"],
-                ev["max_price"], ev["direction"], ev["is_rare"],
+                ev["total_notional"], ev["max_notional"], ev["avg_price"],
+                ev["min_price"], ev["max_price"], ev["direction"], ev["is_rare"],
                 ev["threshold_notional"], ev["threshold_sweeps"],
                 ev["threshold_total"], ev["sweep_ids"], ev["detected_at"]
             ))
@@ -1605,6 +1626,7 @@ def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None,
         SELECT ticker, trade_date,
                COUNT(*) as sweep_count,
                SUM(notional) as total_notional,
+               MAX(notional) as max_notional,
                SUM(price * size) / SUM(size) as vwap,
                MIN(price) as min_price,
                MAX(price) as max_price
@@ -1649,6 +1671,7 @@ def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None,
                 "event_date": event_date,
                 "sweep_count": row["sweep_count"],
                 "total_notional": round(row["total_notional"], 2),
+                "max_notional": round(row["max_notional"], 2) if row["max_notional"] else None,
                 "avg_price": round(row["vwap"], 2) if row["vwap"] else None,
                 "min_price": row["min_price"],
                 "max_price": row["max_price"],
@@ -1663,14 +1686,15 @@ def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None,
         try:
             c.execute("""
                 INSERT OR IGNORE INTO clusterbomb_events
-                (ticker, event_date, sweep_count, total_notional, avg_price,
-                 min_price, max_price, direction, is_rare, event_type,
+                (ticker, event_date, sweep_count, total_notional, max_notional,
+                 avg_price, min_price, max_price, direction, is_rare, event_type,
                  threshold_notional, threshold_sweeps, threshold_total,
                  sweep_ids, detected_at, dormancy_days)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 ev["ticker"], ev["event_date"], ev["sweep_count"],
-                ev["total_notional"], ev["avg_price"], ev["min_price"],
+                ev["total_notional"], ev["max_notional"],
+                ev["avg_price"], ev["min_price"],
                 ev["max_price"], ev["direction"], ev["is_rare"],
                 ev["event_type"], min_notional, 0, 0, "[]", detected_at,
                 ev.get("dormancy_days")
@@ -1727,6 +1751,7 @@ def detect_monster_sweeps(monster_min_notional=DEFAULT_MONSTER_MIN_NOTIONAL, tic
             trade_date,
             COUNT(*) as sweep_count,
             SUM(notional) as total_notional,
+            MAX(notional) as max_notional,
             SUM(price * size) / SUM(size) as vwap,
             MIN(price) as min_price,
             MAX(price) as max_price,
@@ -1755,11 +1780,16 @@ def detect_monster_sweeps(monster_min_notional=DEFAULT_MONSTER_MIN_NOTIONAL, tic
         ticker = row["ticker"]
         event_date = row["trade_date"]
 
-        # Step 1: Try to UPDATE existing event
+        # Step 1: Try to UPDATE existing event — also set max_notional
+        # (use the larger of existing max_notional and the monster sweep's max)
+        _monster_max = round(row["max_notional"], 2) if row["max_notional"] else None
         c.execute("""
-            UPDATE clusterbomb_events SET is_monster = 1
+            UPDATE clusterbomb_events SET is_monster = 1,
+                max_notional = CASE
+                    WHEN COALESCE(max_notional, 0) < COALESCE(?, 0) THEN ?
+                    ELSE max_notional END
             WHERE ticker = ? AND event_date = ?
-        """, (ticker, event_date))
+        """, (_monster_max, _monster_max, ticker, event_date))
 
         if c.rowcount > 0:
             updated += 1
@@ -1771,14 +1801,16 @@ def detect_monster_sweeps(monster_min_notional=DEFAULT_MONSTER_MIN_NOTIONAL, tic
             try:
                 c.execute("""
                     INSERT INTO clusterbomb_events
-                        (ticker, event_date, sweep_count, total_notional, avg_price,
+                        (ticker, event_date, sweep_count, total_notional,
+                         max_notional, avg_price,
                          min_price, max_price, direction, is_rare, is_monster,
                          event_type, threshold_notional, threshold_sweeps,
                          threshold_total, sweep_ids, detected_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1, 'monster_sweep', ?, 0, 0, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, 'monster_sweep', ?, 0, 0, ?, ?)
                 """, (
                     ticker, event_date, row["sweep_count"],
                     round(row["total_notional"], 2),
+                    round(row["max_notional"], 2) if row["max_notional"] else None,
                     round(row["vwap"], 4) if row["vwap"] else None,
                     round(row["min_price"], 4) if row["min_price"] else None,
                     round(row["max_price"], 4) if row["max_price"] else None,
@@ -2140,6 +2172,7 @@ def get_clusterbombs(ticker=None, date_from=None, date_to=None,
             "is_rare": bool(r["is_rare"]),
             "is_monster": bool(r["is_monster"]) if "is_monster" in r.keys() else False,
             "event_type": evt,
+            "max_notional": r["max_notional"] if "max_notional" in r.keys() else None,
             "rank": rk.get("rank"),
             "total_days": rk.get("total_days"),
             "current_price": current_price,
@@ -2262,8 +2295,9 @@ def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
         cb_where.append("(COALESCE(event_type,'clusterbomb') != 'clusterbomb' OR sweep_count >= ?)")
         cb_params.append(min_sweeps)
     if monster_min:
-        # Filter any event with is_monster flag (standalone OR CB+monster overlay)
-        cb_where.append("(COALESCE(is_monster, 0) = 0 AND COALESCE(event_type,'clusterbomb') != 'monster_sweep' OR total_notional >= ?)")
+        # Filter monster events by their largest individual sweep (max_notional),
+        # NOT by total day notional. Non-monster events pass through unaffected.
+        cb_where.append("(COALESCE(is_monster, 0) = 0 AND COALESCE(event_type,'clusterbomb') != 'monster_sweep' OR COALESCE(max_notional, total_notional) >= ?)")
         cb_params.append(monster_min)
     if rare_min:
         cb_where.append("(COALESCE(event_type,'clusterbomb') != 'rare_sweep' OR total_notional >= ?)")
@@ -2611,8 +2645,9 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
         where.append("(COALESCE(event_type,'clusterbomb') != 'clusterbomb' OR sweep_count >= ?)")
         params.append(min_sweeps)
     if monster_min:
-        # Filter any event with is_monster flag (standalone OR CB+monster overlay)
-        where.append("(COALESCE(is_monster, 0) = 0 AND COALESCE(event_type,'clusterbomb') != 'monster_sweep' OR total_notional >= ?)")
+        # Filter monster events by their largest individual sweep (max_notional),
+        # NOT by total day notional. Non-monster events pass through unaffected.
+        where.append("(COALESCE(is_monster, 0) = 0 AND COALESCE(event_type,'clusterbomb') != 'monster_sweep' OR COALESCE(max_notional, total_notional) >= ?)")
         params.append(monster_min)
     if rare_min:
         where.append("(COALESCE(event_type,'clusterbomb') != 'rare_sweep' OR total_notional >= ?)")
@@ -2670,7 +2705,7 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
                avg_price, min_price, max_price, direction, is_rare,
                COALESCE(is_monster, 0) as is_monster,
                COALESCE(event_type, 'clusterbomb') as event_type,
-               dormancy_days
+               dormancy_days, max_notional
         FROM clusterbomb_events
         WHERE {where_sql}
         ORDER BY event_date DESC{limit_clause}
@@ -2743,6 +2778,7 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
             "is_monster": bool(ev["is_monster"]),
             "event_type": ev["event_type"],
             "dormancy_days": ev["dormancy_days"],
+            "max_notional": ev["max_notional"],
             "current_price": current_price,
             "pct_gain": round(pct_gain, 2),
             "days_since": days_since,
