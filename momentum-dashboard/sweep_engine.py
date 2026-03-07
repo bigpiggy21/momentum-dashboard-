@@ -99,6 +99,32 @@ def get_sectors():
 
 
 # ---------------------------------------------------------------------------
+# ETF categories — curated grouping for the ETF sweeps page
+# ---------------------------------------------------------------------------
+
+ETF_CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "etf_categories.json")
+
+_DEFAULT_ETF_CATEGORIES = {
+    "Sector": ["XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLC", "XLB", "XLRE", "XLU"],
+    "Broad Market": ["SPY", "QQQ", "IWM", "DIA", "VOO", "VTI", "IVV"],
+    "Leveraged": ["TQQQ", "SQQQ", "SPXL", "SPXS", "SOXL", "SOXS", "UPRO", "SPXU", "LABU", "LABD"],
+    "Commodity": ["GLD", "SLV", "USO", "UNG", "IAU"],
+    "Bond": ["TLT", "TBT", "HYG", "JNK", "LQD", "AGG"],
+    "Crypto": ["IBIT", "GBTC", "BITO", "ETHE"],
+    "Volatility": ["VXX", "UVXY", "SVXY"],
+}
+
+
+def get_etf_categories():
+    """Load ETF category mapping. Falls back to defaults if no config file."""
+    try:
+        with open(ETF_CATEGORIES_PATH, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return dict(_DEFAULT_ETF_CATEGORIES)
+
+
+# ---------------------------------------------------------------------------
 # ETF ticker cache — fetched from Polygon reference API, cached to JSON
 # ---------------------------------------------------------------------------
 
@@ -395,10 +421,10 @@ DETECTION_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "sweep_detection
 
 
 def get_detection_config():
-    """Return detection config {stock: {...}}.
+    """Return detection config {stock: {...}, etf: {...}}.
 
-    Single-profile config (ETF profile removed). Maintains backward compat
-    with old flat or dual-profile config files on disk.
+    Dual-profile config for stock and ETF detection thresholds.
+    Maintains backward compat with old flat config files on disk.
     """
     stock_defaults = {
         "min_sweeps": DEFAULT_CB_MIN_SWEEPS,       # 3
@@ -408,15 +434,25 @@ def get_detection_config():
         "rare_min_notional": DEFAULT_CB_RARE_MIN_NOTIONAL,  # $1M — independent dormancy-break threshold
         "monster_min_notional": DEFAULT_MONSTER_MIN_NOTIONAL,  # $100M — single monster sweep
     }
-    config = {"stock": dict(stock_defaults)}
+    etf_defaults = {
+        "min_sweeps": 3,
+        "min_notional": 5_000_000,        # $5M — ETFs have higher volume
+        "min_total": 75_000_000,          # $75M
+        "rarity_days": 60,
+        "rare_min_notional": 3_000_000,   # $3M
+        "monster_min_notional": 250_000_000,  # $250M
+    }
+    config = {"stock": dict(stock_defaults), "etf": dict(etf_defaults)}
     try:
         with open(DETECTION_CONFIG_PATH, "r", encoding="utf-8") as f:
             saved = json.load(f)
         if "stock" in saved:
             config["stock"].update(saved["stock"])
-        else:
+        elif "min_sweeps" in saved:
             # Old flat format — treat as stock profile
             config["stock"].update(saved)
+        if "etf" in saved:
+            config["etf"].update(saved["etf"])
     except (FileNotFoundError, json.JSONDecodeError):
         pass
     return config
@@ -426,8 +462,10 @@ def save_detection_config(params):
     """Save detection config to disk.
 
     Accepts either:
-      {"stock": {...}}       — nested format
-      {"min_sweeps": 3, ...} — legacy flat
+      {"stock": {...}, "etf": {...}}  — nested format
+      {"stock": {...}}                — stock-only update
+      {"etf": {...}}                  — etf-only update
+      {"min_sweeps": 3, ...}          — legacy flat (treated as stock)
     """
     config = get_detection_config()
     _all_keys = ("min_sweeps", "min_notional", "min_total", "rarity_days",
@@ -436,10 +474,15 @@ def save_detection_config(params):
         for key in _all_keys:
             if key in params["stock"]:
                 config["stock"][key] = params["stock"][key]
-    else:
+    elif "etf" not in params:
+        # Legacy flat format — treat as stock
         for key in _all_keys:
             if key in params:
                 config["stock"][key] = params[key]
+    if "etf" in params and isinstance(params["etf"], dict):
+        for key in _all_keys:
+            if key in params["etf"]:
+                config["etf"][key] = params["etf"][key]
     with open(DETECTION_CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
     return config
@@ -1286,6 +1329,7 @@ def detect_clusterbombs(
     date_from=None,
     date_to=None,
     exclude_etfs=True,
+    etf_only=False,
 ):
     """
     Scan sweep_trades for clusterbomb events.
@@ -1342,8 +1386,11 @@ def detect_clusterbombs(
         ORDER BY trade_date DESC, total_notional DESC
     """, params + [min_sweeps, min_total]).fetchall()
 
-    # Filter out ETF tickers
-    if exclude_etfs:
+    # Filter ETF tickers
+    if etf_only:
+        etf_tickers = load_etf_set()
+        rows = [r for r in rows if r["ticker"] in etf_tickers] if etf_tickers else []
+    elif exclude_etfs:
         etf_tickers = load_etf_set()
         if etf_tickers:
             rows = [r for r in rows if r["ticker"] not in etf_tickers]
@@ -1504,7 +1551,8 @@ def _check_rarity(conn, ticker, event_date, min_notional, rarity_days):
 
 
 def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None,
-                           date_from=None, date_to=None, exclude_etfs=True):
+                           date_from=None, date_to=None, exclude_etfs=True,
+                           etf_only=False):
     """
     Detect days where a ticker had sweep activity after a long quiet period,
     regardless of whether it meets clusterbomb thresholds (min_sweeps / min_total).
@@ -1549,8 +1597,11 @@ def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None,
         ORDER BY ticker, trade_date
     """, params).fetchall()
 
-    # Filter out ETF tickers
-    if exclude_etfs:
+    # Filter ETF tickers
+    if etf_only:
+        etf_tickers = load_etf_set()
+        rows = [r for r in rows if r["ticker"] in etf_tickers] if etf_tickers else []
+    elif exclude_etfs:
         etf_tickers = load_etf_set()
         if etf_tickers:
             rows = [r for r in rows if r["ticker"] not in etf_tickers]
@@ -1618,7 +1669,8 @@ def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None,
 
 
 def detect_monster_sweeps(monster_min_notional=DEFAULT_MONSTER_MIN_NOTIONAL, tickers=None,
-                          date_from=None, date_to=None, exclude_etfs=True):
+                          date_from=None, date_to=None, exclude_etfs=True,
+                          etf_only=False):
     """
     Detect days where a single dark pool sweep exceeds the monster threshold.
 
@@ -1668,8 +1720,11 @@ def detect_monster_sweeps(monster_min_notional=DEFAULT_MONSTER_MIN_NOTIONAL, tic
         ORDER BY trade_date DESC, total_notional DESC
     """, params).fetchall()
 
-    # Filter out ETF tickers
-    if exclude_etfs:
+    # Filter ETF tickers
+    if etf_only:
+        etf_tickers = load_etf_set()
+        rows = [r for r in rows if r["ticker"] in etf_tickers] if etf_tickers else []
+    elif exclude_etfs:
         etf_tickers = load_etf_set()
         if etf_tickers:
             rows = [r for r in rows if r["ticker"] not in etf_tickers]
@@ -1732,42 +1787,68 @@ def detect_monster_sweeps(monster_min_notional=DEFAULT_MONSTER_MIN_NOTIONAL, tic
 # ---------------------------------------------------------------------------
 
 def detect_today():
-    """Run all detection passes on today's data only.
+    """Run all detection passes on today's data only (stocks + ETFs).
 
     Used by the live sweep daemon to detect events incrementally.
-    Returns dict of event counts: {clusterbomb: N, rare_sweep: N, monster_sweep: N}.
+    Returns dict of event counts for both stock and ETF detections.
     Safe to call repeatedly — INSERT OR IGNORE prevents duplicates.
     """
-    cfg = get_detection_config().get("stock", {})
+    full_cfg = get_detection_config()
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
+    # --- Stock detection (exclude ETFs) ---
+    cfg = full_cfg.get("stock", {})
     cbs = detect_clusterbombs(
         min_sweeps=cfg.get("min_sweeps", DEFAULT_CB_MIN_SWEEPS),
         min_notional=cfg.get("min_notional", DEFAULT_CB_MIN_NOTIONAL),
         min_total=cfg.get("min_total", DEFAULT_CB_MIN_TOTAL),
         rarity_days=cfg.get("rarity_days", DEFAULT_CB_RARITY_DAYS),
         rare_min_notional=cfg.get("rare_min_notional", DEFAULT_CB_RARE_MIN_NOTIONAL),
-        date_from=today,
-        date_to=today,
+        date_from=today, date_to=today,
+        exclude_etfs=True, etf_only=False,
     )
-
     rares = detect_rare_sweep_days(
         min_notional=cfg.get("rare_min_notional", DEFAULT_CB_RARE_MIN_NOTIONAL),
         rarity_days=cfg.get("rarity_days", DEFAULT_CB_RARITY_DAYS),
-        date_from=today,
-        date_to=today,
+        date_from=today, date_to=today,
+        exclude_etfs=True, etf_only=False,
     )
-
     monsters = detect_monster_sweeps(
         monster_min_notional=cfg.get("monster_min_notional", DEFAULT_MONSTER_MIN_NOTIONAL),
-        date_from=today,
-        date_to=today,
+        date_from=today, date_to=today,
+        exclude_etfs=True, etf_only=False,
+    )
+
+    # --- ETF detection (ETFs only, separate thresholds) ---
+    ecfg = full_cfg.get("etf", {})
+    etf_cbs = detect_clusterbombs(
+        min_sweeps=ecfg.get("min_sweeps", 3),
+        min_notional=ecfg.get("min_notional", 5_000_000),
+        min_total=ecfg.get("min_total", 75_000_000),
+        rarity_days=ecfg.get("rarity_days", 60),
+        rare_min_notional=ecfg.get("rare_min_notional", 3_000_000),
+        date_from=today, date_to=today,
+        exclude_etfs=False, etf_only=True,
+    )
+    etf_rares = detect_rare_sweep_days(
+        min_notional=ecfg.get("rare_min_notional", 3_000_000),
+        rarity_days=ecfg.get("rarity_days", 60),
+        date_from=today, date_to=today,
+        exclude_etfs=False, etf_only=True,
+    )
+    etf_monsters = detect_monster_sweeps(
+        monster_min_notional=ecfg.get("monster_min_notional", 250_000_000),
+        date_from=today, date_to=today,
+        exclude_etfs=False, etf_only=True,
     )
 
     return {
         "clusterbomb": len(cbs),
         "rare_sweep": len(rares),
         "monster_sweep": len(monsters),
+        "etf_clusterbomb": len(etf_cbs),
+        "etf_rare_sweep": len(etf_rares),
+        "etf_monster_sweep": len(etf_monsters),
     }
 
 
@@ -1940,13 +2021,21 @@ def get_ticker_day_ranks(tickers=None):
 
 def get_clusterbombs(ticker=None, date_from=None, date_to=None,
                      rare_only=False, limit=100, min_total=None,
-                     exclude_etfs=True):
+                     exclude_etfs=True, etf_only=False):
     """Get detected clusterbomb events, optionally filtered by min_total."""
     conn = _get_db()
     where = []
     params = []
 
-    if exclude_etfs and not ticker:
+    if etf_only and not ticker:
+        etf_tickers = sorted(load_etf_set())
+        if etf_tickers:
+            where.append(f"ticker IN ({','.join('?' * len(etf_tickers))})")
+            params.extend(etf_tickers)
+        else:
+            conn.close()
+            return []
+    elif exclude_etfs and not ticker:
         etf_tickers = load_etf_set()
         if etf_tickers:
             where.append(f"ticker NOT IN ({','.join('?' * len(etf_tickers))})")
@@ -2088,7 +2177,7 @@ def get_clusterbombs(ticker=None, date_from=None, date_to=None,
 
 def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
                     min_sweeps=None, monster_min=None, rare_min=None, rare_days=None,
-                    exclude_etfs=True, full_db=False):
+                    exclude_etfs=True, full_db=False, etf_only=False):
     """Get overview stats for the sweeps page header.
     Supports filtering by min_total, tickers list, date range, and per-type
     display filters so the stats bar reflects the currently active page filters.
@@ -2103,17 +2192,23 @@ def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
     if not date_from and not full_db:
         date_from = (datetime.now() - timedelta(days=730)).strftime("%Y-%m-%d")
 
-    # --- ETF exclusion ---
-    _etf_exclude_tickers = []
-    if exclude_etfs:
-        _etf_exclude_tickers = sorted(load_etf_set())
+    # --- ETF filtering ---
+    _etf_filter_tickers = []
+    _etf_filter_mode = None  # 'include' or 'exclude'
+    if etf_only:
+        _etf_filter_tickers = sorted(load_etf_set())
+        _etf_filter_mode = "include"
+    elif exclude_etfs:
+        _etf_filter_tickers = sorted(load_etf_set())
+        _etf_filter_mode = "exclude"
 
     # --- Single sweep_trades query for all stats ---
     sw_where = ["is_darkpool=1", "is_sweep=1"]
     sw_params = []
-    if _etf_exclude_tickers:
-        sw_where.append(f"ticker NOT IN ({','.join('?' * len(_etf_exclude_tickers))})")
-        sw_params.extend(_etf_exclude_tickers)
+    if _etf_filter_tickers:
+        op = "IN" if _etf_filter_mode == "include" else "NOT IN"
+        sw_where.append(f"ticker {op} ({','.join('?' * len(_etf_filter_tickers))})")
+        sw_params.extend(_etf_filter_tickers)
     if tickers:
         placeholders = ",".join("?" * len(tickers))
         sw_where.append(f"ticker IN ({placeholders})")
@@ -2138,9 +2233,10 @@ def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
     # --- Single clusterbomb_events query for CB + rare + monster counts ---
     cb_where = []
     cb_params = []
-    if _etf_exclude_tickers:
-        cb_where.append(f"ticker NOT IN ({','.join('?' * len(_etf_exclude_tickers))})")
-        cb_params.extend(_etf_exclude_tickers)
+    if _etf_filter_tickers:
+        op = "IN" if _etf_filter_mode == "include" else "NOT IN"
+        cb_where.append(f"ticker {op} ({','.join('?' * len(_etf_filter_tickers))})")
+        cb_params.extend(_etf_filter_tickers)
     if min_total is not None:
         cb_where.append("(total_notional >= ? OR COALESCE(is_monster, 0) = 1 OR is_rare = 1)")
         cb_params.append(min_total)
@@ -2470,7 +2566,7 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
                      limit=200, offset=0,
                      min_sweeps=None, monster_min=None,
                      rare_min=None, rare_days=None,
-                     exclude_etfs=True):
+                     exclude_etfs=True, etf_only=False):
     """
     Get clusterbomb events with current price, % gain, days since, and bias.
     Returns (events_list, total_count) sorted by date descending.
@@ -2517,8 +2613,16 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
         where.append("event_date <= ?")
         params.append(date_to)
 
-    # Exclude ETF tickers from results
-    if exclude_etfs:
+    # ETF ticker filtering
+    if etf_only:
+        etf_tickers = sorted(load_etf_set())
+        if etf_tickers:
+            placeholders_etf = ",".join("?" * len(etf_tickers))
+            where.append(f"ticker IN ({placeholders_etf})")
+            params.extend(etf_tickers)
+        else:
+            return [], 0
+    elif exclude_etfs:
         etf_tickers = load_etf_set()
         if etf_tickers:
             placeholders_etf = ",".join("?" * len(etf_tickers))

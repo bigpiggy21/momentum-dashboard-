@@ -6,7 +6,7 @@
      <script src="/static/header.js"></script>
 
    Set window._activePage before including to highlight the current page.
-   Valid values: 'settings','watchlists','log','search','bollingers','rs','hvc','sweeps','analysis','report','backtest','home'
+   Valid values: 'settings','watchlists','log','search','bollingers','rs','hvc','sweeps','etf-sweeps','analysis','report','backtest','home'
    ==================================================================== */
 
 (function(){
@@ -44,6 +44,7 @@
     + '<div class="section-label">INTELLIGENCE</div>'
     + '<div class="section-controls">'
     + btn('/sweeps', 'Dark Pool Sweeps', '&#x1F4A3; Darkpool Sweeps', 'sweeps', 'sweeps-highlight')
+    + btn('/etf-sweeps', 'ETF Dark Pool Sweeps', '&#x1F4C8; ETF Sweeps', 'etf-sweeps')
     + btn('/analysis', 'Sweep Analysis', '&#x1F4CA; Analysis', 'analysis')
     + '</div></div>'
 

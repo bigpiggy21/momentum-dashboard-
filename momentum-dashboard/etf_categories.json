@@ -1,0 +1,9 @@
+{
+  "Sector": ["XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLC", "XLB", "XLRE", "XLU"],
+  "Broad Market": ["SPY", "QQQ", "IWM", "DIA", "VOO", "VTI", "IVV"],
+  "Leveraged": ["TQQQ", "SQQQ", "SPXL", "SPXS", "SOXL", "SOXS", "UPRO", "SPXU", "LABU", "LABD"],
+  "Commodity": ["GLD", "SLV", "USO", "UNG", "IAU"],
+  "Bond": ["TLT", "TBT", "HYG", "JNK", "LQD", "AGG"],
+  "Crypto": ["IBIT", "GBTC", "BITO", "ETHE"],
+  "Volatility": ["VXX", "UVXY", "SVXY"]
+}

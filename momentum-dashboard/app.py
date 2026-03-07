@@ -204,7 +204,7 @@ from sweep_engine import (
     get_sweep_summary, get_sweep_detail, get_clusterbombs,
     get_sweep_stats, get_sweep_chart_data, check_api_access,
     get_tracker_data, rebuild_stats_cache, rebuild_daily_summary,
-    refresh_etf_cache, load_etf_set, purge_etf_events,
+    refresh_etf_cache, load_etf_set,
 )
 
 # Global scheduler instance
@@ -409,6 +409,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_page("hvc.html")
         elif path == "/sweeps":
             self.serve_page("sweeps.html")
+        elif path == "/etf-sweeps":
+            self.serve_page("etf_sweeps.html")
         elif path == "/analysis":
             self.serve_page("analysis.html")
         elif path == "/rs":
@@ -479,6 +481,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_live_sweep_get_config()
         elif path == "/api/sweeps/sectors":
             self.serve_sweep_sectors()
+        elif path == "/api/sweeps/etf-categories":
+            self.serve_etf_categories()
         elif path == "/api/analysis/river":
             self.serve_analysis_river(query)
         elif path == "/api/analysis/heatmap":
@@ -2452,12 +2456,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             rare_min = float((query or {}).get("rare_min", ["0"])[0]) or None
             rare_days = int((query or {}).get("rare_days", ["0"])[0]) or None
             full_db = (query or {}).get("full_db", ["0"])[0] == "1"
+            etf_only = (query or {}).get("etf_only", ["0"])[0] == "1"
 
             stats = get_sweep_stats(min_total=min_total, tickers=tickers,
                                     date_from=date_from, date_to=date_to,
                                     min_sweeps=min_sweeps, monster_min=monster_min,
                                     rare_min=rare_min, rare_days=rare_days,
-                                    full_db=full_db)
+                                    full_db=full_db,
+                                    exclude_etfs=not etf_only, etf_only=etf_only)
             self.send_json(stats)
         except Exception as e:
             self.send_json({"error": str(e)})
@@ -2503,9 +2509,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             limit = int((query or {}).get("limit", [200])[0])
             min_total_str = (query or {}).get("min_total", [None])[0]
             min_total = float(min_total_str) if min_total_str else None
+            etf_only = (query or {}).get("etf_only", ["0"])[0] == "1"
             data = get_clusterbombs(ticker=ticker, date_from=date_from,
                                     date_to=date_to, rare_only=rare_only,
-                                    limit=limit, min_total=min_total)
+                                    limit=limit, min_total=min_total,
+                                    exclude_etfs=not etf_only, etf_only=etf_only)
             self.send_json({"events": data, "count": len(data)})
         except Exception as e:
             self.send_json({"events": [], "count": 0, "error": str(e)})
@@ -2552,11 +2560,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             monster_min = float((query or {}).get("monster_min", ["0"])[0]) or None
             rare_min = float((query or {}).get("rare_min", ["0"])[0]) or None
             rare_days = int((query or {}).get("rare_days", ["0"])[0]) or None
+            etf_only = (query or {}).get("etf_only", ["0"])[0] == "1"
 
             # Check server-side cache
             cache_key = (min_total, tuple(tickers) if tickers else None,
                          date_from, date_to, limit, offset,
-                         min_sweeps, monster_min, rare_min, rare_days)
+                         min_sweeps, monster_min, rare_min, rare_days,
+                         etf_only)
             now = time.time()
             cached = _tracker_cache.get(cache_key)
             if cached and (now - cached["ts"]) < _TRACKER_CACHE_TTL:
@@ -2570,7 +2580,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                                              min_sweeps=min_sweeps,
                                              monster_min=monster_min,
                                              rare_min=rare_min,
-                                             rare_days=rare_days)
+                                             rare_days=rare_days,
+                                             exclude_etfs=not etf_only,
+                                             etf_only=etf_only)
             response = {"events": events, "total": total, "offset": offset}
 
             # Cache the response
@@ -3022,6 +3034,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         from sweep_engine import get_sectors
         try:
             self.send_json(get_sectors())
+        except Exception as e:
+            self.send_json({"error": str(e)})
+
+    def serve_etf_categories(self):
+        """GET /api/sweeps/etf-categories — return ETF category grouping."""
+        from sweep_engine import get_etf_categories
+        try:
+            self.send_json(get_etf_categories())
         except Exception as e:
             self.send_json({"error": str(e)})
 
@@ -3771,12 +3791,12 @@ def main():
     init_db()
     init_sweep_db()
 
-    # Refresh ETF ticker cache (skips if < 7 days old) and purge stale ETF events
+    # Refresh ETF ticker cache (skips if < 7 days old)
+    # Note: purge_etf_events() removed — ETF events now shown on ETF sweeps page
     try:
         refresh_etf_cache()
-        purge_etf_events()
     except Exception as _e:
-        print(f"⚠️  ETF cache/purge failed: {_e}")
+        print(f"⚠️  ETF cache refresh failed: {_e}")
 
     # Clear cache if requested
     if args.clear_cache:
