@@ -2150,7 +2150,7 @@ def get_clusterbombs(ticker=None, date_from=None, date_to=None,
         ticker = r["ticker"]
         avg_price = r["avg_price"] or 0
 
-        # --- Split adjustment ---
+        # --- Split adjustment (forward AND reverse splits) ---
         if avg_price > 0 and ticker not in _split_cache:
             _split_cache[ticker] = _load_daily_prices(ticker)
         split_factor = 1.0
@@ -2162,8 +2162,12 @@ def get_clusterbombs(ticker=None, date_from=None, date_to=None,
                 if adj_close > 0:
                     ratio = avg_price / adj_close
                     if ratio > 1.5:
+                        # Forward split (e.g. 10:1): raw price > adjusted
                         split_factor = round(ratio)
-        if split_factor > 1:
+                    elif ratio < 0.667:
+                        # Reverse split (e.g. 1:4, 1:10): raw price < adjusted
+                        split_factor = 1.0 / round(1.0 / ratio)
+        if split_factor != 1.0:
             avg_price = avg_price / split_factor
 
         # Current price + % gain + days since
@@ -2462,6 +2466,9 @@ def get_sweep_chart_data(ticker, date_from=None, date_to=None, timeframe="1D",
                 ratio = raw_price / adj_close
                 if ratio > 1.5:
                     sf = round(ratio)
+                    sm["price"] = round(raw_price / sf, 4)
+                elif ratio < 0.667:
+                    sf = 1.0 / round(1.0 / ratio)
                     sm["price"] = round(raw_price / sf, 4)
 
     # Merge per-ticker rank data into clusterbomb entries
@@ -2763,7 +2770,7 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
 
         # --- Split adjustment ---
         # Raw trade prices may be pre-split. Compare to split-adjusted candle
-        # data to detect and correct for stock splits.
+        # data to detect and correct for stock splits (forward AND reverse).
         if avg_price > 0 and ticker not in _split_cache:
             _split_cache[ticker] = _load_daily_prices(ticker)
         split_factor = 1.0
@@ -2777,9 +2784,13 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
                 if adj_close > 0:
                     ratio = avg_price / adj_close
                     if ratio > 1.5:
-                        # Round to nearest integer split ratio (e.g. 10:1, 4:1, 2:1)
+                        # Forward split (e.g. 10:1, 4:1): raw price > adjusted
                         split_factor = round(ratio)
-        if split_factor > 1:
+                    elif ratio < 0.667:
+                        # Reverse split (e.g. 1:4, 1:10): raw price < adjusted
+                        # split_factor < 1 so dividing by it multiplies up
+                        split_factor = 1.0 / round(1.0 / ratio)
+        if split_factor != 1.0:
             avg_price = avg_price / split_factor
 
         # Get current price from most recent candle in cache
