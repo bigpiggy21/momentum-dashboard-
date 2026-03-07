@@ -2353,12 +2353,15 @@ def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
 
 
 def get_sweep_chart_data(ticker, date_from=None, date_to=None, timeframe="1D",
-                         min_total=None):
+                         min_total=None, monster_min=None,
+                         min_sweeps=None, rare_min=None, rare_days=None):
     """
     Get sweep data formatted for chart overlay on candlestick.
     Returns sweeps as markers with price/size/time for chart rendering.
     Also returns clusterbomb dates for highlighting.
     If min_total is set, only clusterbombs with total_notional >= min_total are returned.
+    Per-type display filters (monster_min, min_sweeps, rare_min, rare_days)
+    filter their respective event types by the given thresholds.
     """
     conn = _get_db()
     params = [ticker]
@@ -2401,11 +2404,24 @@ def get_sweep_chart_data(ticker, date_from=None, date_to=None, timeframe="1D",
     if min_total is not None:
         cb_where += " AND (total_notional >= ? OR COALESCE(is_monster, 0) = 1 OR is_rare = 1)"
         cb_params.append(min_total)
+    # Per-type display filters (same logic as get_tracker_data)
+    if min_sweeps:
+        cb_where += " AND (COALESCE(event_type,'clusterbomb') != 'clusterbomb' OR sweep_count >= ?)"
+        cb_params.append(min_sweeps)
+    if monster_min:
+        cb_where += " AND (COALESCE(is_monster, 0) = 0 AND COALESCE(event_type,'clusterbomb') != 'monster_sweep' OR COALESCE(max_notional, total_notional) >= ?)"
+        cb_params.append(monster_min)
+    if rare_min:
+        cb_where += " AND (COALESCE(event_type,'clusterbomb') != 'rare_sweep' OR total_notional >= ?)"
+        cb_params.append(rare_min)
+    if rare_days:
+        cb_where += " AND (COALESCE(event_type,'clusterbomb') != 'rare_sweep' OR COALESCE(dormancy_days, 999) >= ?)"
+        cb_params.append(rare_days)
 
     cbs = conn.execute(f"""
         SELECT event_date, sweep_count, total_notional, direction, is_rare,
                COALESCE(event_type, 'clusterbomb') as event_type,
-               COALESCE(is_monster, 0) as is_monster
+               COALESCE(is_monster, 0) as is_monster, max_notional
         FROM clusterbomb_events
         WHERE ticker = ? {cb_where}
         ORDER BY event_date
@@ -2417,6 +2433,7 @@ def get_sweep_chart_data(ticker, date_from=None, date_to=None, timeframe="1D",
             "date": cb["event_date"],
             "sweep_count": cb["sweep_count"],
             "total_notional": cb["total_notional"],
+            "max_notional": cb["max_notional"],
             "direction": cb["direction"],
             "is_rare": bool(cb["is_rare"]),
             "event_type": cb["event_type"],

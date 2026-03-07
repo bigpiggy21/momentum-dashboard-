@@ -1530,6 +1530,15 @@ function loadChart(){
   var params = new URLSearchParams({ticker: ticker, timeframe: currentTimeframe, min_total: cbMin, etf_only: '1'});
   if(from) params.set('date_from', from);
   if(to) params.set('date_to', to);
+  // Pass per-type display filters so chart bubbles respect the same filters as cards
+  var _ms = parseInt(document.getElementById('trackerMinSweeps').value) || 0;
+  var _mm = (parseFloat(document.getElementById('trackerMonsterMin').value) || 0) * 1e6;
+  var _rm = (parseFloat(document.getElementById('trackerRareMin').value) || 0) * 1e6;
+  var _rd = parseInt(document.getElementById('trackerRareDays').value) || 0;
+  if(_ms > 0) params.set('min_sweeps', _ms);
+  if(_mm > 0) params.set('monster_min', _mm);
+  if(_rm > 0) params.set('rare_min', _rm);
+  if(_rd > 0) params.set('rare_days', _rd);
 
   fetch('/api/sweeps/chart?' + params.toString())
     .then(function(r){return r.json();})

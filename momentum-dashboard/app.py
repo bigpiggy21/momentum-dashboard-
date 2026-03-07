@@ -2533,8 +2533,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             timeframe = (query or {}).get("timeframe", ["1D"])[0]
             min_total_str = (query or {}).get("min_total", [None])[0]
             min_total = float(min_total_str) if min_total_str else None
+            # Per-type display filters (same as tracker endpoint)
+            min_sweeps = int((query or {}).get("min_sweeps", ["0"])[0]) or None
+            monster_min = float((query or {}).get("monster_min", ["0"])[0]) or None
+            rare_min = float((query or {}).get("rare_min", ["0"])[0]) or None
+            rare_days = int((query or {}).get("rare_days", ["0"])[0]) or None
             data = get_sweep_chart_data(ticker, date_from=date_from, date_to=date_to,
-                                        timeframe=timeframe, min_total=min_total)
+                                        timeframe=timeframe, min_total=min_total,
+                                        monster_min=monster_min, min_sweeps=min_sweeps,
+                                        rare_min=rare_min, rare_days=rare_days)
             self.send_json(data)
         except Exception as e:
             self.send_json({"sweeps": [], "clusterbombs": [], "error": str(e)})
