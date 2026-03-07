@@ -1,9 +1,13 @@
 {
+  "Broad Market": ["SPY", "QQQ", "IWM", "DIA", "MDY", "VOO", "VTI", "IVV", "RSP"],
   "Sector": ["XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLC", "XLB", "XLRE", "XLU"],
-  "Broad Market": ["SPY", "QQQ", "IWM", "DIA", "VOO", "VTI", "IVV"],
-  "Leveraged": ["TQQQ", "SQQQ", "SPXL", "SPXS", "SOXL", "SOXS", "UPRO", "SPXU", "LABU", "LABD"],
-  "Commodity": ["GLD", "SLV", "USO", "UNG", "IAU"],
-  "Bond": ["TLT", "TBT", "HYG", "JNK", "LQD", "AGG"],
+  "Thematic": ["SMH", "SOXX", "XBI", "ARKK", "KWEB", "TAN", "HACK", "JETS", "XHB", "KRE"],
+  "Fixed Income": ["TLT", "IEF", "SHY", "AGG", "BND", "HYG", "JNK", "LQD", "TIP", "TBT"],
+  "Developed Markets": ["EWU", "EWG", "EWQ", "EWI", "EWP", "EWL", "EWJ", "EWA", "EWC"],
+  "Emerging Markets": ["EEM", "FXI", "INDA", "EWZ", "EWW", "ECH", "EWY", "EWT", "THD", "EIDO", "EZA", "TUR", "EPOL", "KSA"],
+  "Commodity": ["GLD", "SLV", "IAU", "GDX", "GDXJ", "USO", "UNG", "CPER", "DBA", "URA", "PDBC"],
+  "Leveraged": ["TQQQ", "SQQQ", "SPXL", "SPXS", "SOXL", "SOXS", "UPRO", "SPXU", "LABU", "LABD", "TNA", "FNGU"],
   "Crypto": ["IBIT", "GBTC", "BITO", "ETHE"],
-  "Volatility": ["VXX", "UVXY", "SVXY"]
+  "Volatility": ["VIXY", "VXX", "UVXY", "SVXY"],
+  "Currency": ["UUP", "FXE", "FXY", "FXB"]
 }
