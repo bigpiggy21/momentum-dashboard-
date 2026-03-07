@@ -661,19 +661,35 @@ def init_sweep_db():
         c.execute("ALTER TABLE clusterbomb_events ADD COLUMN max_notional REAL")
         conn.commit()
         print("Added max_notional column to clusterbomb_events.")
-        # Backfill from sweep_trades — set max_notional to the largest individual
-        # dark pool sweep on that (ticker, date)
+
+    # Backfill max_notional for any events that still have NULL
+    # (runs every startup until fully backfilled, handles crash recovery)
+    null_count = c.execute(
+        "SELECT COUNT(*) FROM clusterbomb_events WHERE max_notional IS NULL"
+    ).fetchone()[0]
+    if null_count > 0:
+        print(f"Backfilling max_notional for {null_count} events...", flush=True)
+        # Use a pre-aggregated temp table for speed instead of correlated subquery
+        c.execute("""
+            CREATE TEMP TABLE _max_notionals AS
+            SELECT ticker, trade_date, MAX(notional) as max_n
+            FROM sweep_trades
+            WHERE is_darkpool = 1 AND is_sweep = 1
+            GROUP BY ticker, trade_date
+        """)
         c.execute("""
             UPDATE clusterbomb_events SET max_notional = (
-                SELECT MAX(notional) FROM sweep_trades
-                WHERE sweep_trades.ticker = clusterbomb_events.ticker
-                AND sweep_trades.trade_date = clusterbomb_events.event_date
-                AND is_darkpool = 1 AND is_sweep = 1
-            )
+                SELECT max_n FROM _max_notionals
+                WHERE _max_notionals.ticker = clusterbomb_events.ticker
+                AND _max_notionals.trade_date = clusterbomb_events.event_date
+            ) WHERE max_notional IS NULL
         """)
+        c.execute("DROP TABLE _max_notionals")
         conn.commit()
-        backfilled = c.execute("SELECT COUNT(*) FROM clusterbomb_events WHERE max_notional IS NOT NULL").fetchone()[0]
-        print(f"  Backfilled max_notional for {backfilled} existing events.")
+        filled = c.execute(
+            "SELECT COUNT(*) FROM clusterbomb_events WHERE max_notional IS NOT NULL"
+        ).fetchone()[0]
+        print(f"  Backfilled max_notional for {filled} events.", flush=True)
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS sweep_meta (
