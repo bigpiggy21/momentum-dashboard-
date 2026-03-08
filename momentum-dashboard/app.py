@@ -97,88 +97,23 @@ def _init_portfolio_db():
     conn.close()
 
 def _record_portfolio_snapshot(total_value):
-    """Record today's portfolio value. Baseline = first ever snapshot's total_value."""
+    """Record today's portfolio total_value. Computes % change from baseline (earliest snapshot)."""
     import sqlite3
     today = datetime.utcnow().strftime("%Y-%m-%d")
     conn = sqlite3.connect(DB_PATH, timeout=5)
-    # Check if today already recorded
+
+    # Get baseline = first snapshot's total_value
+    first = conn.execute("SELECT total_value FROM portfolio_snapshots ORDER BY date ASC LIMIT 1").fetchone()
+    baseline = first[0] if first else total_value
+    pct = round((total_value - baseline) / baseline * 100, 2) if baseline > 0 else 0.0
+
     existing = conn.execute("SELECT 1 FROM portfolio_snapshots WHERE date = ?", (today,)).fetchone()
     if existing:
-        # Update today's value (intraday refresh)
-        row = conn.execute("SELECT total_value FROM portfolio_snapshots ORDER BY date ASC LIMIT 1").fetchone()
-        baseline = row[0] if row else total_value
-        pct = round((total_value - baseline) / baseline * 100, 2) if baseline > 0 else 0.0
-        conn.execute("UPDATE portfolio_snapshots SET total_value = ?, total_pct = ? WHERE date = ?",
-                      (total_value, pct, today))
+        conn.execute("UPDATE portfolio_snapshots SET total_value = ?, baseline = ?, total_pct = ? WHERE date = ?",
+                      (total_value, baseline, pct, today))
     else:
-        # Get baseline from first snapshot
-        row = conn.execute("SELECT total_value FROM portfolio_snapshots ORDER BY date ASC LIMIT 1").fetchone()
-        baseline = row[0] if row else total_value
-        pct = round((total_value - baseline) / baseline * 100, 2) if baseline > 0 else 0.0
         conn.execute("INSERT INTO portfolio_snapshots (date, total_value, baseline, total_pct, note) VALUES (?, ?, ?, ?, ?)",
                       (today, total_value, baseline, pct, None))
-    conn.commit()
-    conn.close()
-
-def _backfill_portfolio_history(headers):
-    """One-time backfill: fetch T212 transactions to find deposits, create baseline snapshots."""
-    import sqlite3
-    conn = sqlite3.connect(DB_PATH, timeout=5)
-    # Only backfill if we have fewer than 2 snapshots
-    count = conn.execute("SELECT COUNT(*) FROM portfolio_snapshots").fetchone()[0]
-    if count >= 2:
-        conn.close()
-        return
-
-    base = "https://live.trading212.com/api/v0"
-    # Fetch all transactions (deposits/withdrawals)
-    transactions = []
-    url = f"{base}/history/transactions?limit=50"
-    for _ in range(20):  # max 20 pages
-        try:
-            resp = requests.get(url, headers=headers, timeout=15)
-            resp.raise_for_status()
-            data = resp.json()
-            items = data.get("items", [])
-            transactions.extend(items)
-            next_page = data.get("nextPagePath")
-            if not next_page or not items:
-                break
-            url = f"https://live.trading212.com{next_page}"
-            time.sleep(0.5)  # respect rate limits
-        except Exception:
-            break
-
-    # Build daily deposit totals
-    # Each transaction has: dateTime, amount, type (DEPOSIT/WITHDRAWAL)
-    from collections import defaultdict
-    daily_deposits = defaultdict(float)
-    running_total = 0.0
-    deposit_dates = []
-    for t in sorted(transactions, key=lambda x: x.get("dateTime", "")):
-        dt_str = t.get("dateTime", "")[:10]  # YYYY-MM-DD
-        amount = float(t.get("amount", 0))
-        running_total += amount
-        daily_deposits[dt_str] = running_total
-        deposit_dates.append(dt_str)
-
-    if not deposit_dates:
-        conn.close()
-        return
-
-    # Create snapshots for deposit dates (cash only, no positions yet = 0% gain)
-    first_date = deposit_dates[0]
-    baseline_value = daily_deposits[first_date]
-
-    for dt, cumulative in sorted(daily_deposits.items()):
-        existing = conn.execute("SELECT 1 FROM portfolio_snapshots WHERE date = ?", (dt,)).fetchone()
-        if not existing:
-            pct = round((cumulative - baseline_value) / baseline_value * 100, 2) if baseline_value > 0 else 0.0
-            conn.execute(
-                "INSERT INTO portfolio_snapshots (date, total_value, baseline, total_pct, note) VALUES (?, ?, ?, ?, ?)",
-                (dt, cumulative, baseline_value, pct, "deposit")
-            )
-
     conn.commit()
     conn.close()
 
@@ -3437,7 +3372,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             try:
                 _init_portfolio_db()
                 _record_portfolio_snapshot(total_value)
-                _backfill_portfolio_history(headers)
             except Exception:
                 pass  # don't break the main response
 
@@ -3497,11 +3431,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             except Exception:
                 pass
 
-            # Fetch order history (paginate)
+            # Fetch order history (paginate) — rate limit: 6 req/min
             all_orders = []
             url = f"{base}/equity/history/orders?limit=50"
-            for _ in range(20):  # max 1000 orders
+            for page_num in range(20):  # max 1000 orders
                 try:
+                    if page_num > 0:
+                        time.sleep(11)  # respect 6 req/min rate limit
                     resp = requests.get(url, headers=headers, timeout=15)
                     resp.raise_for_status()
                     data = resp.json()
@@ -3511,35 +3447,47 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     if not next_page or not items:
                         break
                     url = f"https://live.trading212.com{next_page}"
-                    time.sleep(0.5)
                 except Exception:
                     break
 
-            # Build trades list
+            # Build trades list — T212 returns nested {order: {...}, fill: {...}}
             trades = []
-            for o in all_orders:
-                fill_price = float(o.get("fillPrice") or 0)
+            for item in all_orders:
+                order = item.get("order", {})
+                fill = item.get("fill", {})
+
+                fill_price = float(fill.get("price") or 0)
                 if fill_price <= 0:
                     continue  # skip unfilled/cancelled
-                raw_ticker = o.get("ticker", "")
+
+                raw_ticker = order.get("ticker", "")
+                instrument = order.get("instrument", {})
+                ticker_name = instrument.get("name", "")
                 clean_ticker = raw_ticker.split("_")[0] if "_" in raw_ticker else raw_ticker
                 clean_ticker = clean_ticker.rstrip("abcdefghijklmnopqrstuvwxyz") or clean_ticker
 
-                order_type = o.get("type", "").upper()  # BUY / SELL
-                side = "Buy" if "BUY" in order_type else "Sell"
-                date_str = (o.get("dateCreated") or "")[:10]
+                side_str = order.get("side", "").upper()
+                side = "Buy" if side_str == "BUY" else "Sell"
+                date_str = (fill.get("filledAt") or order.get("createdAt") or "")[:10]
 
                 # Compute % gain
                 if side == "Buy" and raw_ticker in cur_prices:
                     cur_p = cur_prices[raw_ticker]["currentPrice"]
                     gain_pct = round((cur_p - fill_price) / fill_price * 100, 2) if fill_price > 0 else 0.0
+                elif side == "Sell":
+                    # For sells: use realisedProfitLoss from wallet impact
+                    wallet = fill.get("walletImpact", {})
+                    rpnl = float(wallet.get("realisedProfitLoss") or 0)
+                    net_val = float(wallet.get("netValue") or 0)
+                    cost = net_val - rpnl
+                    gain_pct = round(rpnl / cost * 100, 2) if cost > 0 else None
                 else:
-                    # For sells or unknown: can't easily compute without position history
                     gain_pct = None
 
                 trades.append({
                     "date": date_str,
                     "ticker": clean_ticker,
+                    "name": ticker_name,
                     "side": side,
                     "gain": gain_pct,
                 })

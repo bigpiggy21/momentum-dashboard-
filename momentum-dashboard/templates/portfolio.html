@@ -196,6 +196,7 @@ input,select,textarea,button{color-scheme:dark;}
             <tr>
               <th>Date</th>
               <th>Ticker</th>
+              <th>Name</th>
               <th>Side</th>
               <th class="col-right">Gain %</th>
             </tr>
@@ -437,6 +438,7 @@ input,select,textarea,button{color-scheme:dark;}
         html += '<tr>'
           + '<td>' + esc(t.date) + '</td>'
           + '<td class="col-ticker">' + esc(t.ticker) + '</td>'
+          + '<td class="col-name">' + esc(t.name || '') + '</td>'
           + '<td class="' + sideCls + '">' + esc(t.side) + '</td>'
           + '<td class="col-right col-gain ' + gainCls + '">' + gainStr + '</td>'
           + '</tr>';
