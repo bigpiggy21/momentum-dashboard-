@@ -360,7 +360,7 @@ td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;borde
 </select>
 <div class="filter-divider"></div>
 <label>Ticker(s)</label>
-<input type="text" id="tickerInput" placeholder="e.g. NVDA, AAPL" value="" style="width:130px;text-transform:uppercase;font-size:12px;font-weight:600;" title="Single ticker for chart, or comma-separated for batch fetch">
+<input type="text" id="tickerInput" placeholder="e.g. SPY, QQQ" value="" style="width:130px;text-transform:uppercase;font-size:12px;font-weight:600;" title="Single ticker for chart, or comma-separated for batch fetch">
 <span class="header-spinner" id="headerSpinner"></span>
 <div class="filter-divider"></div>
 <label>From</label>
@@ -407,8 +407,8 @@ td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;borde
       <div class="stat-item"><div class="stat-label">Sweeps</div><div class="stat-value accent" id="statSweeps">—</div></div>
       <div class="stat-item"><div class="stat-label">Notional</div><div class="stat-value green" id="statNotional">—</div></div>
       <div class="stat-item"><div class="stat-label">Daily</div><div class="stat-value text-amber" id="statDaily">—</div></div>
-      <div class="stat-item"><div class="stat-label">Rare</div><div class="stat-value purple" id="statRare">—</div></div>
       <div class="stat-item"><div class="stat-label">Single</div><div class="stat-value" style="color:#3b82f6;" id="statSingle">—</div></div>
+      <div class="stat-item"><div class="stat-label">Rare</div><div class="stat-value purple" id="statRare">—</div></div>
     </div>
   </div>
   <div class="tracker-tab-bar">
@@ -431,15 +431,6 @@ td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;borde
         <input type="number" class="filter-input" id="trackerMinSweeps" value="2" min="1" max="50" title="Min sweep count" oninput="debouncedTrackerRefresh()" style="width:40px;border-color:#f59e0b44;color:#f59e0b;">
       </div>
     </div>
-    <div class="filter-col" data-type="rare_sweep">
-      <button class="tracker-filter-btn flt-rare" id="filterRare" onclick="setTrackerTypeFilter('rare_sweep',this)">Rare</button>
-      <div class="filter-group">
-        <span class="filter-group-label" style="color:#a78bfa;">$M</span>
-        <input type="number" class="filter-input" id="trackerRareMin" value="1" min="0" step="0.5" title="Rare min notional ($M)" oninput="debouncedTrackerRefresh()" style="border-color:#a78bfa44;color:#a78bfa;">
-        <span class="filter-group-label" style="color:#a78bfa;">Days</span>
-        <input type="number" class="filter-input" id="trackerRareDays" value="60" min="5" max="365" title="Rare min dormancy days" oninput="debouncedTrackerRefresh()" style="border-color:#a78bfa44;color:#a78bfa;">
-      </div>
-    </div>
     <div class="filter-col" data-type="single">
       <button class="tracker-filter-btn flt-single" id="filterSingle" onclick="setTrackerTypeFilter('single',this)">Single</button>
       <div class="filter-group">
@@ -447,6 +438,15 @@ td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;borde
         <input type="number" class="filter-input" id="trackerRankFrom" value="1" min="1" title="Single rank from (top)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#3b82f644;color:#3b82f6;">
         <span class="filter-group-label" style="color:#3b82f6;">To</span>
         <input type="number" class="filter-input" id="trackerRankTo" value="50" min="1" title="Single rank to (bottom)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#3b82f644;color:#3b82f6;">
+      </div>
+    </div>
+    <div class="filter-col" data-type="rare_sweep">
+      <button class="tracker-filter-btn flt-rare" id="filterRare" onclick="setTrackerTypeFilter('rare_sweep',this)">Rare</button>
+      <div class="filter-group">
+        <span class="filter-group-label" style="color:#a78bfa;">$M</span>
+        <input type="number" class="filter-input" id="trackerRareMin" value="1" min="0" step="0.5" title="Rare min notional ($M)" oninput="debouncedTrackerRefresh()" style="border-color:#a78bfa44;color:#a78bfa;">
+        <span class="filter-group-label" style="color:#a78bfa;">Days</span>
+        <input type="number" class="filter-input" id="trackerRareDays" value="60" min="5" max="365" title="Rare min dormancy days" oninput="debouncedTrackerRefresh()" style="border-color:#a78bfa44;color:#a78bfa;">
       </div>
     </div>
     <div style="margin-left:auto;display:flex;align-items:center;gap:4px;align-self:center;">
@@ -534,8 +534,8 @@ td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;borde
       <span id="detailDateRange" style="font-size:9px;color:#555;font-weight:600;letter-spacing:0.3px;align-self:center;margin-right:4px;text-transform:uppercase;"></span>
       <button class="tab-btn dtab-all active" onclick="switchDetailFilter('all',this)">All</button>
       <button class="tab-btn dtab-daily" onclick="switchDetailFilter('daily',this)">Daily</button>
-      <button class="tab-btn dtab-rare" onclick="switchDetailFilter('rare_sweep',this)">Rare</button>
       <button class="tab-btn dtab-single" onclick="switchDetailFilter('single',this)">Single</button>
+      <button class="tab-btn dtab-rare" onclick="switchDetailFilter('rare_sweep',this)">Rare</button>
     </div>
 
     <!-- Events table (for _selectedTicker, filtered by type) -->
@@ -981,8 +981,8 @@ function renderDetailEvents(){
   var tabs = document.querySelectorAll('#detailTabBar .tab-btn');
   tabs[0].textContent = 'All (' + allCount + ')';
   tabs[1].textContent = 'Daily (' + dailyCount + ')';
-  tabs[2].textContent = 'Rare (' + rareCount + ')';
-  tabs[3].textContent = 'Single (' + singleCount + ')';
+  tabs[2].textContent = 'Single (' + singleCount + ')';
+  tabs[3].textContent = 'Rare (' + rareCount + ')';
 
   // Populate ticker stats strip (always from full _detailEvents, not filtered)
   var strip = document.getElementById('tickerStatsStrip');

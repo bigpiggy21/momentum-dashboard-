@@ -43,7 +43,7 @@
     + '<div class="header-section">'
     + '<div class="section-label">INTELLIGENCE</div>'
     + '<div class="section-controls">'
-    + btn('/sweeps', 'Dark Pool Sweeps', '&#x1F4A3; Darkpool Sweeps', 'sweeps', 'sweeps-highlight')
+    + btn('/sweeps', 'Dark Pool Sweeps', '&#x1F4A3; Darkpool Sweeps', 'sweeps')
     + btn('/etf-sweeps', 'ETF Dark Pool Sweeps', '&#x1F4C8; ETF Sweeps', 'etf-sweeps')
     + btn('/analysis', 'Sweep Analysis', '&#x1F4CA; Analysis', 'analysis')
     + '</div></div>'
