@@ -1746,6 +1746,39 @@ def _check_rarity(conn, ticker, event_date, min_notional, rarity_days):
         return 0
 
 
+def get_undetected_tickers(etf_only=False, exclude_etfs=True):
+    """Return list of tickers that have trade data in sweep_daily_summary
+    but zero events in clusterbomb_events. These are tickers that have been
+    fetched but never had detection run on them.
+    """
+    conn = _get_db()
+    etf_set = load_etf_set() if (etf_only or exclude_etfs) else set()
+
+    rows = conn.execute("""
+        SELECT DISTINCT s.ticker
+        FROM sweep_daily_summary s
+        LEFT JOIN clusterbomb_events e ON e.ticker = s.ticker
+        WHERE e.ticker IS NULL
+    """).fetchall()
+    conn.close()
+
+    tickers = [r[0] for r in rows]
+
+    # Apply ETF filtering
+    if etf_only:
+        tickers = [t for t in tickers if t in etf_set]
+    elif exclude_etfs:
+        tickers = [t for t in tickers if t not in etf_set]
+
+    if tickers:
+        print(f"[Undetected] Found {len(tickers)} tickers with trade data but no events: "
+              f"{', '.join(tickers[:20])}{'...' if len(tickers) > 20 else ''}", flush=True)
+    else:
+        print("[Undetected] All tickers with trade data already have events.", flush=True)
+
+    return tickers
+
+
 def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None,
                            date_from=None, date_to=None, exclude_etfs=True,
                            etf_only=False):

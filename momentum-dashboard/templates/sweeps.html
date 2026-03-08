@@ -633,9 +633,14 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
 
 
       <div class="settings-divider"></div>
-      <button class="settings-btn settings-btn-primary" id="btnRedetect" onclick="redetectClusterbombs()">
-        &#x1F50D; Re-detect All
-      </button>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="settings-btn settings-btn-primary" id="btnRedetectNew" onclick="redetectClusterbombs(true)" title="Only detect events for newly fetched tickers that have no existing events">
+          &#x1F50D; Detect New Tickers
+        </button>
+        <button class="settings-btn settings-btn-secondary" id="btnRedetectFull" onclick="redetectClusterbombs(false)" title="Wipe all events and rebuild from scratch (slow)" style="font-size:10px;">
+          &#x1F504; Full Re-detect
+        </button>
+      </div>
       <div class="settings-result" id="redetectResult"></div>
       <div style="margin-top:8px;">
         <button class="settings-btn settings-btn-secondary" onclick="saveDetectionConfig()" style="font-size:10px;">
@@ -2811,13 +2816,19 @@ function getDetectionParams(){
   };
 }
 
-function redetectClusterbombs(){
-  var btn = document.getElementById('btnRedetect');
+function redetectClusterbombs(newOnly){
+  var btnNew = document.getElementById('btnRedetectNew');
+  var btnFull = document.getElementById('btnRedetectFull');
   var result = document.getElementById('redetectResult');
   var params = getDetectionParams();
+  params.new_only = !!newOnly;
 
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Re-detecting...';
+  var activeBtn = newOnly ? btnNew : btnFull;
+  var origHTML = activeBtn.innerHTML;
+
+  btnNew.disabled = true;
+  btnFull.disabled = true;
+  activeBtn.innerHTML = '<span class="spinner"></span> ' + (newOnly ? 'Detecting new...' : 'Re-detecting all...');
   result.className = 'settings-result';
   result.style.display = 'none';
 
@@ -2828,8 +2839,9 @@ function redetectClusterbombs(){
   })
   .then(function(r){return r.json();})
   .then(function(d){
-    btn.disabled = false;
-    btn.innerHTML = '&#x1F50D; Re-detect All';
+    btnNew.disabled = false;
+    btnFull.disabled = false;
+    activeBtn.innerHTML = origHTML;
     if(d.ok){
       result.className = 'settings-result success';
       result.textContent = d.message;
@@ -2843,8 +2855,9 @@ function redetectClusterbombs(){
     }
   })
   .catch(function(e){
-    btn.disabled = false;
-    btn.innerHTML = '&#x1F50D; Re-detect All';
+    btnNew.disabled = false;
+    btnFull.disabled = false;
+    activeBtn.innerHTML = origHTML;
     result.className = 'settings-result error';
     result.textContent = 'Error: ' + e;
     result.style.display = 'block';
