@@ -753,13 +753,9 @@ var _pendingFocusDate = null;
 var _selectedTicker = null;
 var _detailTypeFilter = 'all';
 var _detailEvents = [];  // cached events for client-side type filtering
-var _markerSeries = null;
+// Per-layer marker series: each layer gets its own dot + text series
+var _layerSeries = {daily: {dot: null, text: null}, single: {dot: null, text: null}, rare: {dot: null, text: null}};
 var _markerList = [];
-var _textMarkerSeries = null;
-var _allDotData = [];        // Full unfiltered dot data/markers for bubble filter
-var _allDotMarkers = [];
-var _allTextData = [];
-var _allTextMarkers = [];
 var _highlightTimer = null;
 
 // Timeframe map: days -> default timeframe
@@ -1574,6 +1570,7 @@ function renderChart(ticker, chartData, containerId){
     chartInstance.remove();
     chartInstance = null;
   }
+  _layerSeries = {daily: {dot: null, text: null}, single: {dot: null, text: null}, rare: {dot: null, text: null}};
   container.innerHTML = '';
   // Re-inject cumulative legend overlay (cleared by innerHTML='')
   var _cumLegDiv = document.createElement('div');
@@ -1816,19 +1813,21 @@ function renderChart(ticker, chartData, containerId){
   _applyVolData();
 
   // Build markers — single circle at VWAP + combined text label below
-  // Series 1: Main circle bubble at VWAP price
-  var dotSeries = chartInstance.addLineSeries({
-    color: 'transparent', lineWidth: 0,
-    lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
-  });
-  // Series 2: Text label below bubble (invisible shape, text only)
-  var textSeries = chartInstance.addLineSeries({
-    color: 'transparent', lineWidth: 0,
-    lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
-  });
+  // Per-layer series: each layer gets its own dot + text series
+  var _addInvisibleSeries = function(){
+    return chartInstance.addLineSeries({
+      color: 'transparent', lineWidth: 0,
+      lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+    });
+  };
+  // Create 3 layer pairs (daily=amber, single=blue, rare=purple)
+  _layerSeries.daily = {dot: _addInvisibleSeries(), text: _addInvisibleSeries(),
+                         dotData: [], dotMarkers: [], textData: [], textMarkers: []};
+  _layerSeries.single = {dot: _addInvisibleSeries(), text: _addInvisibleSeries(),
+                          dotData: [], dotMarkers: [], textData: [], textMarkers: []};
+  _layerSeries.rare = {dot: _addInvisibleSeries(), text: _addInvisibleSeries(),
+                        dotData: [], dotMarkers: [], textData: [], textMarkers: []};
 
-  var dotData = [], dotMarkers = [];
-  var textData = [], textMarkers = [];
   var cbDateKeys = Object.keys(cbDates).sort();
 
   cbDateKeys.forEach(function(d){
@@ -1839,7 +1838,6 @@ function renderChart(ticker, chartData, containerId){
     // For intraday charts, find the correct hourly candle using VWAP-weighted time
     if(isIntraday && sweepInfo && sweepInfo.vwapTimeSec && candlesByDate[d]){
       var dayCandles = candlesByDate[d];
-      // Find the candle whose hour window contains the weighted avg sweep time
       var bestCandle = null;
       var bestDist = Infinity;
       for(var ci = 0; ci < dayCandles.length; ci++){
@@ -1855,10 +1853,8 @@ function renderChart(ticker, chartData, containerId){
       if(bestCandle) candle = bestCandle;
     }
 
-    // Skip if no candle found at all (can't position marker)
     if(!candle && !sweepInfo) return;
 
-    // Use sweep VWAP if available, else candle midpoint, snapped to candle range
     var markerPrice = 0;
     if(sweepInfo && sweepInfo.vwap > 0){
       markerPrice = sweepInfo.vwap;
@@ -1869,7 +1865,6 @@ function renderChart(ticker, chartData, containerId){
       markerPrice = Math.max(candle.low, Math.min(candle.high, markerPrice));
     }
 
-    // Find the correct time value — must match chart's time type
     var timeVal = d;
     if(candle) timeVal = candle.time;
     else if(typeof chartData.candles[0]?.time === 'number'){
@@ -1880,65 +1875,74 @@ function renderChart(ticker, chartData, containerId){
     var dailyRank = cb.daily_rank;
     var sweepRank = cb.sweep_rank;
     var isRare = cb.is_rare == 1;
-
-    // Build independent layer tags
-    var tags = [];
-    if(dailyRank != null) tags.push('daily');
-    if(sweepRank != null) tags.push('single');
-    if(isRare) tags.push('rare');
-
-    // Visual colour priority: rare (purple) > single (blue) > daily (amber)
-    var dotSize, dotColor;
-    if(isRare){
-      dotSize = 6;
-      dotColor = 'rgba(167, 139, 250, 0.75)';
-    } else if(sweepRank != null){
-      if(sweepRank <= 3){        dotSize = 9; dotColor = 'rgba(29, 78, 216, 0.90)'; }
-      else if(sweepRank <= 10){  dotSize = 8; dotColor = 'rgba(59, 130, 246, 0.85)'; }
-      else if(sweepRank <= 25){  dotSize = 7; dotColor = 'rgba(96, 165, 250, 0.80)'; }
-      else {                     dotSize = 6; dotColor = 'rgba(147, 197, 253, 0.70)'; }
-    } else if(dailyRank != null){
-      if(dailyRank <= 3){        dotSize = 9; dotColor = 'rgba(255, 215, 0, 0.85)'; }
-      else if(dailyRank <= 10){  dotSize = 7; dotColor = 'rgba(251, 191, 36, 0.75)'; }
-      else if(dailyRank <= 25){  dotSize = 7; dotColor = 'rgba(245, 158, 11, 0.70)'; }
-      else {                     dotSize = 6; dotColor = 'rgba(245, 158, 11, 0.60)'; }
-    } else {
-      dotSize = 5; dotColor = 'rgba(100, 116, 139, 0.50)';
-    }
-    var textColor = isRare ? '#c4b5fd' : (sweepRank != null) ? '#3b82f6' : '#f59e0b';
-
-    // Main bubble at VWAP — dynamic size & shape
-    dotData.push({time: timeVal, value: markerPrice, _tags: tags});
-    dotMarkers.push({
-      time: timeVal, position: 'inBar', color: dotColor,
-      shape: 'circle', text: '', size: dotSize, _tags: tags,
-    });
-
-    // Combined text label below bubble
     var textAnchor = candle ? candle.low : markerPrice;
     var label = fmt$(cb.total_notional);
-    if(dailyRank != null) label += '  D#' + dailyRank;
-    if(sweepRank != null) label += '  S#' + sweepRank;
-    textData.push({time: timeVal, value: textAnchor, _tags: tags});
-    textMarkers.push({
-      time: timeVal, position: 'belowBar', color: textColor,
-      shape: 'circle', text: label, size: 0, _tags: tags,
-    });
+
+    // --- DAILY layer (amber/yellow) ---
+    if(dailyRank != null){
+      var dSize, dColor;
+      if(dailyRank <= 3){        dSize = 9; dColor = 'rgba(255, 215, 0, 0.85)'; }
+      else if(dailyRank <= 10){  dSize = 7; dColor = 'rgba(251, 191, 36, 0.75)'; }
+      else if(dailyRank <= 25){  dSize = 7; dColor = 'rgba(245, 158, 11, 0.70)'; }
+      else {                     dSize = 6; dColor = 'rgba(245, 158, 11, 0.60)'; }
+      _layerSeries.daily.dotData.push({time: timeVal, value: markerPrice});
+      _layerSeries.daily.dotMarkers.push({
+        time: timeVal, position: 'inBar', color: dColor,
+        shape: 'circle', text: '', size: dSize,
+      });
+      _layerSeries.daily.textData.push({time: timeVal, value: textAnchor});
+      _layerSeries.daily.textMarkers.push({
+        time: timeVal, position: 'belowBar', color: '#f59e0b',
+        shape: 'circle', text: label + '  D#' + dailyRank, size: 0,
+      });
+    }
+
+    // --- SINGLE layer (blue) ---
+    if(sweepRank != null){
+      var sSize, sColor;
+      if(sweepRank <= 3){        sSize = 9; sColor = 'rgba(29, 78, 216, 0.90)'; }
+      else if(sweepRank <= 10){  sSize = 8; sColor = 'rgba(59, 130, 246, 0.85)'; }
+      else if(sweepRank <= 25){  sSize = 7; sColor = 'rgba(96, 165, 250, 0.80)'; }
+      else {                     sSize = 6; sColor = 'rgba(147, 197, 253, 0.70)'; }
+      _layerSeries.single.dotData.push({time: timeVal, value: markerPrice});
+      _layerSeries.single.dotMarkers.push({
+        time: timeVal, position: 'inBar', color: sColor,
+        shape: 'circle', text: '', size: sSize,
+      });
+      _layerSeries.single.textData.push({time: timeVal, value: textAnchor});
+      _layerSeries.single.textMarkers.push({
+        time: timeVal, position: 'belowBar', color: '#3b82f6',
+        shape: 'circle', text: label + '  S#' + sweepRank, size: 0,
+      });
+    }
+
+    // --- RARE layer (purple) ---
+    if(isRare){
+      _layerSeries.rare.dotData.push({time: timeVal, value: markerPrice});
+      _layerSeries.rare.dotMarkers.push({
+        time: timeVal, position: 'inBar', color: 'rgba(167, 139, 250, 0.75)',
+        shape: 'circle', text: '', size: 6,
+      });
+      _layerSeries.rare.textData.push({time: timeVal, value: textAnchor});
+      _layerSeries.rare.textMarkers.push({
+        time: timeVal, position: 'belowBar', color: '#c4b5fd',
+        shape: 'circle', text: label + '  [R]', size: 0,
+      });
+    }
   });
 
-  console.log('[Chart] ' + dotMarkers.length + ' CB markers rendered (of ' + Object.keys(cbDates).length + ' CB dates)');
-
+  // Sort and apply each layer
   var sortFn = function(a,b){ return a.time < b.time ? -1 : a.time > b.time ? 1 : 0; };
-  dotData.sort(sortFn); dotMarkers.sort(sortFn);
-  textData.sort(sortFn); textMarkers.sort(sortFn);
+  var totalMarkers = 0;
+  ['daily','single','rare'].forEach(function(layer){
+    var L = _layerSeries[layer];
+    L.dotData.sort(sortFn); L.dotMarkers.sort(sortFn);
+    L.textData.sort(sortFn); L.textMarkers.sort(sortFn);
+    totalMarkers += L.dotMarkers.length;
+  });
+  console.log('[Chart] ' + totalMarkers + ' markers across 3 layers (of ' + Object.keys(cbDates).length + ' event dates)');
 
-  // Store full unfiltered sets globally for bubble filter
-  _allDotData = dotData; _allDotMarkers = dotMarkers;
-  _allTextData = textData; _allTextMarkers = textMarkers;
-  _markerSeries = dotSeries;
-  _textMarkerSeries = textSeries;
-
-  // Apply current bubble filter (also sets _markerList for focus/highlight)
+  // Apply current bubble filter (shows/hides layers)
   _applyBubbleFilter();
 
   // --- Cumulative DP sweep notional line (toggled via Total Notional click) ---
@@ -2152,41 +2156,25 @@ function cycleBubbles(){
 }
 
 function _applyBubbleFilter(){
-  if(!_markerSeries || !_textMarkerSeries) return;
-  if(_bubbleFilter === 'off'){
-    _markerSeries.setData([]);
-    _markerSeries.setMarkers([]);
-    _textMarkerSeries.setData([]);
-    _textMarkerSeries.setMarkers([]);
-    _markerList = [];
-    return;
-  }
-  var fDot = [], fDotM = [], fTxt = [], fTxtM = [];
-  for(var i = 0; i < _allDotData.length; i++){
-    var tags = _allDotMarkers[i]._tags || [];
-    var pass = _bubbleFilter === 'all' || tags.indexOf(_bubbleFilter) >= 0;
-    if(pass){
-      fDot.push(_allDotData[i]);
-      fDotM.push(_allDotMarkers[i]);
-      fTxt.push(_allTextData[i]);
-      fTxtM.push(_allTextMarkers[i]);
+  _markerList = [];
+  var layers = ['daily','single','rare'];
+  layers.forEach(function(layer){
+    var L = _layerSeries[layer];
+    if(!L || !L.dot || !L.text) return;
+    var show = (_bubbleFilter === 'all' || _bubbleFilter === layer);
+    if(show && _bubbleFilter !== 'off' && L.dotData.length > 0){
+      L.dot.setData(L.dotData);
+      L.dot.setMarkers(L.dotMarkers);
+      L.text.setData(L.textData);
+      L.text.setMarkers(L.textMarkers);
+      _markerList = _markerList.concat(L.dotMarkers);
+    } else {
+      L.dot.setData([]);
+      L.dot.setMarkers([]);
+      L.text.setData([]);
+      L.text.setMarkers([]);
     }
-  }
-  if(fDot.length > 0){
-    _markerSeries.setData(fDot);
-    _markerSeries.setMarkers(fDotM);
-  } else {
-    _markerSeries.setData([]);
-    _markerSeries.setMarkers([]);
-  }
-  if(fTxt.length > 0){
-    _textMarkerSeries.setData(fTxt);
-    _textMarkerSeries.setMarkers(fTxtM);
-  } else {
-    _textMarkerSeries.setData([]);
-    _textMarkerSeries.setMarkers([]);
-  }
-  _markerList = fDotM;
+  });
 }
 
 // 30-WEEK WEIGHTED MOVING AVERAGE
@@ -2479,7 +2467,15 @@ function focusChartOnDate(dateStr){
       if(mDate === dateStr) targetIdx = i;
     });
 
-    if(targetIdx >= 0 && _markerSeries){
+    if(targetIdx >= 0){
+      // Find which layer series owns this marker
+      var ownerLayer = null;
+      ['daily','single','rare'].forEach(function(layer){
+        var L = _layerSeries[layer];
+        if(L && L.dotMarkers && L.dotMarkers.indexOf(_markerList[targetIdx]) >= 0) ownerLayer = L;
+      });
+      if(!ownerLayer) return;
+
       // Save originals
       var origColor = _markerList[targetIdx].color;
       var origSize  = _markerList[targetIdx].size;
@@ -2487,7 +2483,7 @@ function focusChartOnDate(dateStr){
       // Flash: bright white, larger
       _markerList[targetIdx].color = '#ffffff';
       _markerList[targetIdx].size  = 5;
-      _markerSeries.setMarkers(_markerList.slice());
+      ownerLayer.dot.setMarkers(ownerLayer.dotMarkers.slice());
 
       // Clear any previous highlight timer
       if(_highlightTimer) clearTimeout(_highlightTimer);
@@ -2497,7 +2493,7 @@ function focusChartOnDate(dateStr){
         if(_markerList[targetIdx]){
           _markerList[targetIdx].color = origColor;
           _markerList[targetIdx].size  = origSize;
-          _markerSeries.setMarkers(_markerList.slice());
+          ownerLayer.dot.setMarkers(ownerLayer.dotMarkers.slice());
         }
         _highlightTimer = null;
       }, 2000);
