@@ -1042,7 +1042,7 @@ function renderDetailEvents(){
       + '<td class="mono col-key">' + ev.date + '</td>'
       + '<td>' + typeTag + '</td>'
       + '<td class="mono col-key">' + rankLabel + '</td>'
-      + '<td class="mono text-right"><span class="' + notionalClass(ev.total_notional) + '">' + fmt$(ev.total_notional) + '</span></td>'
+      + '<td class="mono text-right"><span class="' + notionalClass((hasSingle && !hasDaily && ev.max_notional) ? ev.max_notional : ev.total_notional) + '">' + fmt$((hasSingle && !hasDaily && ev.max_notional) ? ev.max_notional : ev.total_notional) + '</span></td>'
       + '<td class="mono text-right col-key">' + ev.sweep_count + '</td>'
       + '<td class="mono text-right col-key">$' + (ev.avg_price||0).toFixed(2) + '</td>'
       + '<td class="mono text-right col-key">$' + (ev.current_price||0).toFixed(2) + '</td>'
@@ -1371,7 +1371,10 @@ function renderTrackerCards(containerId, events, showRemove){
     if(hasDaily) typeTag += ' <span class="daily-flag">D#' + ev.daily_rank + '</span>';
     if(hasSingle) typeTag += ' <span class="single-flag">S#' + ev.sweep_rank + '</span>';
     if(isRare) typeTag += ' <span class="rare-flag">R</span>';
-    var totalLabel = 'Total';
+    // For Single-only events, show max_notional (the individual trade that earned the rank)
+    // For Daily events (or combined), show total_notional (aggregate day total)
+    var displayNotional = (hasSingle && !hasDaily && ev.max_notional) ? ev.max_notional : ev.total_notional;
+    var totalLabel = (hasSingle && !hasDaily) ? 'Print' : 'Total';
     var totalColor = '';
     // Border priority: rare > single > daily > default
     var cardBorder = isRare ? 'border-left:3px solid #a78bfa;' : hasSingle ? 'border-left:3px solid #3b82f6;' : hasDaily ? 'border-left:3px solid #f59e0b;' : 'border-left:3px solid #1e1e2e;';
@@ -1395,7 +1398,7 @@ function renderTrackerCards(containerId, events, showRemove){
       + '<div class="tracker-card-body">'
       // Left column: notional / sweep stats
       + '<div class="tracker-col-left">'
-      + '<div class="tracker-stat-row"><span class="tracker-label">' + totalLabel + '</span><span class="tracker-value amber" ' + totalColor + '>' + fmt$(ev.total_notional) + '</span></div>'
+      + '<div class="tracker-stat-row"><span class="tracker-label">' + totalLabel + '</span><span class="tracker-value amber" ' + totalColor + '>' + fmt$(displayNotional) + '</span></div>'
       + '<div class="tracker-stat-row"><span class="tracker-label">Sweeps</span><span class="tracker-value">' + ev.sweep_count + '</span></div>'
       + '<div class="tracker-stat-row"><span class="tracker-label">Daily Rank</span><span class="tracker-value amber">' + (hasDaily ? '#' + ev.daily_rank : '—') + '</span></div>'
       + '</div>'
@@ -1925,7 +1928,8 @@ function renderChart(ticker, chartData, containerId){
     var sweepRank = cb.sweep_rank;
     var isRare = cb.is_rare == 1;
     var textAnchor = candle ? candle.low : markerPrice;
-    var label = fmt$(cb.total_notional);
+    var dailyLabel = fmt$(cb.total_notional);
+    var singleLabel = cb.max_notional ? fmt$(cb.max_notional) : fmt$(cb.total_notional);
 
     // --- DAILY layer (amber/yellow) — respect rank range from filter ---
     if(dailyRank != null && dailyRank >= _chartDailyFrom && dailyRank <= _chartDailyTo){
@@ -1942,7 +1946,7 @@ function renderChart(ticker, chartData, containerId){
       _layerSeries.daily.textData.push({time: timeVal, value: textAnchor});
       _layerSeries.daily.textMarkers.push({
         time: timeVal, position: 'belowBar', color: '#f59e0b',
-        shape: 'circle', text: label + '  D#' + dailyRank, size: 0,
+        shape: 'circle', text: dailyLabel + '  D#' + dailyRank, size: 0,
       });
     }
 
@@ -1961,7 +1965,7 @@ function renderChart(ticker, chartData, containerId){
       _layerSeries.single.textData.push({time: timeVal, value: textAnchor});
       _layerSeries.single.textMarkers.push({
         time: timeVal, position: 'belowBar', color: '#3b82f6',
-        shape: 'circle', text: label + '  S#' + sweepRank, size: 0,
+        shape: 'circle', text: singleLabel + '  S#' + sweepRank, size: 0,
       });
     }
 
@@ -1975,7 +1979,7 @@ function renderChart(ticker, chartData, containerId){
       _layerSeries.rare.textData.push({time: timeVal, value: textAnchor});
       _layerSeries.rare.textMarkers.push({
         time: timeVal, position: 'belowBar', color: '#c4b5fd',
-        shape: 'circle', text: label + '  [R]', size: 0,
+        shape: 'circle', text: dailyLabel + '  [R]', size: 0,
       });
     }
   });
