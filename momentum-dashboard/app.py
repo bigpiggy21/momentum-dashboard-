@@ -205,6 +205,7 @@ from sweep_engine import (
     get_sweep_stats, get_sweep_chart_data, check_api_access,
     get_tracker_data, rebuild_stats_cache, rebuild_daily_summary,
     refresh_etf_cache, load_etf_set,
+    load_ticker_names, refresh_ticker_names,
 )
 
 # Global scheduler instance
@@ -485,6 +486,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_sweep_sectors()
         elif path == "/api/sweeps/etf-categories":
             self.serve_etf_categories()
+        elif path == "/api/ticker-names":
+            self.serve_ticker_names()
         elif path == "/api/analysis/river":
             self.serve_analysis_river(query)
         elif path == "/api/analysis/heatmap":
@@ -3157,6 +3160,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_json({"error": str(e)})
 
+    def serve_ticker_names(self):
+        """GET /api/ticker-names — return cached ticker name map {ticker: name}."""
+        try:
+            names = load_ticker_names()
+            self.send_json(names)
+        except Exception as e:
+            self.send_json({"error": str(e)})
+
     def serve_analysis_river(self, query=None):
         """GET /api/analysis/river — aggregated sweep data for river/stream chart."""
         from sweep_engine import get_river_data, init_sweep_db
@@ -3965,6 +3976,12 @@ def main():
         refresh_etf_cache()
     except Exception as _e:
         print(f"⚠️  ETF cache refresh failed: {_e}")
+
+    # Refresh ticker name cache (skips if < 7 days old)
+    try:
+        refresh_ticker_names()
+    except Exception as _e:
+        print(f"⚠️  Ticker names refresh failed: {_e}")
 
     # Clear cache if requested
     if args.clear_cache:

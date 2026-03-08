@@ -232,6 +232,94 @@ def is_etf(ticker):
     """Check if a ticker is an ETF."""
     return ticker in load_etf_set()
 
+
+# ---------------------------------------------------------------------------
+# Ticker name cache — human-readable names from Polygon reference API
+# ---------------------------------------------------------------------------
+
+_TICKER_NAMES_PATH = os.path.join(PRICE_CACHE_DIR, "ticker_names.json")
+_ticker_names = None  # Lazy-loaded dict
+
+def load_ticker_names():
+    """Load cached ticker names. Returns dict {ticker: name}."""
+    global _ticker_names
+    if _ticker_names is not None:
+        return _ticker_names
+    if os.path.isfile(_TICKER_NAMES_PATH):
+        try:
+            with open(_TICKER_NAMES_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            _ticker_names = data.get("names", {})
+            return _ticker_names
+        except Exception as e:
+            print(f"[TickerNames] Failed to load cache: {e}")
+    _ticker_names = {}
+    return _ticker_names
+
+
+def refresh_ticker_names(force=False):
+    """Fetch ticker names from Polygon reference API for all tickers we track.
+
+    Queries both ETF and stock types. Caches to JSON.
+    Skips if cache is fresh (< 7 days) unless force=True.
+    """
+    global _ticker_names
+
+    if not force and os.path.isfile(_TICKER_NAMES_PATH):
+        try:
+            mtime = os.path.getmtime(_TICKER_NAMES_PATH)
+            age_days = (_time.time() - mtime) / 86400
+            if age_days < 7:
+                return load_ticker_names()
+        except Exception:
+            pass
+
+    print("[TickerNames] Fetching ticker names from Polygon...", flush=True)
+    api_key = MASSIVE_API_KEY
+    base = MASSIVE_BASE_URL.replace("/v2", "/v3")
+    names = {}
+    session = _get_session()
+
+    for ticker_type in ["ETF", "CS"]:  # ETFs + Common Stocks
+        url = f"{base}/reference/tickers?type={ticker_type}&market=stocks&active=true&limit=1000&apiKey={api_key}"
+        pages = 0
+        while url:
+            try:
+                resp = session.get(url, timeout=15)
+                resp.raise_for_status()
+                data = resp.json()
+                for r in data.get("results", []):
+                    if "ticker" in r and "name" in r:
+                        names[r["ticker"]] = r["name"]
+                pages += 1
+                next_url = data.get("next_url")
+                if next_url:
+                    url = f"{next_url}&apiKey={api_key}" if "apiKey" not in next_url else next_url
+                else:
+                    url = None
+            except Exception as e:
+                print(f"[TickerNames] API error ({ticker_type} page {pages + 1}): {e}")
+                break
+        print(f"[TickerNames] {ticker_type}: {pages} pages, {len(names)} total so far", flush=True)
+
+    if names:
+        os.makedirs(PRICE_CACHE_DIR, exist_ok=True)
+        cache_data = {
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "count": len(names),
+            "names": names,
+        }
+        with open(_TICKER_NAMES_PATH, "w", encoding="utf-8") as f:
+            json.dump(cache_data, f)
+        _ticker_names = names
+        print(f"[TickerNames] Cached {len(names)} ticker names", flush=True)
+    else:
+        print("[TickerNames] Warning: got 0 names from API, keeping old cache")
+        return load_ticker_names()
+
+    return _ticker_names
+
+
 def purge_etf_events():
     """Remove ETF-based events from clusterbomb_events table.
     Returns count of deleted events."""
