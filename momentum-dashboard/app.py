@@ -3289,7 +3289,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "cashPct": cash_pct,
                 "investedPct": invested_pct,
                 "positions": pos_list,
-                "updatedAt": datetime.now(timezone.utc).isoformat(),
+                "updatedAt": datetime.utcnow().isoformat() + "Z",
             }
 
             _portfolio_cache = {"data": result, "ts": time.time()}
