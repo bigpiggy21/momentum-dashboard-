@@ -1877,20 +1877,29 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
     c = conn.cursor()
 
     # Build WHERE clause for sweep_trades
-    trade_where = ["is_darkpool = 1", "is_sweep = 1"]
-    trade_params = []
+    # IMPORTANT: date_from/date_to must NOT filter the ranking CTE — rankings
+    # must always consider ALL historical trades. Date filters only restrict
+    # which results get processed, so incremental runs rank today's trades
+    # against the full history.
+    cte_where = ["is_darkpool = 1", "is_sweep = 1"]
+    cte_params = []
     if tickers:
         placeholders = ",".join("?" * len(tickers))
-        trade_where.append(f"ticker IN ({placeholders})")
-        trade_params.extend(tickers)
-    if date_from:
-        trade_where.append("trade_date >= ?")
-        trade_params.append(date_from)
-    if date_to:
-        trade_where.append("trade_date <= ?")
-        trade_params.append(date_to)
+        cte_where.append(f"ticker IN ({placeholders})")
+        cte_params.extend(tickers)
 
-    trade_where_sql = " AND ".join(trade_where)
+    cte_where_sql = " AND ".join(cte_where)
+
+    # Date filter for outer query only (restricts which results we process)
+    outer_where = []
+    outer_params = []
+    if date_from:
+        outer_where.append("trade_date >= ?")
+        outer_params.append(date_from)
+    if date_to:
+        outer_where.append("trade_date <= ?")
+        outer_params.append(date_to)
+    outer_where_sql = (" AND " + " AND ".join(outer_where)) if outer_where else ""
 
     # Compute per-ticker rankings using window function, then aggregate to day level
     print(f"Ranked sweep detection: ranking trades (limit top {rank_limit})...", flush=True)
@@ -1901,7 +1910,7 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
             SELECT ticker, trade_date, notional, id,
                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY notional DESC) as trade_rank
             FROM sweep_trades
-            WHERE {trade_where_sql}
+            WHERE {cte_where_sql}
         )
         SELECT
             ticker,
@@ -1912,10 +1921,10 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
             SUM(notional) as total_notional,
             GROUP_CONCAT(id) as sweep_ids
         FROM ranked_trades
-        WHERE trade_rank <= ?
+        WHERE trade_rank <= ?{outer_where_sql}
         GROUP BY ticker, trade_date
         ORDER BY best_rank
-    """, trade_params + [rank_limit]).fetchall()
+    """, cte_params + [rank_limit] + outer_params).fetchall()
     _tickers_in_result = len(set(r["ticker"] for r in rows))
     print(f"Ranked sweep detection: query done in {_time.time()-_t0:.1f}s — "
           f"{len(rows)} day-events across {_tickers_in_result} tickers", flush=True)
@@ -2023,20 +2032,29 @@ def detect_ranked_daily(rank_limit=100, min_sweeps=2, tickers=None,
     c = conn.cursor()
 
     # Build WHERE for sweep_daily_summary
-    sw_where = [f"sweep_count >= {min_sweeps}"]
-    sw_params = []
+    # IMPORTANT: date_from/date_to must NOT filter the ranking CTE — rankings
+    # must always consider ALL historical data. Date filters only restrict which
+    # results get processed (outer WHERE), so incremental runs (e.g. today only)
+    # still rank today's data against the full history.
+    cte_where = [f"sweep_count >= {min_sweeps}"]
+    cte_params = []
     if tickers:
         placeholders = ",".join("?" * len(tickers))
-        sw_where.append(f"ticker IN ({placeholders})")
-        sw_params.extend(tickers)
-    if date_from:
-        sw_where.append("trade_date >= ?")
-        sw_params.append(date_from)
-    if date_to:
-        sw_where.append("trade_date <= ?")
-        sw_params.append(date_to)
+        cte_where.append(f"ticker IN ({placeholders})")
+        cte_params.extend(tickers)
 
-    sw_where_sql = " AND ".join(sw_where)
+    cte_where_sql = " AND ".join(cte_where)
+
+    # Date filter for outer query only (restricts which results we process)
+    outer_where = ["day_rank <= ?"]
+    outer_params = [rank_limit]
+    if date_from:
+        outer_where.append("trade_date >= ?")
+        outer_params.append(date_from)
+    if date_to:
+        outer_where.append("trade_date <= ?")
+        outer_params.append(date_to)
+    outer_where_sql = " AND ".join(outer_where)
 
     print(f"Ranked daily detection: ranking days (limit top {rank_limit}, "
           f"min_sweeps={min_sweeps})...", flush=True)
@@ -2049,14 +2067,14 @@ def detect_ranked_daily(rank_limit=100, min_sweeps=2, tickers=None,
                    min_price, max_price,
                    ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY total_notional DESC) as day_rank
             FROM sweep_daily_summary
-            WHERE {sw_where_sql}
+            WHERE {cte_where_sql}
         )
         SELECT ticker, trade_date, day_rank, total_notional, sweep_count,
                vwap, min_price, max_price
         FROM ranked_days
-        WHERE day_rank <= ?
+        WHERE {outer_where_sql}
         ORDER BY day_rank
-    """, sw_params + [rank_limit]).fetchall()
+    """, cte_params + outer_params).fetchall()
 
     # Filter ETF tickers
     if etf_only:
@@ -2209,13 +2227,13 @@ def detect_today():
     ecfg = full_cfg.get("etf", {})
     etf_daily = detect_ranked_daily(
         rank_limit=100,
-        min_sweeps=ecfg.get("min_sweeps_daily", 2),
+        min_sweeps=ecfg.get("min_sweeps_daily", 1),
         date_from=today, date_to=today,
         exclude_etfs=False, etf_only=True,
     )
     etf_rares = detect_rare_sweep_days(
-        min_notional=ecfg.get("rare_min_notional", 3_000_000),
-        rarity_days=ecfg.get("rarity_days", 60),
+        min_notional=ecfg.get("rare_min_notional", 1_000_000),
+        rarity_days=ecfg.get("rarity_days", 20),
         date_from=today, date_to=today,
         exclude_etfs=False, etf_only=True,
     )

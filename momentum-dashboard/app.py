@@ -2773,12 +2773,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         detect_monster_sweeps(monster_min_notional=float(_sm), tickers=tickers)
                     # ETF detection pass — daily ranked + rare + single ranked
                     ecfg = cfg.get("etf", {})
-                    detect_ranked_daily(rank_limit=100, min_sweeps=2,
+                    detect_ranked_daily(rank_limit=100, min_sweeps=1,
                                         tickers=tickers,
                                         exclude_etfs=False, etf_only=True)
                     detect_rare_sweep_days(
-                        min_notional=float(ecfg.get("rare_min_notional", 3_000_000)),
-                        rarity_days=int(ecfg.get("rarity_days", 60)),
+                        min_notional=float(ecfg.get("rare_min_notional", 1_000_000)),
+                        rarity_days=int(ecfg.get("rarity_days", 20)),
                         tickers=tickers, exclude_etfs=False, etf_only=True,
                     )
                     detect_ranked_sweeps(rank_limit=100, tickers=tickers,
@@ -3272,13 +3272,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 # Daily ranked (replaces clusterbombs for ETFs)
                 etf_daily = detect_ranked_daily(
                     rank_limit=100,
-                    min_sweeps=2,
+                    min_sweeps=1,
                     tickers=all_tickers,
                     exclude_etfs=False, etf_only=True,
                 )
                 # Rare sweep days for ETFs
-                _rare_not = float((etf_params or {}).get("rare_min_notional", 3_000_000))
-                _rare_days = int((etf_params or {}).get("rarity_days", 60))
+                _rare_not = float((etf_params or {}).get("rare_min_notional", 1_000_000))
+                _rare_days = int((etf_params or {}).get("rarity_days", 20))
                 etf_rare = detect_rare_sweep_days(
                     min_notional=_rare_not,
                     rarity_days=_rare_days,
