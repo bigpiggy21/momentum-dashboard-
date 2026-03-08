@@ -3246,7 +3246,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return
 
             cash_pct = round(free_cash / total_value * 100, 2)
-            invested_pct = round(invested / total_value * 100, 2)
+            invested_pct = round(100 - cash_pct, 2)  # ensures cash + invested = 100%
 
             # Load ticker names for display
             from sweep_engine import load_ticker_names as _load_names
