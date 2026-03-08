@@ -418,10 +418,7 @@ td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;borde
   <div class="tracker-type-filter">
     <div class="filter-col filter-col-all" style="gap:2px;">
       <button class="tracker-filter-btn flt-all active" id="filterAll" onclick="setTrackerTypeFilter('all',this)">All</button>
-      <div style="display:flex;gap:2px;">
-        <button class="tracker-nav-btn" id="navPrev" onclick="navigateCards(-1)" title="Previous ticker (←)">&#x25C0;</button>
-        <button class="tracker-nav-btn" id="navNext" onclick="navigateCards(1)" title="Next ticker (→)">&#x25B6;</button>
-      </div>
+      <button class="tracker-nav-btn" id="btnCycleLayer" onclick="cycleLayerFilter()" title="Cycle: Daily → Single → Rare → All">&#x25B6;</button>
     </div>
     <div class="filter-col" data-type="daily">
       <button class="tracker-filter-btn flt-daily" id="filterDaily" onclick="setTrackerTypeFilter('daily',this)">Daily</button>
@@ -1426,21 +1423,27 @@ function selectTrackerTicker(ticker){
   loadDetailTable();
 }
 
-function navigateCards(dir){
-  // Get visible cards in the active tracker body
-  var activeBody = document.getElementById('trackerStocksBody');
-  if(activeBody.style.display === 'none') activeBody = document.getElementById('trackerFavsBody');
-  var cards = activeBody.querySelectorAll('.tracker-card[data-ticker]');
-  if(cards.length === 0) return;
-  var tickers = [];
-  cards.forEach(function(c){ tickers.push(c.getAttribute('data-ticker')); });
-  var idx = _selectedTicker ? tickers.indexOf(_selectedTicker) : -1;
-  var next = idx + dir;
-  if(next < 0) next = tickers.length - 1;
-  if(next >= tickers.length) next = 0;
-  selectTrackerTicker(tickers[next]);
-  // Scroll the selected card into view
-  cards[next].scrollIntoView({block:'nearest',behavior:'smooth'});
+var _layerCycle = ['daily','single','rare','all'];
+var _layerCycleIdx = 3; // start at 'all'
+function cycleLayerFilter(){
+  _layerCycleIdx = (_layerCycleIdx + 1) % _layerCycle.length;
+  var target = _layerCycle[_layerCycleIdx];
+  if(target === 'all'){
+    _activeLayers = {daily: true, single: true, rare: true};
+  } else {
+    _activeLayers = {daily: target === 'daily', single: target === 'single', rare: target === 'rare'};
+  }
+  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare;
+  document.getElementById('filterAll').classList.toggle('active', allOn);
+  document.getElementById('filterDaily').classList.toggle('active', _activeLayers.daily);
+  document.getElementById('filterSingle').classList.toggle('active', _activeLayers.single);
+  document.getElementById('filterRare').classList.toggle('active', _activeLayers.rare);
+  _syncFilterGroupDim();
+  var filtered = filterByType(_allTrackerEvents);
+  document.getElementById('stocksCount').textContent = filtered.length + (_trackerTotal > _trackerOffset ? '+' : '');
+  renderTrackerCards('trackerStocksBody', filtered, false);
+  renderLoadMoreBtn();
+  _applyBubbleFilter();
 }
 
 // ====================================================================
