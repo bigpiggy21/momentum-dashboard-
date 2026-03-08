@@ -752,6 +752,7 @@ var _pendingFocusDate = null;
 var _selectedTicker = null;
 var _detailTypeFilter = 'all';
 var _detailEvents = [];  // cached events for client-side type filtering
+var _tickerNames = {};   // {ticker: "Company Name"} — loaded once from API
 var _markerSeries = null;
 var _markerList = [];
 var _textMarkerSeries = null;
@@ -1363,7 +1364,7 @@ function renderTrackerCards(containerId, events, showRemove){
     html += '<div class="tracker-card' + (_selectedTicker === ev.ticker ? ' selected' : '') + '" data-ticker="' + ev.ticker + '" style="' + cardBorder + '" onclick="selectTrackerTicker(\'' + ev.ticker + '\')">'
       // --- Header: TICKER [BULL/BEAR] [% Now] [Days Ago]     ★ date ---
       + '<div class="tracker-card-head">'
-      + '<span class="tracker-ticker">' + ev.ticker
+      + '<span class="tracker-ticker" title="' + (_tickerNames[ev.ticker] || ev.ticker) + '">' + ev.ticker
       +   '<span class="tracker-pct ' + pctClass + '">' + pctSign + (ev.pct_gain||0).toFixed(1) + '%</span>'
       +   typeTag
       +   '<span class="tracker-price-inline"><span class="price-val">$' + (ev.avg_price||0).toFixed(2) + '</span><span class="price-arrow">\u2192</span><span class="price-val">$' + (ev.current_price||0).toFixed(2) + '</span></span>'
@@ -1438,6 +1439,12 @@ function hideLoading(){
 // ====================================================================
 function loadAll(){
   showLoading();
+  // Load ticker names if not yet loaded
+  if(Object.keys(_tickerNames).length === 0){
+    fetch('/api/ticker-names').then(function(r){return r.json();}).then(function(d){
+      if(d && !d.error) _tickerNames = d;
+    }).catch(function(){});
+  }
   loadStats();
   loadTrackerPanels();
   loadFavouritesTab();
@@ -1514,8 +1521,16 @@ function loadChart(){
   var ticker = _selectedTicker;
   if(!ticker) return;
 
-  document.getElementById('chartTickerLabel').textContent = ticker;
-  if(isChartMaximized) document.getElementById('overlayTickerLabel').textContent = ticker;
+  var _tname = _tickerNames[ticker];
+  var _labelEl = document.getElementById('chartTickerLabel');
+  _labelEl.textContent = ticker;
+  _labelEl.title = _tname || ticker;
+  if(_tname) _labelEl.innerHTML = ticker + ' <span style="font-size:12px;color:#888;font-weight:400;">' + _tname + '</span>';
+  if(isChartMaximized){
+    var _oEl = document.getElementById('overlayTickerLabel');
+    _oEl.textContent = ticker;
+    if(_tname) _oEl.innerHTML = ticker + ' <span style="font-size:12px;color:#888;font-weight:400;">' + _tname + '</span>';
+  }
 
   // Chart has its own date range based on currentChartDays — independent of the filter bar
   var today = new Date();
