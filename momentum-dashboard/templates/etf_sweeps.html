@@ -147,10 +147,10 @@ input,select,textarea,button{color-scheme:dark;}
 .chart-setting-btn{background:#14141e;color:#777;border:1px solid #1e1e2e;padding:3px 8px;border-radius:3px;font-size:10px;font-weight:600;cursor:pointer;height:24px;display:inline-flex;align-items:center;gap:3px;text-transform:uppercase;letter-spacing:0.3px;}
 .chart-setting-btn:hover{color:#ccc;background:#1a1a26;border-color:#2a2a3a;}
 .chart-setting-btn.active{color:#f59e0b;background:#1a1a26;border-color:#f59e0b44;}
-.tracker-type-filter{padding:6px 14px 8px;border-bottom:1px solid #1e1e2e;flex-shrink:0;display:flex;align-items:stretch;gap:6px;flex-wrap:wrap;}
-.filter-col{display:flex;flex-direction:column;align-items:stretch;gap:4px;background:#0d0d14;border:1px solid #1a1a28;border-radius:5px;padding:4px 6px;}
+.tracker-type-filter{padding:6px 10px 8px;border-bottom:1px solid #1e1e2e;flex-shrink:0;display:flex;align-items:stretch;gap:4px;}
+.filter-col{display:flex;flex-direction:column;align-items:stretch;gap:4px;background:#0d0d14;border:1px solid #1a1a28;border-radius:5px;padding:4px 5px;min-width:0;flex-shrink:1;}
 .filter-col .tracker-filter-btn{width:100%;justify-content:center;}
-.filter-col .filter-group{display:inline-flex;align-items:center;justify-content:center;gap:3px;white-space:nowrap;height:22px;}
+.filter-col .filter-group{display:inline-flex;align-items:center;justify-content:center;gap:2px;white-space:nowrap;height:22px;}
 .filter-col-all .tracker-filter-btn{flex:1;}
 .filter-group-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;}
 .filter-input{width:56px;font-size:11px;font-weight:700;font-family:'Consolas',monospace;text-align:center;background:#14141e;padding:2px 6px;border-radius:4px;height:22px;border-width:1px;border-style:solid;-moz-appearance:textfield;}
@@ -444,16 +444,16 @@ td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;borde
       <button class="tracker-filter-btn flt-rare" id="filterRare" onclick="setTrackerTypeFilter('rare_sweep',this)">Rare</button>
       <div class="filter-group">
         <span class="filter-group-label" style="color:#a78bfa;">$M</span>
-        <input type="number" class="filter-input" id="trackerRareMin" value="1" min="0" step="0.5" title="Rare min notional ($M)" oninput="debouncedTrackerRefresh()" style="border-color:#a78bfa44;color:#a78bfa;">
+        <input type="number" class="filter-input" id="trackerRareMin" value="1" min="0" step="0.5" title="Rare min notional ($M)" oninput="debouncedTrackerRefresh()" style="width:36px;border-color:#a78bfa44;color:#a78bfa;">
         <span class="filter-group-label" style="color:#a78bfa;">Days</span>
-        <input type="number" class="filter-input" id="trackerRareDays" value="20" min="5" max="365" title="Rare min dormancy days" oninput="debouncedTrackerRefresh()" style="border-color:#a78bfa44;color:#a78bfa;">
+        <input type="number" class="filter-input" id="trackerRareDays" value="20" min="5" max="365" title="Rare min dormancy days" oninput="debouncedTrackerRefresh()" style="width:36px;border-color:#a78bfa44;color:#a78bfa;">
       </div>
     </div>
-    <div style="margin-left:auto;display:flex;align-items:center;gap:4px;align-self:center;">
-      <select class="profile-select" id="profileSelect" onchange="applyFilterProfile(this.value)" title="Filter profiles">
+    <div style="display:flex;align-items:center;gap:2px;align-self:center;flex-shrink:0;margin-left:auto;">
+      <select class="profile-select" id="profileSelect" onchange="applyFilterProfile(this.value)" title="Filter profiles" style="max-width:62px;padding:2px 2px;">
         <option value="Default">Default</option>
       </select>
-      <button class="profile-save-btn" onclick="saveCurrentProfile()" title="Save current filters as profile">&#x1F4BE;</button>
+      <button class="profile-save-btn" onclick="saveCurrentProfile()" title="Save current filters as profile" style="width:20px;height:20px;font-size:10px;">&#x1F4BE;</button>
     </div>
   </div>
   <div class="tracker-body" id="trackerStocksBody">
