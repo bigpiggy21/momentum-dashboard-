@@ -629,7 +629,7 @@ td .rare-flag,td .ranked-flag{font-size:9px;padding:1px 4px;border-radius:2px;ma
         <div class="settings-divider" style="margin:6px 0;"></div>
         <div class="settings-row">
           <div><div class="settings-label" style="color:#ef4444;">Ranked Sweep Depth</div><div class="settings-label-sub">Top N trades per ticker to track</div></div>
-          <input type="number" class="settings-input settings-input-wide" id="settRankedDepth" value="200" min="10" max="500" title="e.g. 50, 100, 200">
+          <input type="number" class="settings-input settings-input-wide" id="settRankedDepth" value="100" min="10" max="500" title="e.g. 50, 100, 200">
         </div>
       </div>
 
@@ -2807,7 +2807,7 @@ function loadDetectionConfig(){
       if(document.getElementById('settRareNotionalStock'))
         document.getElementById('settRareNotionalStock').value = fmtSettingVal(s.rare_min_notional || 1000000);
       if(document.getElementById('settRankedDepth'))
-        document.getElementById('settRankedDepth').value = 200;
+        document.getElementById('settRankedDepth').value = 100;
     })
     .catch(function(e){ console.error('Load detection config error:', e); });
 }

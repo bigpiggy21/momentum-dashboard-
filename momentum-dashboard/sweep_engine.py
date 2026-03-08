@@ -1852,7 +1852,7 @@ def detect_monster_sweeps(monster_min_notional=DEFAULT_MONSTER_MIN_NOTIONAL, tic
     return events
 
 
-def detect_ranked_sweeps(rank_limit=200, tickers=None,
+def detect_ranked_sweeps(rank_limit=100, tickers=None,
                          date_from=None, date_to=None,
                          exclude_etfs=True, etf_only=False):
     """
@@ -1887,6 +1887,9 @@ def detect_ranked_sweeps(rank_limit=200, tickers=None,
     trade_where_sql = " AND ".join(trade_where)
 
     # Compute per-ticker rankings using window function, then aggregate to day level
+    print(f"Ranked sweep detection: ranking trades (limit top {rank_limit})...", flush=True)
+    import time as _time
+    _t0 = _time.time()
     rows = c.execute(f"""
         WITH ranked_trades AS (
             SELECT ticker, trade_date, notional, id,
@@ -1907,6 +1910,9 @@ def detect_ranked_sweeps(rank_limit=200, tickers=None,
         GROUP BY ticker, trade_date
         ORDER BY best_rank
     """, trade_params + [rank_limit]).fetchall()
+    _tickers_in_result = len(set(r["ticker"] for r in rows))
+    print(f"Ranked sweep detection: query done in {_time.time()-_t0:.1f}s — "
+          f"{len(rows)} day-events across {_tickers_in_result} tickers", flush=True)
 
     # Filter ETF tickers
     if etf_only:
@@ -1921,7 +1927,11 @@ def detect_ranked_sweeps(rank_limit=200, tickers=None,
     inserted = 0
     detected_at = datetime.now(timezone.utc).isoformat()
 
-    for row in rows:
+    _total_rows = len(rows)
+    for _i, row in enumerate(rows):
+        if _i > 0 and _i % 500 == 0:
+            print(f"  Ranked sweep detection: processing {_i}/{_total_rows} "
+                  f"({updated} updated, {inserted} inserted)...", flush=True)
         ticker = row["ticker"]
         event_date = row["trade_date"]
         best_rank = row["best_rank"]
@@ -2063,7 +2073,7 @@ def detect_today():
         exclude_etfs=False, etf_only=True,
     )
     etf_ranked = detect_ranked_sweeps(
-        rank_limit=200,
+        rank_limit=100,
         date_from=today, date_to=today,
         exclude_etfs=False, etf_only=True,
     )

@@ -2709,7 +2709,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                             tickers=tickers, exclude_etfs=False, etf_only=True,
                         )
                         # Ranked sweeps for ETFs (replaces monster for ETFs)
-                        detect_ranked_sweeps(rank_limit=200, tickers=tickers,
+                        detect_ranked_sweeps(rank_limit=100, tickers=tickers,
                                              exclude_etfs=False, etf_only=True)
                     _clear_fetch_job()  # fetch complete — remove job file
                     with _sweep_fetch_lock:
@@ -3215,7 +3215,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     )
                     # Ranked sweeps for ETFs (replaces monster concept on ETF page)
                     etf_ranked = detect_ranked_sweeps(
-                        rank_limit=200,
+                        rank_limit=100,
                         tickers=all_tickers,
                         exclude_etfs=False, etf_only=True,
                     )
