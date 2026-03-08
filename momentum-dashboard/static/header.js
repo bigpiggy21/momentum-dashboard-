@@ -6,7 +6,7 @@
      <script src="/static/header.js"></script>
 
    Set window._activePage before including to highlight the current page.
-   Valid values: 'settings','watchlists','log','search','bollingers','rs','hvc','sweeps','etf-sweeps','analysis','report','backtest','home'
+   Valid values: 'settings','watchlists','log','search','bollingers','rs','hvc','sweeps','etf-sweeps','analysis','report','backtest','portfolio','home'
    ==================================================================== */
 
 (function(){
@@ -67,6 +67,7 @@
     + btn('/log', 'Event Log', '&#x26A1; Log', 'log')
     + btn('/search', 'Screener', '&#x1F50D; Screener', 'search')
     + btn('/backtest', 'Backtesting', '&#x1F9EA; Backtest', 'backtest')
+    + btn('/portfolio', 'Portfolio', '&#x1F4BC; Portfolio', 'portfolio')
     + '</div></div>'
 
     + '</div>'

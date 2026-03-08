@@ -64,6 +64,9 @@ _daemon_intentionally_stopped = True  # True until user starts or auto-start fir
 _tracker_cache = {}       # {cache_key: {"data": response_dict, "ts": float}}
 _TRACKER_CACHE_TTL = 60   # seconds
 
+_portfolio_cache = {"data": None, "ts": 0}
+_PORTFOLIO_CACHE_TTL = 60  # seconds
+
 # ── Daemon watchdog ──────────────────────────────────────────────────────
 _WATCHDOG_INTERVAL = 30         # seconds between health checks
 _WATCHDOG_MAX_RESTARTS = 5      # max restarts per stability window
@@ -412,6 +415,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_page("sweeps.html")
         elif path == "/etf-sweeps":
             self.serve_page("etf_sweeps.html")
+        elif path == "/portfolio":
+            self.serve_page("portfolio.html")
         elif path == "/analysis":
             self.serve_page("analysis.html")
         elif path == "/rs":
@@ -488,6 +493,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_etf_categories()
         elif path == "/api/ticker-names":
             self.serve_ticker_names()
+        elif path == "/api/portfolio/data":
+            self.serve_portfolio_data()
         elif path == "/api/analysis/river":
             self.serve_analysis_river(query)
         elif path == "/api/analysis/heatmap":
@@ -3190,6 +3197,95 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         try:
             names = load_ticker_names()
             self.send_json(names)
+        except Exception as e:
+            self.send_json({"error": str(e)})
+
+    def serve_portfolio_data(self):
+        """GET /api/portfolio/data — fetch T212 portfolio, return sanitised % data only."""
+        global _portfolio_cache
+        try:
+            # Return cache if fresh
+            if _portfolio_cache["data"] and (time.time() - _portfolio_cache["ts"]) < _PORTFOLIO_CACHE_TTL:
+                self.send_json(_portfolio_cache["data"])
+                return
+
+            from config import TRADING212_API_KEY
+            if not TRADING212_API_KEY or TRADING212_API_KEY == "YOUR_T212_API_KEY_HERE":
+                self.send_json({"error": "Trading 212 API key not configured"})
+                return
+
+            base = "https://live.trading212.com/api/v0"
+            headers = {"Authorization": TRADING212_API_KEY}
+
+            # Fetch account cash info
+            cash_resp = requests.get(f"{base}/equity/account/cash", headers=headers, timeout=15)
+            cash_resp.raise_for_status()
+            cash_data = cash_resp.json()
+
+            # Fetch open positions
+            pos_resp = requests.get(f"{base}/equity/portfolio", headers=headers, timeout=15)
+            pos_resp.raise_for_status()
+            positions = pos_resp.json()
+
+            # Compute total portfolio value
+            total_value = float(cash_data.get("total", 0))
+            free_cash = float(cash_data.get("free", 0))
+            invested = float(cash_data.get("invested", 0))
+
+            if total_value <= 0:
+                self.send_json({"error": "Portfolio value is zero"})
+                return
+
+            cash_pct = round(free_cash / total_value * 100, 2)
+            invested_pct = round(invested / total_value * 100, 2)
+
+            # Load ticker names for display
+            from sweep_engine import load_ticker_names as _load_names
+            ticker_names = _load_names() or {}
+
+            # Build sanitised position list (% only, no £ amounts)
+            pos_list = []
+            for p in positions:
+                raw_ticker = p.get("ticker", "")
+                # Clean: AAPL_US_EQ → AAPL
+                clean_ticker = raw_ticker.split("_")[0] if "_" in raw_ticker else raw_ticker
+
+                qty = float(p.get("quantity", 0))
+                avg_price = float(p.get("averagePrice", 0))
+                cur_price = float(p.get("currentPrice", 0))
+                ppl = float(p.get("ppl", 0))
+                fx_ppl = float(p.get("fxPpl", 0))
+
+                # Position value as % of total portfolio
+                position_value = cur_price * qty
+                weight_pct = round(position_value / total_value * 100, 2)
+
+                # Gain % (cost basis)
+                cost_basis = avg_price * qty
+                gain_pct = round((ppl + fx_ppl) / cost_basis * 100, 2) if cost_basis > 0 else 0.0
+
+                pos_list.append({
+                    "ticker": clean_ticker,
+                    "name": ticker_names.get(clean_ticker, clean_ticker),
+                    "weight": weight_pct,
+                    "gain": gain_pct,
+                })
+
+            # Sort by weight descending
+            pos_list.sort(key=lambda x: x["weight"], reverse=True)
+
+            result = {
+                "cashPct": cash_pct,
+                "investedPct": invested_pct,
+                "positions": pos_list,
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
+            }
+
+            _portfolio_cache = {"data": result, "ts": time.time()}
+            self.send_json(result)
+
+        except requests.exceptions.RequestException as e:
+            self.send_json({"error": f"T212 API error: {e}"})
         except Exception as e:
             self.send_json({"error": str(e)})
 

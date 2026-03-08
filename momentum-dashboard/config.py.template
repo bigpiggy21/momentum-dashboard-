@@ -8,3 +8,6 @@ import os
 # === API CONFIGURATION ===
 MASSIVE_API_KEY = os.environ.get("MASSIVE_API_KEY", "YOUR_API_KEY_HERE")
 MASSIVE_BASE_URL = "https://api.massive.com/v2"
+
+# === TRADING 212 PORTFOLIO ===
+TRADING212_API_KEY = os.environ.get("TRADING212_API_KEY", "YOUR_T212_API_KEY_HERE")

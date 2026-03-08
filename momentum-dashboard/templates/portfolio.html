@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TBD Technologies — Portfolio</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/static/header.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-serif;font-size:13px;color-scheme:dark;}
+input,select,textarea,button{color-scheme:dark;}
+
+/* ── Page container ── */
+.portfolio-page{max-width:1200px;margin:0 auto;padding:24px 32px 60px;}
+
+/* ── Page header ── */
+.portfolio-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
+.portfolio-title{font-size:22px;font-weight:700;color:#fff;display:flex;align-items:center;gap:10px;}
+.portfolio-title .icon{font-size:24px;}
+.header-right-info{display:flex;align-items:center;gap:14px;}
+.last-updated{font-size:11px;color:#555;font-family:'Consolas',monospace;}
+.btn-refresh{background:#1e293b;color:#f59e0b;border:1px solid #f59e0b;padding:5px 14px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;height:28px;display:inline-flex;align-items:center;gap:5px;}
+.btn-refresh:hover{background:#334155;color:#fbbf24;}
+.btn-refresh:disabled{opacity:0.4;cursor:not-allowed;}
+
+/* ── Summary bar (Cash vs Invested) ── */
+.summary-section{margin-bottom:28px;}
+.summary-label{font-size:10px;color:#555;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
+.summary-bar-wrap{background:#14141e;border:1px solid #1e1e2e;border-radius:6px;overflow:hidden;height:32px;display:flex;}
+.bar-invested{background:linear-gradient(90deg,#f59e0b,#d97706);height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000;transition:width 0.4s ease;min-width:0;}
+.bar-cash{background:#1e293b;height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#94a3b8;transition:width 0.4s ease;min-width:0;}
+.summary-stats{display:flex;gap:24px;margin-top:8px;}
+.summary-stat{display:flex;align-items:center;gap:6px;}
+.summary-dot{width:10px;height:10px;border-radius:2px;}
+.summary-dot.invested{background:#f59e0b;}
+.summary-dot.cash{background:#1e293b;border:1px solid #334155;}
+.summary-stat-label{font-size:11px;color:#888;}
+.summary-stat-val{font-size:12px;font-weight:700;color:#fff;font-family:'Consolas',monospace;}
+
+/* ── Content grid: chart + table ── */
+.content-grid{display:grid;grid-template-columns:340px 1fr;gap:28px;align-items:start;}
+
+/* ── Pie chart card ── */
+.chart-card{background:#0c0c14;border:1px solid #1e1e2e;border-radius:8px;padding:20px;}
+.chart-card-title{font-size:13px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:16px;}
+.chart-wrap{position:relative;width:280px;height:280px;margin:0 auto;}
+
+/* ── Positions table card ── */
+.table-card{background:#0c0c14;border:1px solid #1e1e2e;border-radius:8px;padding:20px;overflow:hidden;}
+.table-card-title{font-size:13px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
+.position-count{font-size:11px;color:#555;font-weight:400;font-family:'Consolas',monospace;}
+
+.positions-table{width:100%;border-collapse:collapse;}
+.positions-table thead th{text-align:left;font-size:10px;color:#555;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;padding:6px 10px;border-bottom:1px solid #1e1e2e;white-space:nowrap;}
+.positions-table thead th.col-right{text-align:right;}
+.positions-table tbody tr{border-bottom:1px solid #111118;transition:background 0.1s;}
+.positions-table tbody tr:hover{background:#111118;}
+.positions-table tbody td{padding:8px 10px;font-size:12px;white-space:nowrap;}
+.positions-table tbody td.col-ticker{font-weight:700;color:#f59e0b;font-family:'Consolas',monospace;font-size:12px;}
+.positions-table tbody td.col-name{color:#aaa;max-width:200px;overflow:hidden;text-overflow:ellipsis;}
+.positions-table tbody td.col-right{text-align:right;font-family:'Consolas',monospace;}
+.positions-table tbody td.col-weight{font-weight:600;color:#fff;}
+.positions-table tbody td.col-gain{font-weight:600;}
+.gain-pos{color:#22c55e;}
+.gain-neg{color:#ef4444;}
+.gain-zero{color:#555;}
+
+/* Weight bar within table */
+.weight-bar-cell{display:flex;align-items:center;gap:8px;justify-content:flex-end;}
+.weight-bar-bg{width:80px;height:6px;background:#14141e;border-radius:3px;overflow:hidden;flex-shrink:0;}
+.weight-bar-fill{height:100%;background:#f59e0b;border-radius:3px;transition:width 0.3s ease;}
+.weight-val{min-width:48px;text-align:right;}
+
+/* ── Loading / Error ── */
+.loading-wrap{text-align:center;padding:80px 20px;color:#555;}
+.loading-wrap .spinner{display:inline-block;width:28px;height:28px;border:3px solid #1e1e2e;border-top-color:#f59e0b;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:12px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.error-msg{text-align:center;padding:40px 20px;color:#ef4444;font-size:13px;}
+
+/* ── Responsive ── */
+@media(max-width:900px){
+  .content-grid{grid-template-columns:1fr;gap:20px;}
+  .chart-wrap{width:240px;height:240px;}
+  .portfolio-page{padding:16px;}
+}
+</style>
+</head>
+<body>
+
+<!-- Shared header -->
+<div id="headerRow1"></div>
+<script>window._activePage='portfolio';</script>
+<script src="/static/header.js"></script>
+
+<div class="portfolio-page">
+
+  <!-- Page header -->
+  <div class="portfolio-header">
+    <div class="portfolio-title">
+      <span class="icon">&#x1F4BC;</span> Portfolio
+    </div>
+    <div class="header-right-info">
+      <span class="last-updated" id="lastUpdated">--</span>
+      <button class="btn-refresh" id="btnRefresh" onclick="loadPortfolio(true)">&#x21BB; Refresh</button>
+    </div>
+  </div>
+
+  <!-- Loading state -->
+  <div id="loadingWrap" class="loading-wrap">
+    <div class="spinner"></div>
+    <div>Loading portfolio...</div>
+  </div>
+
+  <!-- Error state -->
+  <div id="errorWrap" class="error-msg" style="display:none;"></div>
+
+  <!-- Main content (hidden until loaded) -->
+  <div id="mainContent" style="display:none;">
+
+    <!-- Cash vs Invested bar -->
+    <div class="summary-section">
+      <div class="summary-label">Allocation</div>
+      <div class="summary-bar-wrap">
+        <div class="bar-invested" id="barInvested" style="width:0%"></div>
+        <div class="bar-cash" id="barCash" style="width:0%"></div>
+      </div>
+      <div class="summary-stats">
+        <div class="summary-stat">
+          <div class="summary-dot invested"></div>
+          <span class="summary-stat-label">Invested</span>
+          <span class="summary-stat-val" id="investedPct">--</span>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-dot cash"></div>
+          <span class="summary-stat-label">Cash</span>
+          <span class="summary-stat-val" id="cashPct">--</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chart + Table grid -->
+    <div class="content-grid">
+
+      <!-- Pie chart -->
+      <div class="chart-card">
+        <div class="chart-card-title">Holdings Breakdown</div>
+        <div class="chart-wrap">
+          <canvas id="pieChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Positions table -->
+      <div class="table-card">
+        <div class="table-card-title">
+          Positions
+          <span class="position-count" id="posCount"></span>
+        </div>
+        <table class="positions-table">
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th>Name</th>
+              <th class="col-right">Weight %</th>
+              <th class="col-right">Gain %</th>
+            </tr>
+          </thead>
+          <tbody id="posBody"></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var _chart = null;
+  var _data = null;
+
+  // Amber / gold palette for the pie slices
+  var PIE_COLORS = [
+    '#f59e0b','#d97706','#b45309','#92400e','#78350f',
+    '#fbbf24','#f59e0b','#d97706','#b45309','#92400e',
+    '#eab308','#ca8a04','#a16207','#854d0e','#713f12',
+    '#fde68a','#fcd34d','#fbbf24','#f59e0b','#d97706'
+  ];
+  var OTHER_COLOR = '#1e293b';
+
+  function loadPortfolio(force){
+    var btn = document.getElementById('btnRefresh');
+    btn.disabled = true;
+    btn.innerHTML = '&#x21BB; Loading...';
+
+    var url = '/api/portfolio/data';
+    if(force) url += '?bust=' + Date.now();
+
+    fetch(url).then(function(r){ return r.json(); }).then(function(d){
+      btn.disabled = false;
+      btn.innerHTML = '&#x21BB; Refresh';
+
+      if(d.error){
+        document.getElementById('loadingWrap').style.display = 'none';
+        document.getElementById('errorWrap').style.display = 'block';
+        document.getElementById('errorWrap').textContent = d.error;
+        document.getElementById('mainContent').style.display = 'none';
+        return;
+      }
+
+      _data = d;
+      document.getElementById('loadingWrap').style.display = 'none';
+      document.getElementById('errorWrap').style.display = 'none';
+      document.getElementById('mainContent').style.display = 'block';
+
+      renderSummary(d);
+      renderPieChart(d.positions);
+      renderTable(d.positions);
+
+      // Updated time
+      if(d.updatedAt){
+        var dt = new Date(d.updatedAt);
+        document.getElementById('lastUpdated').textContent = 'Updated ' + dt.toLocaleTimeString();
+      }
+    }).catch(function(err){
+      btn.disabled = false;
+      btn.innerHTML = '&#x21BB; Refresh';
+      document.getElementById('loadingWrap').style.display = 'none';
+      document.getElementById('errorWrap').style.display = 'block';
+      document.getElementById('errorWrap').textContent = 'Failed to load: ' + err.message;
+    });
+  }
+
+  function renderSummary(d){
+    var inv = d.investedPct || 0;
+    var cash = d.cashPct || 0;
+    document.getElementById('barInvested').style.width = inv + '%';
+    document.getElementById('barInvested').textContent = inv >= 8 ? inv.toFixed(1) + '% Invested' : '';
+    document.getElementById('barCash').style.width = cash + '%';
+    document.getElementById('barCash').textContent = cash >= 8 ? cash.toFixed(1) + '% Cash' : '';
+    document.getElementById('investedPct').textContent = inv.toFixed(1) + '%';
+    document.getElementById('cashPct').textContent = cash.toFixed(1) + '%';
+  }
+
+  function renderPieChart(positions){
+    // Group small positions into "Other"
+    var slices = [];
+    var otherWeight = 0;
+    for(var i = 0; i < positions.length; i++){
+      if(positions[i].weight >= 2){
+        slices.push(positions[i]);
+      } else {
+        otherWeight += positions[i].weight;
+      }
+    }
+    if(otherWeight > 0){
+      slices.push({ticker: 'Other', name: 'Other small positions', weight: Math.round(otherWeight * 100) / 100});
+    }
+
+    var labels = slices.map(function(s){ return s.ticker; });
+    var data = slices.map(function(s){ return s.weight; });
+    var colors = slices.map(function(s, i){
+      return s.ticker === 'Other' ? OTHER_COLOR : PIE_COLORS[i % PIE_COLORS.length];
+    });
+
+    if(_chart) _chart.destroy();
+
+    var ctx = document.getElementById('pieChart').getContext('2d');
+    _chart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: data,
+          backgroundColor: colors,
+          borderColor: '#08080d',
+          borderWidth: 2,
+          hoverBorderColor: '#fff',
+          hoverBorderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        cutout: '55%',
+        plugins: {
+          legend: {
+            display: true,
+            position: 'bottom',
+            labels: {
+              color: '#888',
+              font: {size: 10, family: "'Segoe UI', sans-serif"},
+              boxWidth: 10,
+              boxHeight: 10,
+              padding: 8,
+              usePointStyle: true,
+              pointStyle: 'rectRounded'
+            }
+          },
+          tooltip: {
+            backgroundColor: '#14141e',
+            titleColor: '#fff',
+            bodyColor: '#ccc',
+            borderColor: '#2a2a3a',
+            borderWidth: 1,
+            cornerRadius: 6,
+            padding: 10,
+            callbacks: {
+              label: function(ctx){
+                return ctx.label + ': ' + ctx.parsed.toFixed(1) + '%';
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function renderTable(positions){
+    document.getElementById('posCount').textContent = positions.length + ' holdings';
+    var maxW = positions.length > 0 ? positions[0].weight : 1;
+    var html = '';
+    for(var i = 0; i < positions.length; i++){
+      var p = positions[i];
+      var gainCls = p.gain > 0 ? 'gain-pos' : (p.gain < 0 ? 'gain-neg' : 'gain-zero');
+      var gainSign = p.gain > 0 ? '+' : '';
+      var barW = maxW > 0 ? Math.round(p.weight / maxW * 100) : 0;
+      html += '<tr>'
+        + '<td class="col-ticker">' + esc(p.ticker) + '</td>'
+        + '<td class="col-name">' + esc(p.name) + '</td>'
+        + '<td class="col-right col-weight"><div class="weight-bar-cell">'
+          + '<span class="weight-val">' + p.weight.toFixed(1) + '%</span>'
+          + '<div class="weight-bar-bg"><div class="weight-bar-fill" style="width:' + barW + '%"></div></div>'
+        + '</div></td>'
+        + '<td class="col-right col-gain ' + gainCls + '">' + gainSign + p.gain.toFixed(1) + '%</td>'
+        + '</tr>';
+    }
+    document.getElementById('posBody').innerHTML = html;
+  }
+
+  function esc(s){
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // Expose for button
+  window.loadPortfolio = loadPortfolio;
+
+  // Initial load
+  loadPortfolio(false);
+})();
+</script>
+
+</body>
+</html>
