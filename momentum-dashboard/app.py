@@ -66,7 +66,121 @@ _tracker_cache = {}       # {cache_key: {"data": response_dict, "ts": float}}
 _TRACKER_CACHE_TTL = 60   # seconds
 
 _portfolio_cache = {"data": None, "ts": 0}
+_portfolio_trades_cache = {"data": None, "ts": 0}
 _PORTFOLIO_CACHE_TTL = 60  # seconds
+
+# ── Portfolio helpers ──────────────────────────────────────────────────
+def _get_t212_headers():
+    """Return T212 API auth headers (Basic or Bearer)."""
+    import base64
+    from config import TRADING212_API_KEY
+    t212_secret = getattr(__import__("config"), "TRADING212_API_SECRET", "")
+    if t212_secret:
+        creds = base64.b64encode(f"{TRADING212_API_KEY}:{t212_secret}".encode()).decode()
+        return {"Authorization": f"Basic {creds}"}
+    return {"Authorization": TRADING212_API_KEY}
+
+def _init_portfolio_db():
+    """Create portfolio_snapshots table if not exists."""
+    import sqlite3
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+            date TEXT PRIMARY KEY,
+            total_value REAL,
+            baseline REAL,
+            total_pct REAL,
+            note TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def _record_portfolio_snapshot(total_value):
+    """Record today's portfolio value. Baseline = first ever snapshot's total_value."""
+    import sqlite3
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    # Check if today already recorded
+    existing = conn.execute("SELECT 1 FROM portfolio_snapshots WHERE date = ?", (today,)).fetchone()
+    if existing:
+        # Update today's value (intraday refresh)
+        row = conn.execute("SELECT total_value FROM portfolio_snapshots ORDER BY date ASC LIMIT 1").fetchone()
+        baseline = row[0] if row else total_value
+        pct = round((total_value - baseline) / baseline * 100, 2) if baseline > 0 else 0.0
+        conn.execute("UPDATE portfolio_snapshots SET total_value = ?, total_pct = ? WHERE date = ?",
+                      (total_value, pct, today))
+    else:
+        # Get baseline from first snapshot
+        row = conn.execute("SELECT total_value FROM portfolio_snapshots ORDER BY date ASC LIMIT 1").fetchone()
+        baseline = row[0] if row else total_value
+        pct = round((total_value - baseline) / baseline * 100, 2) if baseline > 0 else 0.0
+        conn.execute("INSERT INTO portfolio_snapshots (date, total_value, baseline, total_pct, note) VALUES (?, ?, ?, ?, ?)",
+                      (today, total_value, baseline, pct, None))
+    conn.commit()
+    conn.close()
+
+def _backfill_portfolio_history(headers):
+    """One-time backfill: fetch T212 transactions to find deposits, create baseline snapshots."""
+    import sqlite3
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    # Only backfill if we have fewer than 2 snapshots
+    count = conn.execute("SELECT COUNT(*) FROM portfolio_snapshots").fetchone()[0]
+    if count >= 2:
+        conn.close()
+        return
+
+    base = "https://live.trading212.com/api/v0"
+    # Fetch all transactions (deposits/withdrawals)
+    transactions = []
+    url = f"{base}/history/transactions?limit=50"
+    for _ in range(20):  # max 20 pages
+        try:
+            resp = requests.get(url, headers=headers, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            items = data.get("items", [])
+            transactions.extend(items)
+            next_page = data.get("nextPagePath")
+            if not next_page or not items:
+                break
+            url = f"https://live.trading212.com{next_page}"
+            time.sleep(0.5)  # respect rate limits
+        except Exception:
+            break
+
+    # Build daily deposit totals
+    # Each transaction has: dateTime, amount, type (DEPOSIT/WITHDRAWAL)
+    from collections import defaultdict
+    daily_deposits = defaultdict(float)
+    running_total = 0.0
+    deposit_dates = []
+    for t in sorted(transactions, key=lambda x: x.get("dateTime", "")):
+        dt_str = t.get("dateTime", "")[:10]  # YYYY-MM-DD
+        amount = float(t.get("amount", 0))
+        running_total += amount
+        daily_deposits[dt_str] = running_total
+        deposit_dates.append(dt_str)
+
+    if not deposit_dates:
+        conn.close()
+        return
+
+    # Create snapshots for deposit dates (cash only, no positions yet = 0% gain)
+    first_date = deposit_dates[0]
+    baseline_value = daily_deposits[first_date]
+
+    for dt, cumulative in sorted(daily_deposits.items()):
+        existing = conn.execute("SELECT 1 FROM portfolio_snapshots WHERE date = ?", (dt,)).fetchone()
+        if not existing:
+            pct = round((cumulative - baseline_value) / baseline_value * 100, 2) if baseline_value > 0 else 0.0
+            conn.execute(
+                "INSERT INTO portfolio_snapshots (date, total_value, baseline, total_pct, note) VALUES (?, ?, ?, ?, ?)",
+                (dt, cumulative, baseline_value, pct, "deposit")
+            )
+
+    conn.commit()
+    conn.close()
 
 # ── Daemon watchdog ──────────────────────────────────────────────────────
 _WATCHDOG_INTERVAL = 30         # seconds between health checks
@@ -496,6 +610,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_ticker_names()
         elif path == "/api/portfolio/data":
             self.serve_portfolio_data()
+        elif path == "/api/portfolio/history":
+            self.serve_portfolio_history()
+        elif path == "/api/portfolio/trades":
+            self.serve_portfolio_trades()
         elif path == "/api/analysis/river":
             self.serve_analysis_river(query)
         elif path == "/api/analysis/heatmap":
@@ -3215,16 +3333,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 self.send_json({"error": "Trading 212 API key not configured"})
                 return
 
-            # T212 also has a secret key for Basic auth
-            t212_secret = getattr(__import__("config"), "TRADING212_API_SECRET", "")
-
-            import base64
             base = "https://live.trading212.com/api/v0"
-            if t212_secret:
-                creds = base64.b64encode(f"{TRADING212_API_KEY}:{t212_secret}".encode()).decode()
-                headers = {"Authorization": f"Basic {creds}"}
-            else:
-                headers = {"Authorization": TRADING212_API_KEY}
+            headers = _get_t212_headers()
 
             # Fetch account cash info
             cash_resp = requests.get(f"{base}/equity/account/cash", headers=headers, timeout=15)
@@ -3321,6 +3431,121 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             }
 
             _portfolio_cache = {"data": result, "ts": time.time()}
+            self.send_json(result)
+
+            # Record daily snapshot (non-blocking, best-effort)
+            try:
+                _init_portfolio_db()
+                _record_portfolio_snapshot(total_value)
+                _backfill_portfolio_history(headers)
+            except Exception:
+                pass  # don't break the main response
+
+        except requests.exceptions.RequestException as e:
+            self.send_json({"error": f"T212 API error: {e}"})
+        except Exception as e:
+            self.send_json({"error": str(e)})
+
+    def serve_portfolio_history(self):
+        """GET /api/portfolio/history — return indexed % snapshots for chart."""
+        try:
+            _init_portfolio_db()
+            import sqlite3
+            conn = sqlite3.connect(DB_PATH, timeout=5)
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT date, total_pct FROM portfolio_snapshots ORDER BY date ASC"
+            ).fetchall()
+            conn.close()
+            self.send_json({
+                "snapshots": [{"date": r["date"], "pct": r["total_pct"]} for r in rows]
+            })
+        except Exception as e:
+            self.send_json({"error": str(e)})
+
+    def serve_portfolio_trades(self):
+        """GET /api/portfolio/trades — fetch T212 order history, return sanitised trades."""
+        global _portfolio_trades_cache
+        try:
+            # Return cache if fresh
+            if _portfolio_trades_cache["data"] and (time.time() - _portfolio_trades_cache["ts"]) < _PORTFOLIO_CACHE_TTL:
+                self.send_json(_portfolio_trades_cache["data"])
+                return
+
+            from config import TRADING212_API_KEY
+            if not TRADING212_API_KEY or TRADING212_API_KEY == "YOUR_T212_API_KEY_HERE":
+                self.send_json({"error": "Trading 212 API key not configured"})
+                return
+
+            base = "https://live.trading212.com/api/v0"
+            headers = _get_t212_headers()
+
+            # Get current positions for current prices (to compute unrealised gain)
+            cur_prices = {}
+            try:
+                pos_resp = requests.get(f"{base}/equity/portfolio", headers=headers, timeout=15)
+                pos_resp.raise_for_status()
+                for p in pos_resp.json():
+                    raw = p.get("ticker", "")
+                    clean = raw.split("_")[0] if "_" in raw else raw
+                    clean = clean.rstrip("abcdefghijklmnopqrstuvwxyz") or clean
+                    cur_prices[raw] = {
+                        "currentPrice": float(p.get("currentPrice") or 0),
+                        "averagePrice": float(p.get("averagePrice") or 0),
+                        "clean": clean,
+                    }
+            except Exception:
+                pass
+
+            # Fetch order history (paginate)
+            all_orders = []
+            url = f"{base}/equity/history/orders?limit=50"
+            for _ in range(20):  # max 1000 orders
+                try:
+                    resp = requests.get(url, headers=headers, timeout=15)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    items = data.get("items", [])
+                    all_orders.extend(items)
+                    next_page = data.get("nextPagePath")
+                    if not next_page or not items:
+                        break
+                    url = f"https://live.trading212.com{next_page}"
+                    time.sleep(0.5)
+                except Exception:
+                    break
+
+            # Build trades list
+            trades = []
+            for o in all_orders:
+                fill_price = float(o.get("fillPrice") or 0)
+                if fill_price <= 0:
+                    continue  # skip unfilled/cancelled
+                raw_ticker = o.get("ticker", "")
+                clean_ticker = raw_ticker.split("_")[0] if "_" in raw_ticker else raw_ticker
+                clean_ticker = clean_ticker.rstrip("abcdefghijklmnopqrstuvwxyz") or clean_ticker
+
+                order_type = o.get("type", "").upper()  # BUY / SELL
+                side = "Buy" if "BUY" in order_type else "Sell"
+                date_str = (o.get("dateCreated") or "")[:10]
+
+                # Compute % gain
+                if side == "Buy" and raw_ticker in cur_prices:
+                    cur_p = cur_prices[raw_ticker]["currentPrice"]
+                    gain_pct = round((cur_p - fill_price) / fill_price * 100, 2) if fill_price > 0 else 0.0
+                else:
+                    # For sells or unknown: can't easily compute without position history
+                    gain_pct = None
+
+                trades.append({
+                    "date": date_str,
+                    "ticker": clean_ticker,
+                    "side": side,
+                    "gain": gain_pct,
+                })
+
+            result = {"trades": trades}
+            _portfolio_trades_cache = {"data": result, "ts": time.time()}
             self.send_json(result)
 
         except requests.exceptions.RequestException as e:
