@@ -461,6 +461,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_sweep_stats(query)
         elif path == "/api/sweeps/summary":
             self.serve_sweep_summary(query)
+        elif path == "/api/sweeps/diag":
+            self.serve_sweep_diag(query)
         elif path == "/api/sweeps/detail":
             self.serve_sweep_detail(query)
         elif path == "/api/sweeps/clusterbombs":
@@ -2475,6 +2477,40 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                                     full_db=full_db,
                                     exclude_etfs=not etf_only, etf_only=etf_only)
             self.send_json(stats)
+        except Exception as e:
+            self.send_json({"error": str(e)})
+
+    def serve_sweep_diag(self, query=None):
+        """GET /api/sweeps/diag — temporary diagnostic: compare summary vs trades."""
+        try:
+            init_sweep_db()
+            ticker = (query or {}).get("ticker", [None])[0]
+            date = (query or {}).get("date", [None])[0]
+            if not ticker or not date:
+                self.send_json({"error": "ticker and date required"})
+                return
+            from sweep_engine import _get_db
+            conn = _get_db()
+            conn.row_factory = __import__('sqlite3').Row
+            # All trades (any flags)
+            r1 = conn.execute(
+                "SELECT is_darkpool, is_sweep, COUNT(*) as cnt, SUM(notional) as total, SUM(size) as shares "
+                "FROM sweep_trades WHERE ticker=? AND trade_date=? GROUP BY is_darkpool, is_sweep",
+                (ticker, date)).fetchall()
+            flag_breakdown = [dict(r) for r in r1]
+            # Summary
+            r2 = conn.execute(
+                "SELECT * FROM sweep_daily_summary WHERE ticker=? AND trade_date=?",
+                (ticker, date)).fetchone()
+            summary = dict(r2) if r2 else None
+            # Event
+            r3 = conn.execute(
+                "SELECT event_date, event_type, sweep_count, total_notional, daily_rank, sweep_rank "
+                "FROM clusterbomb_events WHERE ticker=? AND event_date=?",
+                (ticker, date)).fetchall()
+            events = [dict(r) for r in r3]
+            conn.close()
+            self.send_json({"flag_breakdown": flag_breakdown, "summary": summary, "events": events})
         except Exception as e:
             self.send_json({"error": str(e)})
 
