@@ -501,7 +501,7 @@ td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;borde
         <div class="chart-setting-sep"></div>
         <button class="chart-setting-btn" id="btnCumToggle" onclick="toggleCumulative(this)" style="color:#22c55e;border-color:#334155;" title="Toggle cumulative sweep notional line">Cumulative $</button>
         <button class="chart-setting-btn active" id="btnVolCycle" onclick="cycleVol()" title="Click to cycle: Sweep Volume → Top 10 → Stock Volume">Sweep Volume</button>
-        <button class="chart-setting-btn active" id="btnBubbleCycle" onclick="cycleBubbles()" title="Click to cycle: All → Ranked → Rare → CBs → Off" style="color:#f59e0b;border-color:#f59e0b66;">Bubbles: All</button>
+        <button class="chart-setting-btn active" id="btnBubbleToggle" onclick="toggleBubbles()" title="Toggle chart bubbles on/off (layers controlled by card filter)" style="color:#f59e0b;border-color:#f59e0b66;">Bubbles: On</button>
         <div class="chart-setting-sep"></div>
         <button class="chart-setting-btn" id="btn50SMA" onclick="toggle50SMA(this)" title="Toggle 50-day simple moving average" style="color:#0097a7;">50D</button>
         <button class="chart-setting-btn" id="btn200SMA" onclick="toggle200SMA(this)" title="Toggle 200-day simple moving average" style="color:#b22833;">200D</button>
@@ -740,7 +740,7 @@ var _sma50Visible = false;   // Toggle state for 50D SMA
 var _sma200Series = null;    // 200-day SMA line series
 var _sma200Visible = false;  // Toggle state for 200D SMA
 var _gridVisible = false;    // Toggle state for background gridlines (default off)
-var _bubbleFilter = 'all';   // 'all' | 'ranked' | 'rare' | 'cb' | 'off'
+var _bubblesOn = true;       // Master on/off toggle for all chart bubbles
 
 // Cache last chart data for maximize/restore without re-fetch
 var _lastChartTicker = null;
@@ -902,17 +902,6 @@ function switchDetailFilter(filter, btn){
   document.querySelectorAll('#detailTabBar .tab-btn').forEach(function(b){ b.classList.remove('active'); });
   btn.classList.add('active');
   renderDetailEvents();
-  // Sync chart bubble filter with detail tab
-  var bubbleMap = {all:'all', daily:'daily', single:'single', rare_sweep:'rare'};
-  _bubbleFilter = bubbleMap[filter] || 'all';
-  var bbtn = document.getElementById('btnBubbleCycle');
-  if(bbtn){
-    bbtn.textContent = _bubbleLabels[_bubbleFilter];
-    bbtn.style.color = _bubbleColors[_bubbleFilter];
-    bbtn.style.borderColor = _bubbleColors[_bubbleFilter] + '66';
-    bbtn.classList.toggle('active', _bubbleFilter !== 'off');
-  }
-  _applyBubbleFilter();
 }
 
 function exitDrillDown(){
@@ -1110,45 +1099,48 @@ function switchTrackerTab(tab, btn){
 
 // Cache all tracker events so favourites can look up enriched data
 var _allTrackerEvents = [];
-var _trackerTypeFilter = 'all'; // 'all', 'daily', 'rare_sweep', 'single'
+var _activeLayers = {daily: true, single: true, rare: true}; // multi-select toggles
 var _trackerOffset = 0;
 var _trackerTotal = 0;
 var _trackerPageSize = 200;
 
 function setTrackerTypeFilter(filter, btn){
-  _trackerTypeFilter = filter;
-  // Update button active states
-  document.querySelectorAll('.tracker-type-filter .tracker-filter-btn').forEach(function(b){b.classList.remove('active');});
-  btn.classList.add('active');
-  // Toggle filter group visibility based on active type
-  toggleFilterGroupVisibility(filter);
+  if(filter === 'all'){
+    // "All" resets — enable all layers
+    _activeLayers = {daily: true, single: true, rare: true};
+  } else {
+    // Map filter name to layer key
+    var layerKey = filter === 'rare_sweep' ? 'rare' : filter;
+    // Toggle this layer
+    _activeLayers[layerKey] = !_activeLayers[layerKey];
+    // If all are off, reset to all on
+    if(!_activeLayers.daily && !_activeLayers.single && !_activeLayers.rare){
+      _activeLayers = {daily: true, single: true, rare: true};
+    }
+  }
+  // Update button active states — multi-select
+  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare;
+  document.getElementById('filterAll').classList.toggle('active', allOn);
+  document.getElementById('filterDaily').classList.toggle('active', _activeLayers.daily);
+  document.getElementById('filterSingle').classList.toggle('active', _activeLayers.single);
+  document.getElementById('filterRare').classList.toggle('active', _activeLayers.rare);
+  // Dim filter columns for inactive layers
+  _syncFilterGroupDim();
   // Re-render from cached events (no API call)
   var filtered = filterByType(_allTrackerEvents);
   document.getElementById('stocksCount').textContent = filtered.length + (_trackerTotal > _trackerOffset ? '+' : '');
   renderTrackerCards('trackerStocksBody', filtered, false);
   renderLoadMoreBtn();
-  // Sync chart bubble filter with card filter
-  var bubbleMap = {all:'all', daily:'daily', single:'single', rare_sweep:'rare'};
-  _bubbleFilter = bubbleMap[filter] || 'all';
-  var bbtn = document.getElementById('btnBubbleCycle');
-  if(bbtn){
-    bbtn.textContent = _bubbleLabels[_bubbleFilter];
-    bbtn.style.color = _bubbleColors[_bubbleFilter];
-    bbtn.style.borderColor = _bubbleColors[_bubbleFilter] + '66';
-    bbtn.classList.toggle('active', _bubbleFilter !== 'off');
-  }
+  // Sync chart bubble filter
   _applyBubbleFilter();
 }
 
-function toggleFilterGroupVisibility(activeType){
-  // With square-column layout, all filter groups stay visible.
-  // Dim non-active columns so the active type is visually prominent.
+function _syncFilterGroupDim(){
+  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare;
   document.querySelectorAll('.filter-col[data-type]').forEach(function(col){
-    if(activeType === 'all'){
-      col.style.opacity = '';
-    } else {
-      col.style.opacity = (col.getAttribute('data-type') === activeType) ? '' : '0.45';
-    }
+    var dt = col.getAttribute('data-type');
+    var layerKey = dt === 'rare_sweep' ? 'rare' : dt;
+    col.style.opacity = (allOn || _activeLayers[layerKey]) ? '' : '0.45';
   });
 }
 
@@ -1232,21 +1224,18 @@ function deleteProfile(name){
 }
 
 function filterByType(events){
-  if(_trackerTypeFilter === 'all') return events;
-  if(_trackerTypeFilter === 'daily'){
-    var df = parseInt(document.getElementById('trackerDailyFrom').value) || 1;
-    var dt = parseInt(document.getElementById('trackerDailyTo').value) || 50;
-    return events.filter(function(ev){ return ev.daily_rank != null && ev.daily_rank >= df && ev.daily_rank <= dt; });
-  }
-  if(_trackerTypeFilter === 'single'){
-    var rf = parseInt(document.getElementById('trackerRankFrom').value) || 1;
-    var rt = parseInt(document.getElementById('trackerRankTo').value) || 50;
-    return events.filter(function(ev){ return ev.sweep_rank != null && ev.sweep_rank >= rf && ev.sweep_rank <= rt; });
-  }
-  if(_trackerTypeFilter === 'rare_sweep'){
-    return events.filter(function(ev){ return ev.is_rare == 1; });
-  }
-  return events;
+  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare;
+  if(allOn) return events;
+  var df = parseInt(document.getElementById('trackerDailyFrom').value) || 1;
+  var dt = parseInt(document.getElementById('trackerDailyTo').value) || 50;
+  var rf = parseInt(document.getElementById('trackerRankFrom').value) || 1;
+  var rt = parseInt(document.getElementById('trackerRankTo').value) || 50;
+  return events.filter(function(ev){
+    if(_activeLayers.daily && ev.daily_rank != null && ev.daily_rank >= df && ev.daily_rank <= dt) return true;
+    if(_activeLayers.single && ev.sweep_rank != null && ev.sweep_rank >= rf && ev.sweep_rank <= rt) return true;
+    if(_activeLayers.rare && ev.is_rare == 1) return true;
+    return false;
+  });
 }
 
 function loadTrackerPanels(){
@@ -1306,7 +1295,8 @@ function renderLoadMoreBtn(){
   var btn = document.createElement('div');
   btn.id = 'loadMoreBtn';
   btn.className = 'tracker-load-more';
-  if(_trackerTypeFilter === 'all'){
+  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare;
+  if(allOn){
     btn.textContent = 'Load More (' + remaining + ' remaining)';
   } else {
     btn.textContent = 'Load More';
@@ -1360,10 +1350,7 @@ function renderTrackerCards(containerId, events, showRemove){
   if(!events || events.length === 0){
     var emptyMsg = containerId === 'trackerFavsBody'
       ? 'No favourites yet. Click the &#x2B50; on any tracker card to add it.'
-      : _trackerTypeFilter === 'rare_sweep' ? 'No rare sweeps detected'
-      : _trackerTypeFilter === 'single' ? 'No single ranked sweeps detected'
-      : _trackerTypeFilter === 'daily' ? 'No daily ranked events detected'
-      : 'No events detected';
+      : 'No events match the current filter';
     body.innerHTML = '<div class="tracker-empty">' + emptyMsg + '</div>';
     return;
   }
@@ -2166,21 +2153,16 @@ function cycleVol(){
   _applyVolData();
 }
 
-// BUBBLE FILTER — cycle which event types show markers on chart
+// BUBBLE TOGGLE — master on/off for chart markers (layers controlled by card filter buttons)
 // ====================================================================
-var _bubbleCycle = ['all','single','daily','rare','off'];
-var _bubbleLabels = {all:'Bubbles: All',single:'Bubbles: Single',daily:'Bubbles: Daily',rare:'Bubbles: Rare',off:'Bubbles: Off'};
-var _bubbleColors = {all:'#f59e0b',single:'#3b82f6',daily:'#f59e0b',rare:'#a78bfa',off:'#555'};
-
-function cycleBubbles(){
-  var idx = _bubbleCycle.indexOf(_bubbleFilter);
-  _bubbleFilter = _bubbleCycle[(idx + 1) % _bubbleCycle.length];
-  var btn = document.getElementById('btnBubbleCycle');
+function toggleBubbles(){
+  _bubblesOn = !_bubblesOn;
+  var btn = document.getElementById('btnBubbleToggle');
   if(btn){
-    btn.textContent = _bubbleLabels[_bubbleFilter];
-    btn.style.color = _bubbleColors[_bubbleFilter];
-    btn.style.borderColor = _bubbleColors[_bubbleFilter] + '66';
-    btn.classList.toggle('active', _bubbleFilter !== 'off');
+    btn.textContent = _bubblesOn ? 'Bubbles: On' : 'Bubbles: Off';
+    btn.style.color = _bubblesOn ? '#f59e0b' : '#555';
+    btn.style.borderColor = _bubblesOn ? '#f59e0b66' : '#33415566';
+    btn.classList.toggle('active', _bubblesOn);
   }
   _applyBubbleFilter();
 }
@@ -2191,8 +2173,8 @@ function _applyBubbleFilter(){
   layers.forEach(function(layer){
     var L = _layerSeries[layer];
     if(!L || !L.dot || !L.text) return;
-    var show = (_bubbleFilter === 'all' || _bubbleFilter === layer);
-    if(show && _bubbleFilter !== 'off' && L.dotData.length > 0){
+    var show = _bubblesOn && _activeLayers[layer];
+    if(show && L.dotData.length > 0){
       L.dot.setData(L.dotData);
       L.dot.setMarkers(L.dotMarkers);
       L.text.setData(L.textData);
