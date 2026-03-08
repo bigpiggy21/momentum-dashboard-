@@ -2481,36 +2481,57 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_json({"error": str(e)})
 
     def serve_sweep_diag(self, query=None):
-        """GET /api/sweeps/diag — temporary diagnostic: compare summary vs trades."""
+        """GET /api/sweeps/diag — diagnostic: compare summary vs trades.
+        Add &fix=1 to rebuild summary + delete corrupt event for that ticker+date."""
         try:
             init_sweep_db()
             ticker = (query or {}).get("ticker", [None])[0]
             date = (query or {}).get("date", [None])[0]
+            fix = (query or {}).get("fix", ["0"])[0] == "1"
             if not ticker or not date:
                 self.send_json({"error": "ticker and date required"})
                 return
             from sweep_engine import _get_db
             conn = _get_db()
             conn.row_factory = __import__('sqlite3').Row
-            # All trades (any flags)
+
+            if fix:
+                # Rebuild summary for this ticker+date from actual trades
+                conn.execute("""
+                    INSERT OR REPLACE INTO sweep_daily_summary
+                        (ticker, trade_date, sweep_count, total_notional, total_shares,
+                         vwap, min_price, max_price, first_sweep, last_sweep)
+                    SELECT ticker, trade_date,
+                        COUNT(*), SUM(notional), SUM(size),
+                        SUM(price * size) / SUM(size),
+                        MIN(price), MAX(price),
+                        MIN(trade_time), MAX(trade_time)
+                    FROM sweep_trades
+                    WHERE ticker=? AND trade_date=? AND is_darkpool=1 AND is_sweep=1
+                """, (ticker, date))
+                # Delete the corrupt event so redetect recreates it
+                conn.execute(
+                    "DELETE FROM clusterbomb_events WHERE ticker=? AND event_date=? AND event_type='ranked_daily'",
+                    (ticker, date))
+                conn.commit()
+
+            # Diagnostic output
             r1 = conn.execute(
                 "SELECT is_darkpool, is_sweep, COUNT(*) as cnt, SUM(notional) as total, SUM(size) as shares "
                 "FROM sweep_trades WHERE ticker=? AND trade_date=? GROUP BY is_darkpool, is_sweep",
                 (ticker, date)).fetchall()
             flag_breakdown = [dict(r) for r in r1]
-            # Summary
             r2 = conn.execute(
                 "SELECT * FROM sweep_daily_summary WHERE ticker=? AND trade_date=?",
                 (ticker, date)).fetchone()
             summary = dict(r2) if r2 else None
-            # Event
             r3 = conn.execute(
                 "SELECT event_date, event_type, sweep_count, total_notional, daily_rank, sweep_rank "
                 "FROM clusterbomb_events WHERE ticker=? AND event_date=?",
                 (ticker, date)).fetchall()
             events = [dict(r) for r in r3]
             conn.close()
-            self.send_json({"flag_breakdown": flag_breakdown, "summary": summary, "events": events})
+            self.send_json({"fixed": fix, "flag_breakdown": flag_breakdown, "summary": summary, "events": events})
         except Exception as e:
             self.send_json({"error": str(e)})
 
