@@ -426,9 +426,9 @@ td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;borde
         <span class="filter-group-label" style="color:#f59e0b;">From</span>
         <input type="number" class="filter-input" id="trackerDailyFrom" value="1" min="1" title="Daily rank from (top)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#f59e0b44;color:#f59e0b;">
         <span class="filter-group-label" style="color:#f59e0b;">To</span>
-        <input type="number" class="filter-input" id="trackerDailyTo" value="50" min="1" title="Daily rank to (bottom)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#f59e0b44;color:#f59e0b;">
+        <input type="number" class="filter-input" id="trackerDailyTo" value="20" min="1" title="Daily rank to (bottom)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#f59e0b44;color:#f59e0b;">
         <span class="filter-group-label" style="color:#f59e0b;">#</span>
-        <input type="number" class="filter-input" id="trackerMinSweeps" value="2" min="1" max="50" title="Min sweep count" oninput="debouncedTrackerRefresh()" style="width:40px;border-color:#f59e0b44;color:#f59e0b;">
+        <input type="number" class="filter-input" id="trackerMinSweeps" value="1" min="1" max="50" title="Min sweep count" oninput="debouncedTrackerRefresh()" style="width:40px;border-color:#f59e0b44;color:#f59e0b;">
       </div>
     </div>
     <div class="filter-col" data-type="single">
@@ -437,7 +437,7 @@ td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;borde
         <span class="filter-group-label" style="color:#3b82f6;">From</span>
         <input type="number" class="filter-input" id="trackerRankFrom" value="1" min="1" title="Single rank from (top)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#3b82f644;color:#3b82f6;">
         <span class="filter-group-label" style="color:#3b82f6;">To</span>
-        <input type="number" class="filter-input" id="trackerRankTo" value="50" min="1" title="Single rank to (bottom)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#3b82f644;color:#3b82f6;">
+        <input type="number" class="filter-input" id="trackerRankTo" value="10" min="1" title="Single rank to (bottom)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#3b82f644;color:#3b82f6;">
       </div>
     </div>
     <div class="filter-col" data-type="rare_sweep">
@@ -446,7 +446,7 @@ td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;borde
         <span class="filter-group-label" style="color:#a78bfa;">$M</span>
         <input type="number" class="filter-input" id="trackerRareMin" value="1" min="0" step="0.5" title="Rare min notional ($M)" oninput="debouncedTrackerRefresh()" style="border-color:#a78bfa44;color:#a78bfa;">
         <span class="filter-group-label" style="color:#a78bfa;">Days</span>
-        <input type="number" class="filter-input" id="trackerRareDays" value="60" min="5" max="365" title="Rare min dormancy days" oninput="debouncedTrackerRefresh()" style="border-color:#a78bfa44;color:#a78bfa;">
+        <input type="number" class="filter-input" id="trackerRareDays" value="20" min="5" max="365" title="Rare min dormancy days" oninput="debouncedTrackerRefresh()" style="border-color:#a78bfa44;color:#a78bfa;">
       </div>
     </div>
     <div style="margin-left:auto;display:flex;align-items:center;gap:4px;align-self:center;">
@@ -815,7 +815,7 @@ function parseMinInput(val){
 // Controls stats bar, CB table, chart markers, AND tracker cards.
 function getDailyRankRange(){
   return {from: parseInt(document.getElementById('trackerDailyFrom').value) || 1,
-          to: parseInt(document.getElementById('trackerDailyTo').value) || 50};
+          to: parseInt(document.getElementById('trackerDailyTo').value) || 20};
 }
 // Debounced refresh — waits 600ms after last keystroke before reloading everything
 var _refreshTimer = null;
@@ -887,7 +887,7 @@ function buildFilterParams(){
   params.set('daily_to', dr.to);
   // Single rank range
   var rankFrom = parseInt(document.getElementById('trackerRankFrom').value) || 1;
-  var rankTo = parseInt(document.getElementById('trackerRankTo').value) || 50;
+  var rankTo = parseInt(document.getElementById('trackerRankTo').value) || 10;
   params.set('rank_from', rankFrom);
   params.set('rank_to', rankTo);
   var rareMin = (parseFloat(document.getElementById('trackerRareMin').value) || 0) * 1e6;
@@ -961,9 +961,9 @@ function renderDetailEvents(){
   var events = _detailEvents;
   // Client-side type filter — independent layers, respecting rank ranges
   var _df = parseInt(document.getElementById('trackerDailyFrom').value) || 1;
-  var _dt = parseInt(document.getElementById('trackerDailyTo').value) || 50;
+  var _dt = parseInt(document.getElementById('trackerDailyTo').value) || 20;
   var _rf = parseInt(document.getElementById('trackerRankFrom').value) || 1;
-  var _rt = parseInt(document.getElementById('trackerRankTo').value) || 50;
+  var _rt = parseInt(document.getElementById('trackerRankTo').value) || 10;
   if(_detailTypeFilter !== 'all'){
     events = events.filter(function(ev){
       if(_detailTypeFilter === 'daily') return ev.daily_rank != null && ev.daily_rank >= _df && ev.daily_rank <= _dt;
@@ -1185,12 +1185,12 @@ function applyFilterProfile(name){
   var profiles = getFilterProfiles();
   var p = profiles[name] || _DEFAULT_PROFILE;
   document.getElementById('trackerDailyFrom').value = p.daily_from || '1';
-  document.getElementById('trackerDailyTo').value = p.daily_to || '50';
-  document.getElementById('trackerMinSweeps').value = p.min_sweeps || '2';
+  document.getElementById('trackerDailyTo').value = p.daily_to || '20';
+  document.getElementById('trackerMinSweeps').value = p.min_sweeps || '1';
   document.getElementById('trackerRankFrom').value = p.rank_from || '1';
-  document.getElementById('trackerRankTo').value = p.rank_to || '50';
+  document.getElementById('trackerRankTo').value = p.rank_to || '10';
   document.getElementById('trackerRareMin').value = p.rare_min || '1';
-  document.getElementById('trackerRareDays').value = p.rare_days || '60';
+  document.getElementById('trackerRareDays').value = p.rare_days || '20';
   loadAll();
 }
 
@@ -1230,9 +1230,9 @@ function filterByType(events){
   var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare;
   if(allOn) return events;
   var df = parseInt(document.getElementById('trackerDailyFrom').value) || 1;
-  var dt = parseInt(document.getElementById('trackerDailyTo').value) || 50;
+  var dt = parseInt(document.getElementById('trackerDailyTo').value) || 20;
   var rf = parseInt(document.getElementById('trackerRankFrom').value) || 1;
-  var rt = parseInt(document.getElementById('trackerRankTo').value) || 50;
+  var rt = parseInt(document.getElementById('trackerRankTo').value) || 10;
   return events.filter(function(ev){
     if(_activeLayers.daily && ev.daily_rank != null && ev.daily_rank >= df && ev.daily_rank <= dt) return true;
     if(_activeLayers.single && ev.sweep_rank != null && ev.sweep_rank >= rf && ev.sweep_rank <= rt) return true;
@@ -1575,7 +1575,7 @@ function loadChart(){
   var _ms = parseInt(document.getElementById('trackerMinSweeps').value) || 0;
   var _dr = getDailyRankRange();
   var _rf = parseInt(document.getElementById('trackerRankFrom').value) || 1;
-  var _rt = parseInt(document.getElementById('trackerRankTo').value) || 50;
+  var _rt = parseInt(document.getElementById('trackerRankTo').value) || 10;
   var _rm = (parseFloat(document.getElementById('trackerRareMin').value) || 0) * 1e6;
   var _rd = parseInt(document.getElementById('trackerRareDays').value) || 0;
   if(_ms > 0) params.set('min_sweeps', _ms);
@@ -1873,9 +1873,9 @@ function renderChart(ticker, chartData, containerId){
 
   // Read rank ranges from filter inputs — bubbles only show within these ranges
   var _chartDailyFrom = parseInt(document.getElementById('trackerDailyFrom').value) || 1;
-  var _chartDailyTo   = parseInt(document.getElementById('trackerDailyTo').value) || 50;
+  var _chartDailyTo   = parseInt(document.getElementById('trackerDailyTo').value) || 20;
   var _chartSingleFrom = parseInt(document.getElementById('trackerRankFrom').value) || 1;
-  var _chartSingleTo   = parseInt(document.getElementById('trackerRankTo').value) || 50;
+  var _chartSingleTo   = parseInt(document.getElementById('trackerRankTo').value) || 10;
 
   var cbDateKeys = Object.keys(cbDates).sort();
 
