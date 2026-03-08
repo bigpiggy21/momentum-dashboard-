@@ -3460,6 +3460,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 if fill_price <= 0:
                     continue  # skip unfilled/cancelled
 
+                date_str = (fill.get("filledAt") or order.get("createdAt") or "")[:10]
+                # Only include trades from March 2026 onward
+                if date_str < "2026-03-01":
+                    continue
+
                 raw_ticker = order.get("ticker", "")
                 instrument = order.get("instrument", {})
                 ticker_name = instrument.get("name", "")
@@ -3468,7 +3473,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
                 side_str = order.get("side", "").upper()
                 side = "Buy" if side_str == "BUY" else "Sell"
-                date_str = (fill.get("filledAt") or order.get("createdAt") or "")[:10]
 
                 # Compute % gain
                 if side == "Buy" and raw_ticker in cur_prices:
