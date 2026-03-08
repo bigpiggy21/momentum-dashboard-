@@ -3253,7 +3253,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             ticker_names = _load_names() or {}
 
             # Build sanitised position list (% only, no £ amounts)
-            pos_list = []
+            # Pass 1: collect positions with ppl (account currency) for weight calc
+            raw_positions = []
             for p in positions:
                 raw_ticker = p.get("ticker", "")
                 # Clean: AAPL_US_EQ → AAPL, SGDXl_EQ → SGDX
@@ -3261,27 +3262,52 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 # Strip trailing lowercase suffixes (T212 fractional indicators like 'l')
                 clean_ticker = clean_ticker.rstrip("abcdefghijklmnopqrstuvwxyz") or clean_ticker
 
-                qty = float(p.get("quantity") or 0)
                 avg_price = float(p.get("averagePrice") or 0)
                 cur_price = float(p.get("currentPrice") or 0)
-                ppl = float(p.get("ppl") or 0)
-                fx_ppl = float(p.get("fxPpl") or 0)
+                ppl = float(p.get("ppl") or 0)         # P&L in account currency
+                fx_ppl = float(p.get("fxPpl") or 0)     # FX P&L in account currency
 
-                # Cost basis in account currency (from T212's averagePrice)
-                cost_basis = avg_price * qty
+                # Gain % — averagePrice and currentPrice are in same units (currency-agnostic)
+                gain_pct = round((cur_price - avg_price) / avg_price * 100, 2) if avg_price > 0 else 0.0
 
-                # Position current value = cost + profit/loss (all in account currency)
-                position_value = cost_basis + ppl + fx_ppl
-                weight_pct = round(position_value / total_value * 100, 2) if total_value > 0 else 0.0
-
-                # Gain % (profit/loss relative to cost)
-                gain_pct = round((ppl + fx_ppl) / cost_basis * 100, 2) if cost_basis > 0 else 0.0
-
-                pos_list.append({
+                # Position current value in account currency = invested_portion + ppl
+                # We derive invested_portion from: total_ppl contributes to (total - free - invested_leftover)
+                # Simpler: position_value = (invested / n) adjusted by ppl share
+                # Most reliable: each position's value in acct currency = its share of invested * (1 + gain)
+                total_pnl = ppl + fx_ppl
+                raw_positions.append({
                     "ticker": clean_ticker,
                     "name": ticker_names.get(clean_ticker, clean_ticker),
-                    "weight": weight_pct,
                     "gain": gain_pct,
+                    "pnl": total_pnl,
+                })
+
+            # Pass 2: compute weights using ppl to derive position values
+            # Each position's current value in account currency:
+            #   value_i = cost_i + pnl_i, and sum(cost_i) = invested, sum(pnl_i) = total_pnl
+            #   so sum(value_i) = invested + total_pnl = total - free
+            # We can get cost_i from: cost_i = pnl_i / (gain_ratio) when gain != 0
+            # But when gain is 0, cost_i is unknown from API alone.
+            # Simplest robust approach: value_i = cost_i * (1 + gain_i/100)
+            #   where cost_i = pnl_i / (gain_i/100) when gain != 0
+            # Fallback for gain=0: distribute remaining invested equally
+            total_invested_value = total_value - free_cash  # = invested + total pnl
+            pos_list = []
+            for rp in raw_positions:
+                gain_ratio = rp["gain"] / 100.0
+                if abs(gain_ratio) > 0.0001:
+                    cost_i = rp["pnl"] / gain_ratio
+                    value_i = cost_i + rp["pnl"]
+                else:
+                    # gain ≈ 0 → value ≈ cost, distribute invested evenly
+                    value_i = invested / max(len(raw_positions), 1)
+
+                weight_pct = round(value_i / total_value * 100, 2) if total_value > 0 else 0.0
+                pos_list.append({
+                    "ticker": rp["ticker"],
+                    "name": rp["name"],
+                    "weight": weight_pct,
+                    "gain": rp["gain"],
                 })
 
             # Sort by weight descending
