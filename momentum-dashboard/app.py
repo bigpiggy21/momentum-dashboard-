@@ -1532,12 +1532,19 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     # ── Single-Ticker Backfill ────────────────────────────────────────
 
     def trigger_ticker_backfill(self):
-        """POST /api/scheduler/trigger-ticker — backfill a single ticker (collect + compute)."""
+        """POST /api/scheduler/trigger-ticker — backfill one or more tickers (collect + compute).
+        Accepts 'ticker' as a single ticker string or comma-separated list."""
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
-            ticker = body.get("ticker", "").strip().upper()
-            if not ticker:
+            raw = body.get("ticker", "").strip().upper()
+            if not raw:
+                self.send_json({"ok": False, "error": "ticker required"})
+                return
+
+            # Parse comma-separated tickers
+            tickers = [t.strip() for t in raw.split(",") if t.strip()]
+            if not tickers:
                 self.send_json({"ok": False, "error": "ticker required"})
                 return
 
@@ -1546,78 +1553,96 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     self.send_json({"ok": False, "error": f"Already backfilling {_ticker_backfill['ticker']}"})
                     return
                 _ticker_backfill.update({
-                    "running": True, "ticker": ticker,
-                    "phase": "collecting", "message": f"Collecting {ticker}...",
+                    "running": True, "ticker": tickers[0],
+                    "tickers": tickers, "completed": 0, "total": len(tickers),
+                    "phase": "collecting", "message": f"Collecting {tickers[0]}... (1/{len(tickers)})",
                     "t0": time.time(),
                 })
 
             def _run():
                 import subprocess as _sp
-                try:
-                    # Phase 1: Collect OHLC data
-                    from collector import collect_ticker
-                    result = collect_ticker(ticker)
-                    if result.get("status") == "error":
+                from collector import collect_ticker
+                engine_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "engine.py")
+                done = 0
+                total = len(tickers)
+                errors = []
+
+                for i, ticker in enumerate(tickers):
+                    try:
+                        # Phase 1: Collect OHLC data
                         with _ticker_backfill_lock:
                             _ticker_backfill.update({
-                                "running": False, "phase": "error",
-                                "message": f"Collection failed: {result.get('error', 'unknown')}",
+                                "ticker": ticker, "completed": done, "total": total,
+                                "phase": "collecting",
+                                "message": f"Collecting {ticker}... ({i+1}/{total})",
                             })
-                        return
 
-                    # Phase 2: Compute indicators via engine subprocess
-                    with _ticker_backfill_lock:
-                        _ticker_backfill.update({
-                            "phase": "computing",
-                            "message": f"Computing indicators for {ticker}...",
-                        })
+                        result = collect_ticker(ticker)
+                        if result.get("status") == "error":
+                            err_msg = result.get("error", "unknown")
+                            errors.append(f"{ticker}: {err_msg}")
+                            print(f"[BACKFILL] {ticker} collection failed: {err_msg}", flush=True)
+                            done += 1
+                            continue
 
-                    engine_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "engine.py")
-                    cmd = [sys.executable, engine_path,
-                           "--ticker", ticker,
-                           "--workers", "1",
-                           "--once"]
-                    eng = _sp.run(cmd, capture_output=True, timeout=300,
-                                  cwd=os.path.dirname(engine_path),
-                                  encoding='utf-8', errors='replace')
-                    if eng.returncode != 0:
-                        err = eng.stderr[-300:] if eng.stderr else "unknown error"
+                        # Phase 2: Compute indicators via engine subprocess
                         with _ticker_backfill_lock:
                             _ticker_backfill.update({
-                                "running": False, "phase": "error",
-                                "message": f"Compute failed: {err}",
+                                "phase": "computing",
+                                "message": f"Computing {ticker}... ({i+1}/{total})",
                             })
-                        return
 
-                    elapsed = round(time.time() - _ticker_backfill["t0"], 1)
-                    with _ticker_backfill_lock:
-                        _ticker_backfill.update({
-                            "running": False, "phase": "done",
-                            "message": f"{ticker} backfilled in {elapsed}s",
-                        })
-                    print(f"[BACKFILL] {ticker} done in {elapsed}s", flush=True)
+                        cmd = [sys.executable, engine_path,
+                               "--ticker", ticker,
+                               "--workers", "1",
+                               "--once"]
+                        eng = _sp.run(cmd, capture_output=True, timeout=300,
+                                      cwd=os.path.dirname(engine_path),
+                                      encoding='utf-8', errors='replace')
+                        if eng.returncode != 0:
+                            err = eng.stderr[-300:] if eng.stderr else "unknown error"
+                            errors.append(f"{ticker}: compute failed")
+                            print(f"[BACKFILL] {ticker} compute failed: {err}", flush=True)
+                            done += 1
+                            continue
 
-                except Exception as e:
-                    with _ticker_backfill_lock:
-                        _ticker_backfill.update({
-                            "running": False, "phase": "error",
-                            "message": f"Error: {e}",
-                        })
+                        done += 1
+                        print(f"[BACKFILL] {ticker} done ({done}/{total})", flush=True)
+
+                    except Exception as e:
+                        errors.append(f"{ticker}: {e}")
+                        done += 1
+                        print(f"[BACKFILL] {ticker} error: {e}", flush=True)
+
+                elapsed = round(time.time() - _ticker_backfill["t0"], 1)
+                err_suffix = f" ({len(errors)} errors)" if errors else ""
+                with _ticker_backfill_lock:
+                    _ticker_backfill.update({
+                        "running": False, "completed": done, "total": total,
+                        "phase": "done" if not errors else "done_with_errors",
+                        "message": f"{done}/{total} tickers backfilled in {elapsed}s{err_suffix}",
+                        "errors": errors,
+                    })
+                print(f"[BACKFILL] Batch complete: {done}/{total} in {elapsed}s{err_suffix}", flush=True)
 
             threading.Thread(target=_run, daemon=True).start()
-            self.send_json({"ok": True, "ticker": ticker})
+            self.send_json({"ok": True, "tickers": tickers, "count": len(tickers)})
 
         except Exception as e:
             self.send_json({"ok": False, "error": str(e)})
 
     def serve_ticker_backfill_status(self):
-        """GET /api/scheduler/ticker-backfill-status — progress of single-ticker backfill."""
+        """GET /api/scheduler/ticker-backfill-status — progress of ticker backfill (single or batch)."""
         with _ticker_backfill_lock:
             self.send_json({
                 "running": _ticker_backfill["running"],
-                "ticker": _ticker_backfill["ticker"],
+                "ticker": _ticker_backfill.get("ticker", ""),
+                "tickers": _ticker_backfill.get("tickers", []),
+                "completed": _ticker_backfill.get("completed", 0),
+                "total": _ticker_backfill.get("total", 0),
                 "phase": _ticker_backfill["phase"],
                 "message": _ticker_backfill["message"],
+                "errors": _ticker_backfill.get("errors", []),
             })
 
     # ── TradingView UDF Datafeed ──────────────────────────────────────
