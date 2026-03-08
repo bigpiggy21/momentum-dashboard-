@@ -2119,24 +2119,24 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
         # max_notional = biggest individual trade (from ranked_trades query).
         # Daily detection sets max_notional = total_notional (wrong for per-trade),
         # so we always overwrite with the accurate per-trade value here.
+        # NOTE: Use != instead of > so ranks can go UP or DOWN after backfill.
         _trade_max = round(row["max_notional"], 2) if row["max_notional"] else None
         c.execute("""
             UPDATE clusterbomb_events SET sweep_rank = ?,
                 max_notional = COALESCE(?, max_notional)
             WHERE ticker = ? AND event_date = ?
-            AND (sweep_rank IS NULL OR sweep_rank > ?)
+            AND (sweep_rank IS NULL OR sweep_rank != ?)
         """, (best_rank, _trade_max, ticker, event_date, best_rank))
 
         if c.rowcount > 0:
             updated += 1
         else:
-            # Check if event exists but already has a better rank
+            # Check if event exists (with same rank already — no update needed)
             existing = c.execute(
                 "SELECT sweep_rank FROM clusterbomb_events WHERE ticker = ? AND event_date = ?",
                 (ticker, event_date)
             ).fetchone()
             if existing:
-                # Event exists with equal or better rank — skip
                 continue
 
             # Step 2: No existing event — INSERT as standalone ranked_sweep
@@ -2174,6 +2174,36 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
                 inserted += 1
             except sqlite3.IntegrityError:
                 pass
+
+    # Cleanup: after backfill, some events may now be ranked beyond the limit.
+    # For processed tickers, NULL out sweep_rank for events not in the current
+    # ranked result set, and DELETE standalone ranked_sweep events that lost rank.
+    if tickers and not date_from and not date_to:
+        _valid = set((r["ticker"], r["trade_date"]) for r in rows)
+
+        _ph = ",".join("?" * len(tickers))
+        stale_rows = c.execute(f"""
+            SELECT id, ticker, event_date, event_type, sweep_rank, daily_rank
+            FROM clusterbomb_events
+            WHERE ticker IN ({_ph}) AND sweep_rank IS NOT NULL
+        """, list(tickers)).fetchall()
+
+        nulled = 0
+        deleted = 0
+        for sr in stale_rows:
+            if (sr["ticker"], sr["event_date"]) not in _valid:
+                if sr["event_type"] == "ranked_sweep" and sr["daily_rank"] is None:
+                    # Standalone sweep event with no daily rank — delete it
+                    c.execute("DELETE FROM clusterbomb_events WHERE id = ?", (sr["id"],))
+                    deleted += 1
+                else:
+                    # Multi-type event — just NULL the sweep_rank
+                    c.execute("UPDATE clusterbomb_events SET sweep_rank = NULL WHERE id = ?", (sr["id"],))
+                    nulled += 1
+
+        if nulled or deleted:
+            print(f"  Ranked sweep cleanup: {nulled} stale ranks nulled, "
+                  f"{deleted} orphan ranked_sweep events deleted", flush=True)
 
     conn.commit()
     conn.close()
@@ -2272,16 +2302,17 @@ def detect_ranked_daily(rank_limit=100, min_sweeps=2, tickers=None,
         day_rank = row["day_rank"]
 
         # Step 1: Try to UPDATE existing event's daily_rank
+        # NOTE: Use != instead of > so ranks can go UP or DOWN after backfill.
         c.execute("""
             UPDATE clusterbomb_events SET daily_rank = ?
             WHERE ticker = ? AND event_date = ?
-            AND (daily_rank IS NULL OR daily_rank > ?)
+            AND (daily_rank IS NULL OR daily_rank != ?)
         """, (day_rank, ticker, event_date, day_rank))
 
         if c.rowcount > 0:
             updated += 1
         else:
-            # Check if event exists but already has a better rank
+            # Check if event exists (with same rank already — no update needed)
             existing = c.execute(
                 "SELECT daily_rank FROM clusterbomb_events WHERE ticker = ? AND event_date = ?",
                 (ticker, event_date)
@@ -2314,6 +2345,40 @@ def detect_ranked_daily(rank_limit=100, min_sweeps=2, tickers=None,
                 inserted += 1
             except sqlite3.IntegrityError:
                 pass
+
+    # Cleanup: after backfill, some events may now be ranked beyond the limit
+    # or no longer qualify. For processed tickers, NULL out daily_rank for events
+    # not in the current ranked result set, and DELETE standalone ranked_daily
+    # events that lost their rank (they have no other purpose).
+    if tickers and not date_from and not date_to:
+        # Build set of (ticker, date) that ARE validly ranked
+        _valid = set((r["ticker"], r["trade_date"]) for r in rows)
+        _processed_tickers = set(tickers)
+
+        # Find stale ranked events for these tickers
+        _ph = ",".join("?" * len(tickers))
+        stale_rows = c.execute(f"""
+            SELECT id, ticker, event_date, event_type, daily_rank, sweep_rank
+            FROM clusterbomb_events
+            WHERE ticker IN ({_ph}) AND daily_rank IS NOT NULL
+        """, list(tickers)).fetchall()
+
+        nulled = 0
+        deleted = 0
+        for sr in stale_rows:
+            if (sr["ticker"], sr["event_date"]) not in _valid:
+                if sr["event_type"] == "ranked_daily" and sr["sweep_rank"] is None:
+                    # Standalone daily event with no sweep rank — delete it
+                    c.execute("DELETE FROM clusterbomb_events WHERE id = ?", (sr["id"],))
+                    deleted += 1
+                else:
+                    # Multi-type event — just NULL the daily_rank
+                    c.execute("UPDATE clusterbomb_events SET daily_rank = NULL WHERE id = ?", (sr["id"],))
+                    nulled += 1
+
+        if nulled or deleted:
+            print(f"  Ranked daily cleanup: {nulled} stale ranks nulled, "
+                  f"{deleted} orphan ranked_daily events deleted", flush=True)
 
     conn.commit()
     conn.close()
