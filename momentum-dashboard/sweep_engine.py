@@ -2645,16 +2645,14 @@ def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
         else:
             cb_where.append("(COALESCE(event_type,'clusterbomb') != 'clusterbomb' OR sweep_count >= ?)")
         cb_params.append(min_sweeps)
-    if etf_only and (daily_from is not None or daily_to is not None):
+    if etf_only and (daily_from is not None or daily_to is not None or rank_from is not None or rank_to is not None):
+        # OR across layers: include if daily_rank in range OR sweep_rank in range OR is_rare
         _df = daily_from if daily_from is not None else 1
         _dt = daily_to if daily_to is not None else 50
-        cb_where.append("(daily_rank IS NULL OR (daily_rank >= ? AND daily_rank <= ?))")
-        cb_params.extend([_df, _dt])
-    if etf_only and (rank_from is not None or rank_to is not None):
         _rf = rank_from if rank_from is not None else 1
         _rt = rank_to if rank_to is not None else 50
-        cb_where.append("(sweep_rank IS NULL OR (sweep_rank >= ? AND sweep_rank <= ?))")
-        cb_params.extend([_rf, _rt])
+        cb_where.append("((daily_rank >= ? AND daily_rank <= ?) OR (sweep_rank >= ? AND sweep_rank <= ?) OR is_rare = 1)")
+        cb_params.extend([_df, _dt, _rf, _rt])
     elif monster_min:
         cb_where.append("(COALESCE(is_monster, 0) = 0 AND COALESCE(event_type,'clusterbomb') != 'monster_sweep' OR COALESCE(max_notional, total_notional) >= ?)")
         cb_params.append(monster_min)
@@ -2763,16 +2761,14 @@ def get_sweep_chart_data(ticker, date_from=None, date_to=None, timeframe="1D",
         else:
             cb_where += " AND (COALESCE(event_type,'clusterbomb') != 'clusterbomb' OR sweep_count >= ?)"
         cb_params.append(min_sweeps)
-    if etf_only and (daily_from is not None or daily_to is not None):
+    if etf_only and (daily_from is not None or daily_to is not None or rank_from is not None or rank_to is not None):
+        # OR across layers: include if daily_rank in range OR sweep_rank in range OR is_rare
         _df = daily_from if daily_from is not None else 1
         _dt = daily_to if daily_to is not None else 50
-        cb_where += " AND (daily_rank IS NULL OR (daily_rank >= ? AND daily_rank <= ?))"
-        cb_params.extend([_df, _dt])
-    if etf_only and (rank_from is not None or rank_to is not None):
         _rf = rank_from if rank_from is not None else 1
         _rt = rank_to if rank_to is not None else 50
-        cb_where += " AND (sweep_rank IS NULL OR (sweep_rank >= ? AND sweep_rank <= ?))"
-        cb_params.extend([_rf, _rt])
+        cb_where += " AND ((daily_rank >= ? AND daily_rank <= ?) OR (sweep_rank >= ? AND sweep_rank <= ?) OR is_rare = 1)"
+        cb_params.extend([_df, _dt, _rf, _rt])
     elif monster_min:
         cb_where += " AND (COALESCE(is_monster, 0) = 0 AND COALESCE(event_type,'clusterbomb') != 'monster_sweep' OR COALESCE(max_notional, total_notional) >= ?)"
         cb_params.append(monster_min)
@@ -3069,17 +3065,14 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
         else:
             where.append("(COALESCE(event_type,'clusterbomb') != 'clusterbomb' OR sweep_count >= ?)")
         params.append(min_sweeps)
-    if etf_only and (daily_from is not None or daily_to is not None):
+    if etf_only and (daily_from is not None or daily_to is not None or rank_from is not None or rank_to is not None):
+        # OR across layers: include if daily_rank in range OR sweep_rank in range OR is_rare
         _df = daily_from if daily_from is not None else 1
         _dt = daily_to if daily_to is not None else 50
-        where.append("(daily_rank IS NULL OR (daily_rank >= ? AND daily_rank <= ?))")
-        params.extend([_df, _dt])
-    if etf_only and (rank_from is not None or rank_to is not None):
-        # ETF mode: filter single-ranked events by rank range
         _rf = rank_from if rank_from is not None else 1
         _rt = rank_to if rank_to is not None else 50
-        where.append("(sweep_rank IS NULL OR (sweep_rank >= ? AND sweep_rank <= ?))")
-        params.extend([_rf, _rt])
+        where.append("((daily_rank >= ? AND daily_rank <= ?) OR (sweep_rank >= ? AND sweep_rank <= ?) OR is_rare = 1)")
+        params.extend([_df, _dt, _rf, _rt])
     elif monster_min:
         # Stock mode: Filter monster events by their largest individual sweep (max_notional)
         where.append("(COALESCE(is_monster, 0) = 0 AND COALESCE(event_type,'clusterbomb') != 'monster_sweep' OR COALESCE(max_notional, total_notional) >= ?)")
