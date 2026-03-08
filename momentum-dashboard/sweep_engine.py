@@ -701,12 +701,55 @@ def init_sweep_db():
         ).fetchone()[0]
         print(f"  Backfilled max_notional for {filled} events.", flush=True)
 
+    # One-time fix: correct max_notional where daily detection set it = total_notional.
+    # For events with sweep_rank, max_notional should be the biggest individual trade,
+    # not the day total. Only needs to run once — flag prevents re-running.
+    _fix_done = c.execute(
+        "SELECT value FROM sweep_meta WHERE key = 'max_notional_fix_v1'"
+    ).fetchone() if c.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='sweep_meta'"
+    ).fetchone() else None
+    if not _fix_done:
+        _bad = c.execute("""
+            SELECT COUNT(*) FROM clusterbomb_events
+            WHERE sweep_rank IS NOT NULL AND max_notional = total_notional
+            AND total_notional > 0
+        """).fetchone()[0]
+        if _bad > 0:
+            print(f"Fixing {_bad} events where max_notional was incorrectly set to total_notional...", flush=True)
+            c.execute("""
+                CREATE TEMP TABLE _true_max AS
+                SELECT ticker, trade_date, MAX(notional) as max_n
+                FROM sweep_trades
+                WHERE is_darkpool = 1 AND is_sweep = 1
+                GROUP BY ticker, trade_date
+            """)
+            c.execute("""
+                UPDATE clusterbomb_events SET max_notional = (
+                    SELECT max_n FROM _true_max
+                    WHERE _true_max.ticker = clusterbomb_events.ticker
+                    AND _true_max.trade_date = clusterbomb_events.event_date
+                )
+                WHERE sweep_rank IS NOT NULL
+                AND max_notional = total_notional
+                AND total_notional > 0
+            """)
+            _fixed = c.rowcount
+            c.execute("DROP TABLE _true_max")
+            conn.commit()
+            print(f"  Fixed max_notional for {_fixed} events.", flush=True)
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS sweep_meta (
             key TEXT PRIMARY KEY,
             value TEXT
         )
     """)
+
+    # Write flag so max_notional fix only runs once
+    if not _fix_done:
+        c.execute("INSERT OR REPLACE INTO sweep_meta (key, value) VALUES ('max_notional_fix_v1', '1')")
+        conn.commit()
 
     # Track which ticker+date combos have been fetched (even if 0 sweeps found)
     c.execute("""
@@ -1951,12 +1994,17 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
         event_date = row["trade_date"]
         best_rank = row["best_rank"]
 
-        # Step 1: Try to UPDATE existing event's sweep_rank
+        # Step 1: Try to UPDATE existing event's sweep_rank + max_notional
+        # max_notional = biggest individual trade (from ranked_trades query).
+        # Daily detection sets max_notional = total_notional (wrong for per-trade),
+        # so we always overwrite with the accurate per-trade value here.
+        _trade_max = round(row["max_notional"], 2) if row["max_notional"] else None
         c.execute("""
-            UPDATE clusterbomb_events SET sweep_rank = ?
+            UPDATE clusterbomb_events SET sweep_rank = ?,
+                max_notional = COALESCE(?, max_notional)
             WHERE ticker = ? AND event_date = ?
             AND (sweep_rank IS NULL OR sweep_rank > ?)
-        """, (best_rank, ticker, event_date, best_rank))
+        """, (best_rank, _trade_max, ticker, event_date, best_rank))
 
         if c.rowcount > 0:
             updated += 1
