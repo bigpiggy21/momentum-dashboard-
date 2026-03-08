@@ -233,7 +233,7 @@ def fetch_with_cache(api_ticker, timespan, asset_type="stock", full_history_days
         if hasattr(earliest_cached, 'tz') and earliest_cached.tz is not None:
             earliest_cached = earliest_cached.tz_localize(None)
         backfill_gap_days = (earliest_cached - history_start_ts).days
-        if backfill_gap_days > 30 and (timespan == "hour" or _is_backfill_enabled()):
+        if backfill_gap_days > 30 and (timespan in ("hour", "day") or _is_backfill_enabled()):
             # Check marker file — if a previous backfill attempt already found
             # nothing, the ticker likely didn't exist before its cache start date
             # (e.g. SPOT IPO'd Apr 2018, no data before that).  Don't keep asking.
