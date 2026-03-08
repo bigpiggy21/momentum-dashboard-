@@ -147,7 +147,7 @@ input,select,textarea,button{color-scheme:dark;}
 .chart-setting-btn{background:#14141e;color:#777;border:1px solid #1e1e2e;padding:3px 8px;border-radius:3px;font-size:10px;font-weight:600;cursor:pointer;height:24px;display:inline-flex;align-items:center;gap:3px;text-transform:uppercase;letter-spacing:0.3px;}
 .chart-setting-btn:hover{color:#ccc;background:#1a1a26;border-color:#2a2a3a;}
 .chart-setting-btn.active{color:#f59e0b;background:#1a1a26;border-color:#f59e0b44;}
-.tracker-type-filter{padding:6px 14px 8px;border-bottom:1px solid #1e1e2e;flex-shrink:0;display:flex;align-items:stretch;gap:6px;}
+.tracker-type-filter{padding:6px 14px 8px;border-bottom:1px solid #1e1e2e;flex-shrink:0;display:flex;align-items:stretch;gap:6px;flex-wrap:wrap;}
 .filter-col{display:flex;flex-direction:column;align-items:stretch;gap:4px;background:#0d0d14;border:1px solid #1a1a28;border-radius:5px;padding:4px 6px;}
 .filter-col .tracker-filter-btn{width:100%;justify-content:center;}
 .filter-col .filter-group{display:inline-flex;align-items:center;justify-content:center;gap:3px;white-space:nowrap;height:22px;}
@@ -424,20 +424,20 @@ td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;borde
       <button class="tracker-filter-btn flt-daily" id="filterDaily" onclick="setTrackerTypeFilter('daily',this)">Daily</button>
       <div class="filter-group">
         <span class="filter-group-label" style="color:#f59e0b;">From</span>
-        <input type="number" class="filter-input" id="trackerDailyFrom" value="1" min="1" title="Daily rank from (top)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#f59e0b44;color:#f59e0b;">
+        <input type="number" class="filter-input" id="trackerDailyFrom" value="1" min="1" title="Daily rank from (top)" oninput="debouncedTrackerRefresh()" style="width:38px;border-color:#f59e0b44;color:#f59e0b;">
         <span class="filter-group-label" style="color:#f59e0b;">To</span>
-        <input type="number" class="filter-input" id="trackerDailyTo" value="20" min="1" title="Daily rank to (bottom)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#f59e0b44;color:#f59e0b;">
+        <input type="number" class="filter-input" id="trackerDailyTo" value="20" min="1" title="Daily rank to (bottom)" oninput="debouncedTrackerRefresh()" style="width:38px;border-color:#f59e0b44;color:#f59e0b;">
         <span class="filter-group-label" style="color:#f59e0b;">#</span>
-        <input type="number" class="filter-input" id="trackerMinSweeps" value="1" min="1" max="50" title="Min sweep count" oninput="debouncedTrackerRefresh()" style="width:40px;border-color:#f59e0b44;color:#f59e0b;">
+        <input type="number" class="filter-input" id="trackerMinSweeps" value="1" min="1" max="50" title="Min sweep count" oninput="debouncedTrackerRefresh()" style="width:36px;border-color:#f59e0b44;color:#f59e0b;">
       </div>
     </div>
     <div class="filter-col" data-type="single">
       <button class="tracker-filter-btn flt-single" id="filterSingle" onclick="setTrackerTypeFilter('single',this)">Single</button>
       <div class="filter-group">
         <span class="filter-group-label" style="color:#3b82f6;">From</span>
-        <input type="number" class="filter-input" id="trackerRankFrom" value="1" min="1" title="Single rank from (top)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#3b82f644;color:#3b82f6;">
+        <input type="number" class="filter-input" id="trackerRankFrom" value="1" min="1" title="Single rank from (top)" oninput="debouncedTrackerRefresh()" style="width:38px;border-color:#3b82f644;color:#3b82f6;">
         <span class="filter-group-label" style="color:#3b82f6;">To</span>
-        <input type="number" class="filter-input" id="trackerRankTo" value="10" min="1" title="Single rank to (bottom)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#3b82f644;color:#3b82f6;">
+        <input type="number" class="filter-input" id="trackerRankTo" value="10" min="1" title="Single rank to (bottom)" oninput="debouncedTrackerRefresh()" style="width:38px;border-color:#3b82f644;color:#3b82f6;">
       </div>
     </div>
     <div class="filter-col" data-type="rare_sweep">
@@ -1152,7 +1152,7 @@ function _syncFilterGroupDim(){
 // FILTER PROFILES — localStorage persistence
 // ====================================================================
 var _PROFILE_KEY = 'etf_sweep_filter_profiles';
-var _DEFAULT_PROFILE = {daily_from:'1',daily_to:'50',min_sweeps:'2',rank_from:'1',rank_to:'50',rare_min:'1',rare_days:'60'};
+var _DEFAULT_PROFILE = {daily_from:'1',daily_to:'20',min_sweeps:'1',rank_from:'1',rank_to:'10',rare_min:'1',rare_days:'20'};
 
 function getFilterProfiles(){
   try {
