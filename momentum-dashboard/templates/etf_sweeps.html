@@ -2683,7 +2683,13 @@ function loadWatchlists(){
       opt.textContent = wl.name + ' (' + watchlistData[wl.name].length + ')';
       sel.appendChild(opt);
     });
-    // No default watchlist — show all tickers
+    // Default to ETF watchlist if available
+    if(watchlistData['ETF']){
+      sel.value = 'ETF';
+      updateCategoryDropdown('ETF');
+    }
+    // Initial data load (after watchlist is set)
+    loadAll();
   });
 }
 
@@ -3188,7 +3194,7 @@ document.getElementById('dateTo').addEventListener('change', function(){
 });
 
 loadFilterProfiles();
-loadAll();
+// loadAll() is called inside loadWatchlists() after ETF watchlist is auto-selected
 
 // Resume fetch progress UI if a fetch is already running on the server
 (function checkFetchOnLoad(){
