@@ -667,6 +667,11 @@ def init_sweep_db():
         conn.commit()
         print("Added sweep_rank column to clusterbomb_events.")
 
+    if "daily_rank" not in existing_cols:
+        c.execute("ALTER TABLE clusterbomb_events ADD COLUMN daily_rank INTEGER DEFAULT NULL")
+        conn.commit()
+        print("Added daily_rank column to clusterbomb_events.")
+
     # Backfill max_notional for any events that still have NULL
     # (runs every startup until fully backfilled, handles crash recovery)
     null_count = c.execute(
@@ -723,6 +728,7 @@ def init_sweep_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_cb_ticker_date ON clusterbomb_events(ticker, event_date)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_cb_date ON clusterbomb_events(event_date)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_cb_rare ON clusterbomb_events(is_rare)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_cb_daily_rank ON clusterbomb_events(daily_rank)")
     # Covering index for detection queries (clusterbomb/rare/monster GROUP BY with notional filter)
     c.execute("CREATE INDEX IF NOT EXISTS idx_sweep_dp_notional ON sweep_trades(is_darkpool, is_sweep, notional, ticker, trade_date)")
 
@@ -2000,6 +2006,150 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
     return {"updated": updated, "inserted": inserted}
 
 
+def detect_ranked_daily(rank_limit=100, min_sweeps=2, tickers=None,
+                        date_from=None, date_to=None,
+                        exclude_etfs=True, etf_only=False):
+    """
+    Rank days per-ticker by total daily notional (from sweep_daily_summary).
+    Only counts days with at least min_sweeps sweeps.
+
+    Two-step approach (mirrors detect_ranked_sweeps):
+    1. UPDATE existing clusterbomb_events to set daily_rank.
+    2. INSERT new events with event_type='ranked_daily' for days not already in table.
+
+    Rankings are per-ticker: each ticker's days are ranked independently.
+    """
+    conn = _get_db()
+    c = conn.cursor()
+
+    # Build WHERE for sweep_daily_summary
+    sw_where = [f"sweep_count >= {min_sweeps}"]
+    sw_params = []
+    if tickers:
+        placeholders = ",".join("?" * len(tickers))
+        sw_where.append(f"ticker IN ({placeholders})")
+        sw_params.extend(tickers)
+    if date_from:
+        sw_where.append("trade_date >= ?")
+        sw_params.append(date_from)
+    if date_to:
+        sw_where.append("trade_date <= ?")
+        sw_params.append(date_to)
+
+    sw_where_sql = " AND ".join(sw_where)
+
+    print(f"Ranked daily detection: ranking days (limit top {rank_limit}, "
+          f"min_sweeps={min_sweeps})...", flush=True)
+    import time as _time
+    _t0 = _time.time()
+
+    rows = c.execute(f"""
+        WITH ranked_days AS (
+            SELECT ticker, trade_date, total_notional, sweep_count, vwap,
+                   min_price, max_price,
+                   ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY total_notional DESC) as day_rank
+            FROM sweep_daily_summary
+            WHERE {sw_where_sql}
+        )
+        SELECT ticker, trade_date, day_rank, total_notional, sweep_count,
+               vwap, min_price, max_price
+        FROM ranked_days
+        WHERE day_rank <= ?
+        ORDER BY day_rank
+    """, sw_params + [rank_limit]).fetchall()
+
+    # Filter ETF tickers
+    if etf_only:
+        etf_tickers = load_etf_set()
+        rows = [r for r in rows if r["ticker"] in etf_tickers] if etf_tickers else []
+    elif exclude_etfs:
+        etf_tickers = load_etf_set()
+        if etf_tickers:
+            rows = [r for r in rows if r["ticker"] not in etf_tickers]
+
+    _tickers_in_result = len(set(r["ticker"] for r in rows))
+    print(f"Ranked daily detection: query done in {_time.time()-_t0:.1f}s — "
+          f"{len(rows)} day-events across {_tickers_in_result} tickers", flush=True)
+
+    updated = 0
+    inserted = 0
+    detected_at = datetime.now(timezone.utc).isoformat()
+    _total_rows = len(rows)
+
+    for _i, row in enumerate(rows):
+        if _i > 0 and _i % 500 == 0:
+            print(f"  Ranked daily detection: processing {_i}/{_total_rows} "
+                  f"({updated} updated, {inserted} inserted)...", flush=True)
+        ticker = row["ticker"]
+        event_date = row["trade_date"]
+        day_rank = row["day_rank"]
+
+        # Step 1: Try to UPDATE existing event's daily_rank
+        c.execute("""
+            UPDATE clusterbomb_events SET daily_rank = ?
+            WHERE ticker = ? AND event_date = ?
+            AND (daily_rank IS NULL OR daily_rank > ?)
+        """, (day_rank, ticker, event_date, day_rank))
+
+        if c.rowcount > 0:
+            updated += 1
+        else:
+            # Check if event exists but already has a better rank
+            existing = c.execute(
+                "SELECT daily_rank FROM clusterbomb_events WHERE ticker = ? AND event_date = ?",
+                (ticker, event_date)
+            ).fetchone()
+            if existing:
+                continue
+
+            # Step 2: No existing event — INSERT as standalone ranked_daily
+            direction = _infer_sweep_direction_from_summary(conn, ticker, event_date)
+
+            try:
+                c.execute("""
+                    INSERT INTO clusterbomb_events
+                        (ticker, event_date, sweep_count, total_notional,
+                         max_notional, avg_price,
+                         min_price, max_price, direction, is_rare, is_monster,
+                         event_type, threshold_notional, threshold_sweeps,
+                         threshold_total, sweep_ids, detected_at, daily_rank)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 'ranked_daily', 0, 0, 0, '[]', ?, ?)
+                """, (
+                    ticker, event_date, row["sweep_count"],
+                    round(row["total_notional"], 2),
+                    round(row["total_notional"], 2),  # max_notional = total for daily
+                    round(row["vwap"], 4) if row["vwap"] else None,
+                    round(row["min_price"], 4) if row["min_price"] else None,
+                    round(row["max_price"], 4) if row["max_price"] else None,
+                    direction,
+                    detected_at, day_rank
+                ))
+                inserted += 1
+            except sqlite3.IntegrityError:
+                pass
+
+    conn.commit()
+    conn.close()
+
+    print(f"Ranked daily detection: {updated} existing events ranked, "
+          f"{inserted} new daily-only events inserted "
+          f"(rank limit: top {rank_limit}, min_sweeps: {min_sweeps})")
+    return {"updated": updated, "inserted": inserted}
+
+
+def _infer_sweep_direction_from_summary(conn, ticker, trade_date):
+    """Infer buy/sell/mixed direction from sweep_trades for a given day."""
+    rows = conn.execute("""
+        SELECT id FROM sweep_trades
+        WHERE ticker = ? AND trade_date = ? AND is_darkpool = 1 AND is_sweep = 1
+        LIMIT 20
+    """, (ticker, trade_date)).fetchall()
+    if not rows:
+        return "mixed"
+    sweep_ids = [str(r["id"]) for r in rows]
+    return _infer_sweep_direction(conn, sweep_ids)
+
+
 def get_trade_ranks_for_ticker(ticker):
     """Return {trade_date: best_rank} mapping for a single ticker.
     Ranks individual sweep trades by notional DESC across all time.
@@ -2055,14 +2205,11 @@ def detect_today():
         exclude_etfs=True, etf_only=False,
     )
 
-    # --- ETF detection (ETFs only, separate thresholds) ---
+    # --- ETF detection (ETFs only — daily ranking + single ranking + rare) ---
     ecfg = full_cfg.get("etf", {})
-    etf_cbs = detect_clusterbombs(
-        min_sweeps=ecfg.get("min_sweeps", 3),
-        min_notional=ecfg.get("min_notional", 5_000_000),
-        min_total=ecfg.get("min_total", 75_000_000),
-        rarity_days=ecfg.get("rarity_days", 60),
-        rare_min_notional=ecfg.get("rare_min_notional", 3_000_000),
+    etf_daily = detect_ranked_daily(
+        rank_limit=100,
+        min_sweeps=ecfg.get("min_sweeps_daily", 2),
         date_from=today, date_to=today,
         exclude_etfs=False, etf_only=True,
     )
@@ -2082,7 +2229,7 @@ def detect_today():
         "clusterbomb": len(cbs),
         "rare_sweep": len(rares),
         "monster_sweep": len(monsters),
-        "etf_clusterbomb": len(etf_cbs),
+        "etf_daily": etf_daily.get("updated", 0) + etf_daily.get("inserted", 0),
         "etf_rare_sweep": len(etf_rares),
         "etf_ranked": etf_ranked.get("updated", 0) + etf_ranked.get("inserted", 0),
     }
@@ -2290,10 +2437,10 @@ def get_clusterbombs(ticker=None, date_from=None, date_to=None,
         where.append("is_rare = 1")
     if min_total is not None:
         if etf_only:
-            where.append("(total_notional >= ? OR sweep_rank IS NOT NULL OR is_rare = 1)")
+            where.append("(daily_rank IS NOT NULL OR sweep_rank IS NOT NULL OR is_rare = 1)")
         else:
             where.append("(total_notional >= ? OR COALESCE(is_monster, 0) = 1 OR is_rare = 1)")
-        params.append(min_total)
+            params.append(min_total)
 
     where_sql = (" AND ".join(where)) if where else "1=1"
     rows = conn.execute(f"""
@@ -2368,6 +2515,7 @@ def get_clusterbombs(ticker=None, date_from=None, date_to=None,
             "event_type": evt,
             "max_notional": r["max_notional"] if "max_notional" in r.keys() else None,
             "sweep_rank": r["sweep_rank"] if "sweep_rank" in r.keys() else None,
+            "daily_rank": r["daily_rank"] if "daily_rank" in r.keys() else None,
             "rank": rk.get("rank"),
             "total_days": rk.get("total_days"),
             "current_price": current_price,
@@ -2423,6 +2571,7 @@ def get_clusterbombs(ticker=None, date_from=None, date_to=None,
 def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
                     min_sweeps=None, monster_min=None, rare_min=None, rare_days=None,
                     rank_from=None, rank_to=None,
+                    daily_from=None, daily_to=None,
                     exclude_etfs=True, full_db=False, etf_only=False):
     """Get overview stats for the sweeps page header.
     Supports filtering by min_total, tickers list, date range, and per-type
@@ -2485,22 +2634,28 @@ def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
         cb_params.extend(_etf_filter_tickers)
     if min_total is not None:
         if etf_only:
-            cb_where.append("(total_notional >= ? OR sweep_rank IS NOT NULL OR is_rare = 1)")
+            cb_where.append("(daily_rank IS NOT NULL OR sweep_rank IS NOT NULL OR is_rare = 1)")
         else:
             cb_where.append("(total_notional >= ? OR COALESCE(is_monster, 0) = 1 OR is_rare = 1)")
-        cb_params.append(min_total)
+            cb_params.append(min_total)
     # Per-type display filters
     if min_sweeps:
-        cb_where.append("(COALESCE(event_type,'clusterbomb') != 'clusterbomb' OR sweep_count >= ?)")
+        if etf_only:
+            cb_where.append("(daily_rank IS NULL OR sweep_count >= ?)")
+        else:
+            cb_where.append("(COALESCE(event_type,'clusterbomb') != 'clusterbomb' OR sweep_count >= ?)")
         cb_params.append(min_sweeps)
+    if etf_only and (daily_from is not None or daily_to is not None):
+        _df = daily_from if daily_from is not None else 1
+        _dt = daily_to if daily_to is not None else 50
+        cb_where.append("(daily_rank IS NULL OR (daily_rank >= ? AND daily_rank <= ?))")
+        cb_params.extend([_df, _dt])
     if etf_only and (rank_from is not None or rank_to is not None):
         _rf = rank_from if rank_from is not None else 1
         _rt = rank_to if rank_to is not None else 50
         cb_where.append("(sweep_rank IS NULL OR (sweep_rank >= ? AND sweep_rank <= ?))")
         cb_params.extend([_rf, _rt])
     elif monster_min:
-        # Filter monster events by their largest individual sweep (max_notional),
-        # NOT by total day notional. Non-monster events pass through unaffected.
         cb_where.append("(COALESCE(is_monster, 0) = 0 AND COALESCE(event_type,'clusterbomb') != 'monster_sweep' OR COALESCE(max_notional, total_notional) >= ?)")
         cb_params.append(monster_min)
     if rare_min:
@@ -2526,13 +2681,15 @@ def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
         f"SELECT COUNT(*), "
         f"SUM(CASE WHEN is_rare=1 THEN 1 ELSE 0 END), "
         f"SUM(CASE WHEN COALESCE(is_monster,0)=1 THEN 1 ELSE 0 END), "
-        f"SUM(CASE WHEN sweep_rank IS NOT NULL THEN 1 ELSE 0 END) "
+        f"SUM(CASE WHEN sweep_rank IS NOT NULL THEN 1 ELSE 0 END), "
+        f"SUM(CASE WHEN daily_rank IS NOT NULL THEN 1 ELSE 0 END) "
         f"FROM clusterbomb_events{cb_sql}", cb_params
     ).fetchone()
     stats["clusterbombs"] = row[0] or 0
     stats["rare_clusterbombs"] = row[1] or 0
     stats["monster_sweeps"] = row[2] or 0
     stats["ranked_sweeps"] = row[3] or 0
+    stats["daily_events"] = row[4] or 0
 
     # Last fetch info
     meta = conn.execute("SELECT value FROM sweep_meta WHERE key='last_fetch'").fetchone()
@@ -2545,7 +2702,8 @@ def get_sweep_stats(min_total=None, tickers=None, date_from=None, date_to=None,
 def get_sweep_chart_data(ticker, date_from=None, date_to=None, timeframe="1D",
                          min_total=None, monster_min=None,
                          min_sweeps=None, rare_min=None, rare_days=None,
-                         rank_from=None, rank_to=None, etf_only=False):
+                         rank_from=None, rank_to=None,
+                         daily_from=None, daily_to=None, etf_only=False):
     """
     Get sweep data formatted for chart overlay on candlestick.
     Returns sweeps as markers with price/size/time for chart rendering.
@@ -2594,14 +2752,22 @@ def get_sweep_chart_data(ticker, date_from=None, date_to=None, timeframe="1D",
         cb_params.append(date_to)
     if min_total is not None:
         if etf_only:
-            cb_where += " AND (total_notional >= ? OR sweep_rank IS NOT NULL OR is_rare = 1)"
+            cb_where += " AND (daily_rank IS NOT NULL OR sweep_rank IS NOT NULL OR is_rare = 1)"
         else:
             cb_where += " AND (total_notional >= ? OR COALESCE(is_monster, 0) = 1 OR is_rare = 1)"
-        cb_params.append(min_total)
-    # Per-type display filters (same logic as get_tracker_data)
+            cb_params.append(min_total)
+    # Per-type display filters
     if min_sweeps:
-        cb_where += " AND (COALESCE(event_type,'clusterbomb') != 'clusterbomb' OR sweep_count >= ?)"
+        if etf_only:
+            cb_where += " AND (daily_rank IS NULL OR sweep_count >= ?)"
+        else:
+            cb_where += " AND (COALESCE(event_type,'clusterbomb') != 'clusterbomb' OR sweep_count >= ?)"
         cb_params.append(min_sweeps)
+    if etf_only and (daily_from is not None or daily_to is not None):
+        _df = daily_from if daily_from is not None else 1
+        _dt = daily_to if daily_to is not None else 50
+        cb_where += " AND (daily_rank IS NULL OR (daily_rank >= ? AND daily_rank <= ?))"
+        cb_params.extend([_df, _dt])
     if etf_only and (rank_from is not None or rank_to is not None):
         _rf = rank_from if rank_from is not None else 1
         _rt = rank_to if rank_to is not None else 50
@@ -2620,7 +2786,7 @@ def get_sweep_chart_data(ticker, date_from=None, date_to=None, timeframe="1D",
     cbs = conn.execute(f"""
         SELECT event_date, sweep_count, total_notional, direction, is_rare,
                COALESCE(event_type, 'clusterbomb') as event_type,
-               COALESCE(is_monster, 0) as is_monster, max_notional, sweep_rank
+               COALESCE(is_monster, 0) as is_monster, max_notional, sweep_rank, daily_rank
         FROM clusterbomb_events
         WHERE ticker = ? {cb_where}
         ORDER BY event_date
@@ -2645,6 +2811,7 @@ def get_sweep_chart_data(ticker, date_from=None, date_to=None, timeframe="1D",
             "event_type": cb["event_type"],
             "is_monster": bool(cb["is_monster"]),
             "sweep_rank": sr,
+            "daily_rank": cb["daily_rank"],
         })
 
     conn.close()
@@ -2862,6 +3029,7 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
                      min_sweeps=None, monster_min=None,
                      rare_min=None, rare_days=None,
                      rank_from=None, rank_to=None,
+                     daily_from=None, daily_to=None,
                      exclude_etfs=True, etf_only=False):
     """
     Get clusterbomb events with current price, % gain, days since, and bias.
@@ -2880,28 +3048,40 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
         rare_days: minimum dormancy days for rare sweeps (display filter)
         rank_from: minimum sweep rank to include (ETF mode, replaces monster_min)
         rank_to: maximum sweep rank to include (ETF mode, replaces monster_min)
+        daily_from: minimum daily rank to include (ETF mode)
+        daily_to: maximum daily rank to include (ETF mode)
     """
     # Build dynamic WHERE clause
-    # Monster/ranked sweeps bypass the min_total filter
     if etf_only:
-        where = ["(total_notional >= ? OR sweep_rank IS NOT NULL OR is_rare = 1)"]
+        # ETF mode: ranking-based — include if ANY layer matches
+        where = ["(daily_rank IS NOT NULL OR sweep_rank IS NOT NULL OR is_rare = 1)"]
+        params = []
     else:
+        # Stock mode: threshold-based — monster/rare bypass min_total
         where = ["(total_notional >= ? OR COALESCE(is_monster, 0) = 1 OR is_rare = 1)"]
-    params = [min_total]
+        params = [min_total]
 
     # Per-type display filters (each only applies to its own event_type)
     if min_sweeps:
-        where.append("(COALESCE(event_type,'clusterbomb') != 'clusterbomb' OR sweep_count >= ?)")
+        # For ETF mode, min_sweeps applies to daily-ranked events; for stock mode, to CBs
+        if etf_only:
+            where.append("(daily_rank IS NULL OR sweep_count >= ?)")
+        else:
+            where.append("(COALESCE(event_type,'clusterbomb') != 'clusterbomb' OR sweep_count >= ?)")
         params.append(min_sweeps)
+    if etf_only and (daily_from is not None or daily_to is not None):
+        _df = daily_from if daily_from is not None else 1
+        _dt = daily_to if daily_to is not None else 50
+        where.append("(daily_rank IS NULL OR (daily_rank >= ? AND daily_rank <= ?))")
+        params.extend([_df, _dt])
     if etf_only and (rank_from is not None or rank_to is not None):
-        # ETF mode: filter ranked events by rank range, non-ranked pass through
+        # ETF mode: filter single-ranked events by rank range
         _rf = rank_from if rank_from is not None else 1
         _rt = rank_to if rank_to is not None else 50
         where.append("(sweep_rank IS NULL OR (sweep_rank >= ? AND sweep_rank <= ?))")
         params.extend([_rf, _rt])
     elif monster_min:
-        # Stock mode: Filter monster events by their largest individual sweep (max_notional),
-        # NOT by total day notional. Non-monster events pass through unaffected.
+        # Stock mode: Filter monster events by their largest individual sweep (max_notional)
         where.append("(COALESCE(is_monster, 0) = 0 AND COALESCE(event_type,'clusterbomb') != 'monster_sweep' OR COALESCE(max_notional, total_notional) >= ?)")
         params.append(monster_min)
     if rare_min:
@@ -2960,7 +3140,7 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
                avg_price, min_price, max_price, direction, is_rare,
                COALESCE(is_monster, 0) as is_monster,
                COALESCE(event_type, 'clusterbomb') as event_type,
-               dormancy_days, max_notional, sweep_rank
+               dormancy_days, max_notional, sweep_rank, daily_rank
         FROM clusterbomb_events
         WHERE {where_sql}
         ORDER BY event_date DESC{limit_clause}
@@ -3039,6 +3219,7 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
             "dormancy_days": ev["dormancy_days"],
             "max_notional": ev["max_notional"],
             "sweep_rank": ev["sweep_rank"],
+            "daily_rank": ev["daily_rank"],
             "current_price": current_price,
             "pct_gain": round(pct_gain, 2),
             "days_since": days_since,

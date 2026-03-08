@@ -164,9 +164,9 @@ input,select,textarea,button{color-scheme:dark;}
 .tracker-filter-btn:hover{color:#ccc;background:#1a1a26;}
 .tracker-filter-btn.active{background:#1a1a26;}
 .tracker-filter-btn.flt-all{border-color:#94a3b844;}.tracker-filter-btn.flt-all:hover{border-color:#94a3b8;}.tracker-filter-btn.flt-all.active{color:#e2e8f0;border-color:#94a3b8;}
-.tracker-filter-btn.flt-cb{border-color:#f59e0b44;}.tracker-filter-btn.flt-cb:hover{border-color:#f59e0b;}.tracker-filter-btn.flt-cb.active{color:#f59e0b;border-color:#f59e0b;}
+.tracker-filter-btn.flt-daily{border-color:#f59e0b44;}.tracker-filter-btn.flt-daily:hover{border-color:#f59e0b;}.tracker-filter-btn.flt-daily.active{color:#f59e0b;border-color:#f59e0b;}
 .tracker-filter-btn.flt-rare{border-color:#a78bfa44;}.tracker-filter-btn.flt-rare:hover{border-color:#a78bfa;}.tracker-filter-btn.flt-rare.active{color:#c4b5fd;border-color:#a78bfa;}
-.tracker-filter-btn.flt-ranked{border-color:#3b82f644;}.tracker-filter-btn.flt-ranked:hover{border-color:#3b82f6;}.tracker-filter-btn.flt-ranked.active{color:#60a5fa;border-color:#3b82f6;}
+.tracker-filter-btn.flt-single{border-color:#3b82f644;}.tracker-filter-btn.flt-single:hover{border-color:#3b82f6;}.tracker-filter-btn.flt-single.active{color:#60a5fa;border-color:#3b82f6;}
 .chart-setting-sep{width:1px;height:14px;background:#1e1e2e;margin:0 2px;}
 
 /* Chart fullscreen overlay */
@@ -185,9 +185,9 @@ input,select,textarea,button{color-scheme:dark;}
 .tab-btn:hover{color:#fff;background:#1e1e2e;}
 .tab-btn.active{background:#1a1a26;border-bottom-color:#1a1a26;}
 .tab-btn.dtab-all.active{color:#e2e8f0;border-color:#94a3b8;border-bottom-color:#1a1a26;}
-.tab-btn.dtab-cb.active{color:#f59e0b;border-color:#f59e0b;border-bottom-color:#1a1a26;}
+.tab-btn.dtab-daily.active{color:#f59e0b;border-color:#f59e0b;border-bottom-color:#1a1a26;}
 .tab-btn.dtab-rare.active{color:#c4b5fd;border-color:#a78bfa;border-bottom-color:#1a1a26;}
-.tab-btn.dtab-ranked.active{color:#60a5fa;border-color:#3b82f6;border-bottom-color:#1a1a26;}
+.tab-btn.dtab-single.active{color:#60a5fa;border-color:#3b82f6;border-bottom-color:#1a1a26;}
 .table-wrap{flex:1;overflow-y:auto;overflow-x:auto;border:1px solid #1e1e2e;border-radius:0 0 6px 6px;min-height:0;}
 table{width:100%;border-collapse:collapse;}
 th{background:#0e0e16;color:#666;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:6px 8px;text-align:left;position:sticky;top:0;z-index:1;border-bottom:1px solid #1e1e2e;cursor:pointer;user-select:none;white-space:nowrap;}
@@ -195,9 +195,9 @@ th:hover{color:#f59e0b;}
 td{padding:5px 8px;border-bottom:1px solid #111118;font-size:10px;white-space:nowrap;}
 td.col-key{font-size:12px;}
 tr:hover td{background:#0e0e18;}
-tr.row-ranked td{background:rgba(29,78,216,0.10);}
-tr.row-ranked td:first-child{box-shadow:inset 3px 0 0 #3b82f6;}
-tr.row-ranked:hover td{background:rgba(29,78,216,0.18);}
+tr.row-single td{background:rgba(29,78,216,0.10);}
+tr.row-single td:first-child{box-shadow:inset 3px 0 0 #3b82f6;}
+tr.row-single:hover td{background:rgba(29,78,216,0.18);}
 tr.row-rare td{background:rgba(30,41,59,0.15);}
 tr.row-rare td:first-child{box-shadow:inset 3px 0 0 #a78bfa;}
 tr.row-rare:hover td{background:rgba(30,41,59,0.25);}
@@ -228,8 +228,9 @@ tr.row-focused td:first-child{box-shadow:inset 3px 0 0 #f59e0b !important;}
 /* Event type badges */
 .cb-badge{display:inline-block;background:#422006;color:#f59e0b;font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:0.5px;}
 .rare-flag{display:inline-flex;align-items:center;background:#4c1d95;color:#c4b5fd;font-size:12px;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;line-height:1;}
-.ranked-flag{display:inline-flex;align-items:center;background:#1e3a5f;color:#60a5fa;font-size:12px;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;line-height:1;}
-td .rare-flag,td .ranked-flag{font-size:9px;padding:1px 4px;border-radius:2px;margin-left:3px;}
+.single-flag{display:inline-flex;align-items:center;background:#1e3a5f;color:#60a5fa;font-size:12px;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;line-height:1;}
+.daily-flag{display:inline-flex;align-items:center;background:#f59e0b22;color:#f59e0b;font-size:12px;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;line-height:1;}
+td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;border-radius:2px;margin-left:3px;}
 
 /* Toast */
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e293b;color:#f59e0b;border:1px solid #334155;padding:10px 20px;border-radius:6px;font-size:12px;z-index:9999;opacity:0;transition:opacity 0.3s;pointer-events:none;}
@@ -403,9 +404,9 @@ td .rare-flag,td .ranked-flag{font-size:9px;padding:1px 4px;border-radius:2px;ma
       <div class="stat-item"><div class="stat-label">Tickers</div><div class="stat-value" id="statTickers">—</div></div>
       <div class="stat-item"><div class="stat-label">Sweeps</div><div class="stat-value accent" id="statSweeps">—</div></div>
       <div class="stat-item"><div class="stat-label">Notional</div><div class="stat-value green" id="statNotional">—</div></div>
-      <div class="stat-item"><div class="stat-label">Clusterbombs</div><div class="stat-value text-amber" id="statCBs">—</div></div>
+      <div class="stat-item"><div class="stat-label">Daily</div><div class="stat-value text-amber" id="statDaily">—</div></div>
       <div class="stat-item"><div class="stat-label">Rare</div><div class="stat-value purple" id="statRare">—</div></div>
-      <div class="stat-item"><div class="stat-label">Ranked</div><div class="stat-value" style="color:#3b82f6;" id="statRanked">—</div></div>
+      <div class="stat-item"><div class="stat-label">Single</div><div class="stat-value" style="color:#3b82f6;" id="statSingle">—</div></div>
     </div>
   </div>
   <div class="tracker-tab-bar">
@@ -416,17 +417,19 @@ td .rare-flag,td .ranked-flag{font-size:9px;padding:1px 4px;border-radius:2px;ma
     <div class="filter-col filter-col-all">
       <button class="tracker-filter-btn flt-all active" id="filterAll" onclick="setTrackerTypeFilter('all',this)">All</button>
     </div>
-    <div class="filter-col" data-type="clusterbomb">
-      <button class="tracker-filter-btn flt-cb" id="filterCB" onclick="setTrackerTypeFilter('clusterbomb',this)">Clusterbombs</button>
+    <div class="filter-col" data-type="daily">
+      <button class="tracker-filter-btn flt-daily" id="filterDaily" onclick="setTrackerTypeFilter('daily',this)">Daily</button>
       <div class="filter-group">
-        <span class="filter-group-label" style="color:#f59e0b;">$M</span>
-        <input type="number" class="filter-input" id="trackerMinTotal" value="38" min="1" title="CB min total notional ($M)" oninput="debouncedTrackerRefresh()" style="border-color:#f59e0b44;color:#f59e0b;">
+        <span class="filter-group-label" style="color:#f59e0b;">From</span>
+        <input type="number" class="filter-input" id="trackerDailyFrom" value="1" min="1" title="Daily rank from (top)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#f59e0b44;color:#f59e0b;">
+        <span class="filter-group-label" style="color:#f59e0b;">To</span>
+        <input type="number" class="filter-input" id="trackerDailyTo" value="50" min="1" title="Daily rank to (bottom)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#f59e0b44;color:#f59e0b;">
         <span class="filter-group-label" style="color:#f59e0b;">#</span>
-        <input type="number" class="filter-input" id="trackerMinSweeps" value="3" min="1" max="50" title="CB min sweep count" oninput="debouncedTrackerRefresh()" style="border-color:#f59e0b44;color:#f59e0b;">
+        <input type="number" class="filter-input" id="trackerMinSweeps" value="2" min="1" max="50" title="Min sweep count" oninput="debouncedTrackerRefresh()" style="width:40px;border-color:#f59e0b44;color:#f59e0b;">
       </div>
     </div>
     <div class="filter-col" data-type="rare_sweep">
-      <button class="tracker-filter-btn flt-rare" id="filterRare" onclick="setTrackerTypeFilter('rare_sweep',this)">Rare Sweeps</button>
+      <button class="tracker-filter-btn flt-rare" id="filterRare" onclick="setTrackerTypeFilter('rare_sweep',this)">Rare</button>
       <div class="filter-group">
         <span class="filter-group-label" style="color:#a78bfa;">$M</span>
         <input type="number" class="filter-input" id="trackerRareMin" value="1" min="0" step="0.5" title="Rare min notional ($M)" oninput="debouncedTrackerRefresh()" style="border-color:#a78bfa44;color:#a78bfa;">
@@ -434,13 +437,13 @@ td .rare-flag,td .ranked-flag{font-size:9px;padding:1px 4px;border-radius:2px;ma
         <input type="number" class="filter-input" id="trackerRareDays" value="60" min="5" max="365" title="Rare min dormancy days" oninput="debouncedTrackerRefresh()" style="border-color:#a78bfa44;color:#a78bfa;">
       </div>
     </div>
-    <div class="filter-col" data-type="ranked_sweep">
-      <button class="tracker-filter-btn flt-ranked" id="filterRanked" onclick="setTrackerTypeFilter('ranked_sweep',this)">Ranked</button>
+    <div class="filter-col" data-type="single">
+      <button class="tracker-filter-btn flt-single" id="filterSingle" onclick="setTrackerTypeFilter('single',this)">Single</button>
       <div class="filter-group">
         <span class="filter-group-label" style="color:#3b82f6;">From</span>
-        <input type="number" class="filter-input" id="trackerRankFrom" value="1" min="1" title="Rank from (top)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#3b82f644;color:#3b82f6;">
+        <input type="number" class="filter-input" id="trackerRankFrom" value="1" min="1" title="Single rank from (top)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#3b82f644;color:#3b82f6;">
         <span class="filter-group-label" style="color:#3b82f6;">To</span>
-        <input type="number" class="filter-input" id="trackerRankTo" value="50" min="1" title="Rank to (bottom)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#3b82f644;color:#3b82f6;">
+        <input type="number" class="filter-input" id="trackerRankTo" value="50" min="1" title="Single rank to (bottom)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#3b82f644;color:#3b82f6;">
       </div>
     </div>
     <div style="margin-left:auto;display:flex;align-items:center;gap:4px;align-self:center;">
@@ -484,7 +487,7 @@ td .rare-flag,td .ranked-flag{font-size:9px;padding:1px 4px;border-radius:2px;ma
           <span style="margin-left:10px;"><span class="text-dim">Total $</span>&nbsp;<span id="tsNotional" style="color:#f59e0b;font-weight:600;">—</span></span>
           <span style="margin-left:10px;"><span class="text-dim">Sweeps</span>&nbsp;<span id="tsSweeps" style="color:#fff;font-weight:600;">—</span></span>
           <span style="margin-left:10px;"><span class="text-dim">Rare</span>&nbsp;<span id="tsRare" style="color:#c4b5fd;font-weight:600;">—</span></span>
-          <span style="margin-left:10px;"><span class="text-dim">Ranked</span>&nbsp;<span id="tsRanked" style="color:#3b82f6;font-weight:600;">—</span></span>
+          <span style="margin-left:10px;"><span class="text-dim">Single</span>&nbsp;<span id="tsSingle" style="color:#3b82f6;font-weight:600;">—</span></span>
         </span>
       </div>
     </div>
@@ -527,9 +530,9 @@ td .rare-flag,td .ranked-flag{font-size:9px;padding:1px 4px;border-radius:2px;ma
     <div class="tab-bar" id="detailTabBar">
       <span id="detailDateRange" style="font-size:9px;color:#555;font-weight:600;letter-spacing:0.3px;align-self:center;margin-right:4px;text-transform:uppercase;"></span>
       <button class="tab-btn dtab-all active" onclick="switchDetailFilter('all',this)">All</button>
-      <button class="tab-btn dtab-cb" onclick="switchDetailFilter('clusterbomb',this)">Clusterbombs</button>
-      <button class="tab-btn dtab-rare" onclick="switchDetailFilter('rare_sweep',this)">Rare Sweeps</button>
-      <button class="tab-btn dtab-ranked" onclick="switchDetailFilter('ranked_sweep',this)">Ranked</button>
+      <button class="tab-btn dtab-daily" onclick="switchDetailFilter('daily',this)">Daily</button>
+      <button class="tab-btn dtab-rare" onclick="switchDetailFilter('rare_sweep',this)">Rare</button>
+      <button class="tab-btn dtab-single" onclick="switchDetailFilter('single',this)">Single</button>
     </div>
 
     <!-- Events table (for _selectedTicker, filtered by type) -->
@@ -604,19 +607,11 @@ td .rare-flag,td .ranked-flag{font-size:9px;padding:1px 4px;border-radius:2px;ma
       <div class="settings-section-title">&#x1F4A3; Detection Parameters</div>
 
 
-      <!-- Stock profile -->
+      <!-- ETF detection settings -->
       <div id="profileStock" class="detection-profile">
         <div class="settings-row">
-          <div><div class="settings-label">Min Sweeps / Day</div><div class="settings-label-sub">Sweeps clustering in a single day</div></div>
-          <input type="number" class="settings-input" id="settMinSweepsStock" value="3" min="1" max="50">
-        </div>
-        <div class="settings-row">
-          <div><div class="settings-label">Min $ / Sweep</div><div class="settings-label-sub">Each individual sweep must exceed</div></div>
-          <input type="text" class="settings-input settings-input-wide" id="settMinNotionalStock" value="1M" title="e.g. 500K, 1M, 5M">
-        </div>
-        <div class="settings-row">
-          <div><div class="settings-label">Min Total / Day</div><div class="settings-label-sub">Combined notional threshold per day</div></div>
-          <input type="text" class="settings-input settings-input-wide" id="settMinTotalStock" value="10M" title="e.g. 10M, 38M, 50M">
+          <div><div class="settings-label">Min Sweeps / Day</div><div class="settings-label-sub">Required sweeps to qualify as a daily event</div></div>
+          <input type="number" class="settings-input" id="settMinSweepsStock" value="2" min="1" max="50">
         </div>
         <div class="settings-row">
           <div><div class="settings-label">Rarity Window</div><div class="settings-label-sub">Trading days with no prior sweeps = "rare"</div></div>
@@ -628,8 +623,12 @@ td .rare-flag,td .ranked-flag{font-size:9px;padding:1px 4px;border-radius:2px;ma
         </div>
         <div class="settings-divider" style="margin:6px 0;"></div>
         <div class="settings-row">
-          <div><div class="settings-label" style="color:#3b82f6;">Ranked Sweep Depth</div><div class="settings-label-sub">Top N trades per ticker to track</div></div>
-          <input type="number" class="settings-input settings-input-wide" id="settRankedDepth" value="100" min="10" max="500" title="e.g. 50, 100, 200">
+          <div><div class="settings-label" style="color:#f59e0b;">Daily Rank Depth</div><div class="settings-label-sub">Top N days per ticker to track</div></div>
+          <input type="number" class="settings-input settings-input-wide" id="settDailyDepth" value="100" min="10" max="500" title="e.g. 50, 100, 200">
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-label" style="color:#3b82f6;">Single Sweep Depth</div><div class="settings-label-sub">Top N individual trades per ticker to track</div></div>
+          <input type="number" class="settings-input settings-input-wide" id="settSingleDepth" value="100" min="10" max="500" title="e.g. 50, 100, 200">
         </div>
       </div>
 
@@ -674,9 +673,9 @@ td .rare-flag,td .ranked-flag{font-size:9px;padding:1px 4px;border-radius:2px;ma
         <div style="margin-top:6px;padding-top:6px;border-top:1px solid #1e1e2e;">
           <div style="font-size:9px;color:#555;margin-bottom:3px;">Events detected today:</div>
           <div style="display:flex;gap:10px;font-size:10px;">
-            <span><span style="color:#f59e0b;" id="liveCBs">0</span> CBs</span>
+            <span><span style="color:#f59e0b;" id="liveDaily">0</span> Daily</span>
             <span><span style="color:#a855f7;" id="liveRares">0</span> Rare</span>
-            <span><span style="color:#3b82f6;" id="liveRanked">0</span> Ranked</span>
+            <span><span style="color:#3b82f6;" id="liveSingle">0</span> Single</span>
           </div>
           <div id="liveLastDetection" style="font-size:9px;color:#444;margin-top:2px;"></div>
         </div>
@@ -815,8 +814,9 @@ function parseMinInput(val){
 }
 // Global CB threshold — single source of truth from left panel tracker filter.
 // Controls stats bar, CB table, chart markers, AND tracker cards.
-function getCBThreshold(){
-  return (parseFloat(document.getElementById('trackerMinTotal').value) || 38) * 1e6;
+function getDailyRankRange(){
+  return {from: parseInt(document.getElementById('trackerDailyFrom').value) || 1,
+          to: parseInt(document.getElementById('trackerDailyTo').value) || 50};
 }
 // Debounced refresh — waits 600ms after last keystroke before reloading everything
 var _refreshTimer = null;
@@ -871,19 +871,22 @@ function setTrackerPeriod(label, btn){
 
 // Build common filter query string used by tracker + stats
 function buildFilterParams(){
-  var minTotal = getCBThreshold();
   var tickers = getSelectedTickers();
   var dateFrom = document.getElementById('dateFrom').value;
   var dateTo = document.getElementById('dateTo').value;
   var params = new URLSearchParams();
   params.set('etf_only', '1');
-  params.set('min_total', minTotal);
   if(tickers.length > 0) params.set('tickers', tickers.join(','));
   if(dateFrom) params.set('date_from', dateFrom);
   if(dateTo) params.set('date_to', dateTo);
   // Per-type display filters
   var minSweeps = parseInt(document.getElementById('trackerMinSweeps').value) || 0;
   if(minSweeps > 0) params.set('min_sweeps', minSweeps);
+  // Daily rank range
+  var dr = getDailyRankRange();
+  params.set('daily_from', dr.from);
+  params.set('daily_to', dr.to);
+  // Single rank range
   var rankFrom = parseInt(document.getElementById('trackerRankFrom').value) || 1;
   var rankTo = parseInt(document.getElementById('trackerRankTo').value) || 50;
   params.set('rank_from', rankFrom);
@@ -924,13 +927,11 @@ function loadDetailTable(){
   if(!_selectedTicker) return;
   var from = document.getElementById('dateFrom').value;
   var to = document.getElementById('dateTo').value;
-  var cbMin = getCBThreshold();
   var params = new URLSearchParams();
   params.set('etf_only', '1');
   params.set('ticker', _selectedTicker);
   if(from) params.set('date_from', from);
   if(to) params.set('date_to', to);
-  params.set('min_total', cbMin);
 
   document.getElementById('eventsBody').innerHTML = '<tr><td colspan="14" class="loading"><span class="spinner"></span> Loading...</td></tr>';
   // Show events table, hide drill-down detail
@@ -959,29 +960,26 @@ function updateDetailDateLabel(){
 function renderDetailEvents(){
   updateDetailDateLabel();
   var events = _detailEvents;
-  // Client-side type filter
-  // Ranked tab shows ANY event with sweep_rank set.
-  // CB and Rare tabs filter by primary event_type only.
+  // Client-side type filter — independent layers
   if(_detailTypeFilter !== 'all'){
     events = events.filter(function(ev){
-      var et = ev.event_type || 'clusterbomb';
-      if(_detailTypeFilter === 'ranked_sweep') return ev.sweep_rank != null;
-      if(_detailTypeFilter === 'clusterbomb') return et === 'clusterbomb';
-      if(_detailTypeFilter === 'rare_sweep') return et === 'rare_sweep';
+      if(_detailTypeFilter === 'daily') return ev.daily_rank != null;
+      if(_detailTypeFilter === 'single') return ev.sweep_rank != null;
+      if(_detailTypeFilter === 'rare_sweep') return ev.is_rare == 1;
       return true;
     });
   }
 
-  // Update tab counts — Ranked includes any event with sweep_rank
+  // Update tab counts — each layer is independent
   var allCount = _detailEvents.length;
-  var cbCount = _detailEvents.filter(function(ev){ return (ev.event_type||'clusterbomb')==='clusterbomb'; }).length;
-  var rareCount = _detailEvents.filter(function(ev){ return (ev.event_type||'clusterbomb')==='rare_sweep'; }).length;
-  var rankedCount = _detailEvents.filter(function(ev){ return ev.sweep_rank != null; }).length;
+  var dailyCount = _detailEvents.filter(function(ev){ return ev.daily_rank != null; }).length;
+  var rareCount = _detailEvents.filter(function(ev){ return ev.is_rare == 1; }).length;
+  var singleCount = _detailEvents.filter(function(ev){ return ev.sweep_rank != null; }).length;
   var tabs = document.querySelectorAll('#detailTabBar .tab-btn');
   tabs[0].textContent = 'All (' + allCount + ')';
-  tabs[1].textContent = 'Clusterbombs (' + cbCount + ')';
-  tabs[2].textContent = 'Rare Sweeps (' + rareCount + ')';
-  tabs[3].textContent = 'Ranked (' + rankedCount + ')';
+  tabs[1].textContent = 'Daily (' + dailyCount + ')';
+  tabs[2].textContent = 'Rare (' + rareCount + ')';
+  tabs[3].textContent = 'Single (' + singleCount + ')';
 
   // Populate ticker stats strip (always from full _detailEvents, not filtered)
   var strip = document.getElementById('tickerStatsStrip');
@@ -995,14 +993,14 @@ function renderDetailEvents(){
     document.getElementById('tsNotional').textContent = fmt$(totalNotional);
     document.getElementById('tsSweeps').textContent = totalSweeps.toLocaleString();
     document.getElementById('tsRare').textContent = rareCount;
-    document.getElementById('tsRanked').textContent = rankedCount;
+    document.getElementById('tsSingle').textContent = singleCount;
     strip.style.display = '';
   } else if(_selectedTicker){
     document.getElementById('tsEvents').textContent = '0';
     document.getElementById('tsNotional').textContent = '$0';
     document.getElementById('tsSweeps').textContent = '0';
     document.getElementById('tsRare').textContent = '0';
-    document.getElementById('tsRanked').textContent = '0';
+    document.getElementById('tsSingle').textContent = '0';
     strip.style.display = '';
   } else {
     strip.style.display = 'none';
@@ -1023,27 +1021,20 @@ function renderDetailEvents(){
 
   var html = '';
   events.forEach(function(ev){
-    var evType = ev.event_type || 'clusterbomb';
-    var isRareSweep = evType === 'rare_sweep';
-    var hasRank = ev.sweep_rank != null;
-    // Table type badges: CB is default (dim), rare get colour badges, ranked get rank number
+    var hasDaily = ev.daily_rank != null;
+    var hasSingle = ev.sweep_rank != null;
+    var isRare = ev.is_rare == 1;
+    // Multi-badge: show all applicable badges independently
     var typeTag = '';
-    if(isRareSweep){
-      typeTag = '<span class="rare-flag">R</span>';
-      if(hasRank) typeTag += ' <span class="ranked-flag">#' + ev.sweep_rank + '</span>';
-    } else if(ev.is_rare){
-      typeTag = '<span class="rare-flag">R</span>';
-      if(hasRank) typeTag += ' <span class="ranked-flag">#' + ev.sweep_rank + '</span>';
-    } else if(hasRank && evType === 'ranked_sweep'){
-      typeTag = '<span class="ranked-flag">#' + ev.sweep_rank + '</span>';
-    } else {
-      typeTag = '<span class="text-dim" style="font-size:9px;">CB</span>';
-      if(hasRank) typeTag += ' <span class="ranked-flag">#' + ev.sweep_rank + '</span>';
-    }
-    var rankLabel = ev.rank ? '<span class="text-amber" style="font-weight:700;">#' + ev.rank + '</span><span class="text-dim"> / ' + ev.total_days + '</span>' : '<span class="text-dim">\u2014</span>';
+    if(hasDaily) typeTag += '<span class="daily-flag">D#' + ev.daily_rank + '</span> ';
+    if(hasSingle) typeTag += '<span class="single-flag">S#' + ev.sweep_rank + '</span> ';
+    if(isRare) typeTag += '<span class="rare-flag">R</span>';
+    if(!typeTag) typeTag = '<span class="text-dim">\u2014</span>';
+    var rankLabel = hasDaily ? '<span class="text-amber" style="font-weight:700;">#' + ev.daily_rank + '</span>' : '<span class="text-dim">\u2014</span>';
     var gainCls = (ev.pct_gain||0) >= 0 ? 'up' : 'down';
     var gainStr = (ev.pct_gain!=null) ? '<span class="tracker-value '+gainCls+'">'+((ev.pct_gain>=0)?'+':'')+ev.pct_gain.toFixed(1)+'%</span>' : '<span class="text-dim">\u2014</span>';
-    var rowCls = hasRank ? 'row-ranked' : isRareSweep ? 'row-rare' : (ev.is_rare ? 'row-rare' : '');
+    // Row class priority: rare > single > daily
+    var rowCls = isRare ? 'row-rare' : hasSingle ? 'row-single' : '';
     html += '<tr class="' + rowCls + '" onclick="focusChartOnDate(\'' + ev.date + '\')" ondblclick="drillDown(\'' + ev.ticker + '\',\'' + ev.date + '\')" style="cursor:pointer">'
       + '<td class="mono col-key">' + ev.date + '</td>'
       + '<td>' + typeTag + '</td>'
@@ -1108,7 +1099,7 @@ function switchTrackerTab(tab, btn){
 
 // Cache all tracker events so favourites can look up enriched data
 var _allTrackerEvents = [];
-var _trackerTypeFilter = 'all'; // 'all', 'clusterbomb', 'rare_sweep'
+var _trackerTypeFilter = 'all'; // 'all', 'daily', 'rare_sweep', 'single'
 var _trackerOffset = 0;
 var _trackerTotal = 0;
 var _trackerPageSize = 200;
@@ -1143,7 +1134,7 @@ function toggleFilterGroupVisibility(activeType){
 // FILTER PROFILES — localStorage persistence
 // ====================================================================
 var _PROFILE_KEY = 'etf_sweep_filter_profiles';
-var _DEFAULT_PROFILE = {min_total:'38',min_sweeps:'3',rank_from:'1',rank_to:'50',rare_min:'1',rare_days:'60'};
+var _DEFAULT_PROFILE = {daily_from:'1',daily_to:'50',min_sweeps:'2',rank_from:'1',rank_to:'50',rare_min:'1',rare_days:'60'};
 
 function getFilterProfiles(){
   try {
@@ -1176,8 +1167,9 @@ function loadFilterProfiles(){
 function applyFilterProfile(name){
   var profiles = getFilterProfiles();
   var p = profiles[name] || _DEFAULT_PROFILE;
-  document.getElementById('trackerMinTotal').value = p.min_total || '38';
-  document.getElementById('trackerMinSweeps').value = p.min_sweeps || '3';
+  document.getElementById('trackerDailyFrom').value = p.daily_from || '1';
+  document.getElementById('trackerDailyTo').value = p.daily_to || '50';
+  document.getElementById('trackerMinSweeps').value = p.min_sweeps || '2';
   document.getElementById('trackerRankFrom').value = p.rank_from || '1';
   document.getElementById('trackerRankTo').value = p.rank_to || '50';
   document.getElementById('trackerRareMin').value = p.rare_min || '1';
@@ -1187,7 +1179,8 @@ function applyFilterProfile(name){
 
 function getCurrentFilterValues(){
   return {
-    min_total: document.getElementById('trackerMinTotal').value,
+    daily_from: document.getElementById('trackerDailyFrom').value,
+    daily_to: document.getElementById('trackerDailyTo').value,
     min_sweeps: document.getElementById('trackerMinSweeps').value,
     rank_from: document.getElementById('trackerRankFrom').value,
     rank_to: document.getElementById('trackerRankTo').value,
@@ -1218,11 +1211,16 @@ function deleteProfile(name){
 
 function filterByType(events){
   if(_trackerTypeFilter === 'all') return events;
-  // Ranked includes any event with sweep_rank set
-  if(_trackerTypeFilter === 'ranked_sweep'){
+  if(_trackerTypeFilter === 'daily'){
+    return events.filter(function(ev){ return ev.daily_rank != null; });
+  }
+  if(_trackerTypeFilter === 'single'){
     return events.filter(function(ev){ return ev.sweep_rank != null; });
   }
-  return events.filter(function(ev){ return (ev.event_type||'clusterbomb') === _trackerTypeFilter; });
+  if(_trackerTypeFilter === 'rare_sweep'){
+    return events.filter(function(ev){ return ev.is_rare == 1; });
+  }
+  return events;
 }
 
 function loadTrackerPanels(){
@@ -1337,9 +1335,9 @@ function renderTrackerCards(containerId, events, showRemove){
     var emptyMsg = containerId === 'trackerFavsBody'
       ? 'No favourites yet. Click the &#x2B50; on any tracker card to add it.'
       : _trackerTypeFilter === 'rare_sweep' ? 'No rare sweeps detected'
-      : _trackerTypeFilter === 'ranked_sweep' ? 'No ranked sweeps detected'
-      : _trackerTypeFilter === 'clusterbomb' ? 'No clusterbombs above threshold'
-      : 'No events above threshold';
+      : _trackerTypeFilter === 'single' ? 'No single ranked sweeps detected'
+      : _trackerTypeFilter === 'daily' ? 'No daily ranked events detected'
+      : 'No events detected';
     body.innerHTML = '<div class="tracker-empty">' + emptyMsg + '</div>';
     return;
   }
@@ -1349,17 +1347,18 @@ function renderTrackerCards(containerId, events, showRemove){
     var pctSign = ev.pct_gain >= 0 ? '+' : '';
     var biasClass = ev.bias === 'bullish' ? 'bullish' : 'bearish';
     var biasLabel = ev.bias === 'bullish' ? 'BULL' : 'BEAR';
-    var evType = ev.event_type || 'clusterbomb';
-    var isRareSweep = evType === 'rare_sweep';
-    var hasRank = ev.sweep_rank != null;
-    var isRare = isRareSweep || ev.is_rare;
-    // Cards: CBs are default (no badge). Show [R] for rare, [#N] for ranked.
+    var hasDaily = ev.daily_rank != null;
+    var hasSingle = ev.sweep_rank != null;
+    var isRare = ev.is_rare == 1;
+    // Multi-badge: show all applicable badges independently
     var typeTag = '';
+    if(hasDaily) typeTag += ' <span class="daily-flag">D#' + ev.daily_rank + '</span>';
+    if(hasSingle) typeTag += ' <span class="single-flag">S#' + ev.sweep_rank + '</span>';
     if(isRare) typeTag += ' <span class="rare-flag">R</span>';
-    if(hasRank) typeTag += ' <span class="ranked-flag">#' + ev.sweep_rank + '</span>';
-    var totalLabel = (hasRank && evType === 'ranked_sweep') ? 'Ranked Total' : isRareSweep ? 'Sweep Total' : 'CB Total';
-    var totalColor = (hasRank && evType === 'ranked_sweep') ? 'style="color:#60a5fa;"' : isRareSweep ? 'style="color:#c4b5fd;"' : '';
-    var cardBorder = hasRank ? 'border-left:3px solid #3b82f6;' : isRareSweep ? 'border-left:3px solid #a78bfa;' : 'border-left:3px solid #f59e0b44;';
+    var totalLabel = 'Total';
+    var totalColor = '';
+    // Border priority: rare > single > daily > default
+    var cardBorder = isRare ? 'border-left:3px solid #a78bfa;' : hasSingle ? 'border-left:3px solid #3b82f6;' : hasDaily ? 'border-left:3px solid #f59e0b;' : 'border-left:3px solid #1e1e2e;';
     var starred = isFavourite(ev.ticker, ev.date);
     var starBtn = showRemove
       ? '<button class="tracker-remove" onclick="removeFavourite(\'' + ev.ticker + '\',\'' + ev.date + '\',event)" title="Remove from favourites">&#x2715;</button>'
@@ -1382,7 +1381,7 @@ function renderTrackerCards(containerId, events, showRemove){
       + '<div class="tracker-col-left">'
       + '<div class="tracker-stat-row"><span class="tracker-label">' + totalLabel + '</span><span class="tracker-value amber" ' + totalColor + '>' + fmt$(ev.total_notional) + '</span></div>'
       + '<div class="tracker-stat-row"><span class="tracker-label">Sweeps</span><span class="tracker-value">' + ev.sweep_count + '</span></div>'
-      + '<div class="tracker-stat-row"><span class="tracker-label">Rank</span><span class="tracker-value amber">' + (ev.rank ? '#' + ev.rank + '/' + ev.total_days : '—') + '</span></div>'
+      + '<div class="tracker-stat-row"><span class="tracker-label">Daily Rank</span><span class="tracker-value amber">' + (hasDaily ? '#' + ev.daily_rank : '—') + '</span></div>'
       + '</div>'
       // Right column: returns grid (3×2: short periods top, long periods bottom)
       + '<div class="tracker-col-right">'
@@ -1460,9 +1459,9 @@ function loadStats(){
     document.getElementById('statSweeps').textContent = fmtN(d.total_sweeps);
     document.getElementById('statNotional').textContent = fmt$(d.total_notional);
     document.getElementById('statTickers').textContent = fmtN(d.tickers_tracked);
-    document.getElementById('statCBs').textContent = fmtN(d.clusterbombs);
+    document.getElementById('statDaily').textContent = fmtN(d.daily_events || 0);
     document.getElementById('statRare').textContent = fmtN(d.rare_clusterbombs);
-    document.getElementById('statRanked').textContent = fmtN(d.ranked_sweeps || 0);
+    document.getElementById('statSingle').textContent = fmtN(d.ranked_sweeps || 0);
     var rangeEl = document.getElementById('statRange');
     if(rangeEl && d.date_range && d.date_range.from){
       rangeEl.textContent = d.date_range.from + ' \u2192 ' + d.date_range.to;
@@ -1530,17 +1529,19 @@ function loadChart(){
   var from = currentChartDays > 0 ? chartFrom.toISOString().slice(0,10) : '';
   var to = '';  // open-ended (up to latest available)
 
-  var cbMin = getCBThreshold();
-  var params = new URLSearchParams({ticker: ticker, timeframe: currentTimeframe, min_total: cbMin, etf_only: '1'});
+  var params = new URLSearchParams({ticker: ticker, timeframe: currentTimeframe, etf_only: '1'});
   if(from) params.set('date_from', from);
   if(to) params.set('date_to', to);
   // Pass per-type display filters so chart bubbles respect the same filters as cards
   var _ms = parseInt(document.getElementById('trackerMinSweeps').value) || 0;
+  var _dr = getDailyRankRange();
   var _rf = parseInt(document.getElementById('trackerRankFrom').value) || 1;
   var _rt = parseInt(document.getElementById('trackerRankTo').value) || 50;
   var _rm = (parseFloat(document.getElementById('trackerRareMin').value) || 0) * 1e6;
   var _rd = parseInt(document.getElementById('trackerRareDays').value) || 0;
   if(_ms > 0) params.set('min_sweeps', _ms);
+  params.set('daily_from', _dr.from);
+  params.set('daily_to', _dr.to);
   params.set('rank_from', _rf);
   params.set('rank_to', _rt);
   if(_rm > 0) params.set('rare_min', _rm);
@@ -1781,27 +1782,21 @@ function renderChart(ticker, chartData, containerId){
     var cb = cbDates[dateKey];
     var barColor;
     if(cb){
-      var r = cb.rank || 999;
-      var sr = cb.sweep_rank;
-      var evType = cb.event_type || 'clusterbomb';
-      var isRare = evType === 'rare_sweep' || cb.is_rare;
-      // Ranked sweeps get red-orange gradient based on rank
-      if(sr != null){
-        if(sr <= 3)       barColor = 'rgba(29, 78, 216, 0.85)';
-        else if(sr <= 10) barColor = 'rgba(59, 130, 246, 0.75)';
-        else if(sr <= 25) barColor = 'rgba(96, 165, 250, 0.65)';
-        else              barColor = 'rgba(147, 197, 253, 0.55)';
+      var dr = cb.daily_rank;
+      // Volume bars always colored by daily_rank (yellow gradient)
+      if(dr != null){
+        if(dr <= 3)       barColor = 'rgba(255, 215, 0, 0.85)';   // gold
+        else if(dr <= 10) barColor = 'rgba(251, 191, 36, 0.75)';  // warm amber
+        else if(dr <= 25) barColor = 'rgba(245, 178, 30, 0.65)';
+        else if(dr <= 50) barColor = 'rgba(245, 158, 11, 0.55)';
+        else              barColor = 'rgba(245, 158, 11, 0.40)';
+      } else {
+        barColor = 'rgba(245, 158, 11, 0.30)';
       }
-      else if(isRare)  barColor = 'rgba(167, 139, 250, 0.70)';
-      else if(r === 1) barColor = 'rgba(255, 215, 0, 0.85)';
-      else if(r === 2) barColor = 'rgba(251, 191, 36, 0.75)';
-      else if(r <= 5)  barColor = 'rgba(245, 178, 30, 0.65)';
-      else if(r <= 10) barColor = 'rgba(245, 158, 11, 0.55)';
-      else             barColor = 'rgba(245, 158, 11, 0.40)';
     } else {
       barColor = 'rgba(100, 116, 139, 0.30)';
     }
-    volData.push({time: timeVal, value: notional, color: barColor, rank: cb ? (cb.rank||999) : 999});
+    volData.push({time: timeVal, value: notional, color: barColor, rank: cb ? (cb.daily_rank||999) : 999});
   });
   // Deduplicate weekly: if multiple dates map to same weekly time, sum them
   var volByTime = {};
@@ -1882,73 +1877,52 @@ function renderChart(ticker, chartData, containerId){
       timeVal = Math.floor(new Date(+parts[0], +parts[1]-1, +parts[2], 12, 0, 0).getTime() / 1000);
     }
 
-    var evType = cb.event_type || 'clusterbomb';
-    var isRare = evType === 'rare_sweep' || cb.is_rare;
+    var dailyRank = cb.daily_rank;
     var sweepRank = cb.sweep_rank;
-    var rank = cb.rank || 999;
+    var isRare = cb.is_rare == 1;
 
-    // Dynamic bubble colour: ranked sweeps get red-orange gradient, rare gets purple, CBs get amber
-    var dotSize, dotColor, dotShape;
-    if(sweepRank != null){
-      // Ranked sweep: deep red for top ranks → orange for lower ranks
-      if(sweepRank <= 3){
-        dotSize = 9;
-        dotColor = 'rgba(29, 78, 216, 0.90)';   // deep blue
-        dotShape = 'circle';
-      } else if(sweepRank <= 10){
-        dotSize = 8;
-        dotColor = 'rgba(59, 130, 246, 0.85)';  // blue
-        dotShape = 'circle';
-      } else if(sweepRank <= 25){
-        dotSize = 7;
-        dotColor = 'rgba(96, 165, 250, 0.80)';  // light blue
-        dotShape = 'circle';
-      } else {
-        dotSize = 6;
-        dotColor = 'rgba(147, 197, 253, 0.70)'; // pale blue
-        dotShape = 'circle';
-      }
-    } else if(isRare){
+    // Build independent layer tags
+    var tags = [];
+    if(dailyRank != null) tags.push('daily');
+    if(sweepRank != null) tags.push('single');
+    if(isRare) tags.push('rare');
+
+    // Visual colour priority: rare (purple) > single (blue) > daily (amber)
+    var dotSize, dotColor;
+    if(isRare){
       dotSize = 6;
       dotColor = 'rgba(167, 139, 250, 0.75)';
-      dotShape = 'circle';
-    } else if(rank === 1){
-      dotSize = 9;
-      dotColor = 'rgba(255, 215, 0, 0.85)';    // gold — #1 day
-      dotShape = 'circle';
-    } else if(rank <= 3){
-      dotSize = 7;
-      dotColor = 'rgba(251, 191, 36, 0.75)';   // warm amber
-      dotShape = 'circle';
-    } else if(rank <= 10){
-      dotSize = 7;
-      dotColor = 'rgba(245, 158, 11, 0.70)';   // standard amber
-      dotShape = 'circle';
+    } else if(sweepRank != null){
+      if(sweepRank <= 3){        dotSize = 9; dotColor = 'rgba(29, 78, 216, 0.90)'; }
+      else if(sweepRank <= 10){  dotSize = 8; dotColor = 'rgba(59, 130, 246, 0.85)'; }
+      else if(sweepRank <= 25){  dotSize = 7; dotColor = 'rgba(96, 165, 250, 0.80)'; }
+      else {                     dotSize = 6; dotColor = 'rgba(147, 197, 253, 0.70)'; }
+    } else if(dailyRank != null){
+      if(dailyRank <= 3){        dotSize = 9; dotColor = 'rgba(255, 215, 0, 0.85)'; }
+      else if(dailyRank <= 10){  dotSize = 7; dotColor = 'rgba(251, 191, 36, 0.75)'; }
+      else if(dailyRank <= 25){  dotSize = 7; dotColor = 'rgba(245, 158, 11, 0.70)'; }
+      else {                     dotSize = 6; dotColor = 'rgba(245, 158, 11, 0.60)'; }
     } else {
-      dotSize = 6;
-      dotColor = 'rgba(245, 158, 11, 0.60)';   // slightly faded
-      dotShape = 'circle';
+      dotSize = 5; dotColor = 'rgba(100, 116, 139, 0.50)';
     }
-    var textColor = (sweepRank != null) ? '#3b82f6' : isRare ? '#c4b5fd' : '#f59e0b';
-    // Tag for bubble filter: ranked > rare > cb
-    var bubbleTag = (sweepRank != null) ? 'ranked' : isRare ? 'rare' : 'cb';
+    var textColor = isRare ? '#c4b5fd' : (sweepRank != null) ? '#3b82f6' : '#f59e0b';
 
     // Main bubble at VWAP — dynamic size & shape
-    dotData.push({time: timeVal, value: markerPrice, _tag: bubbleTag});
+    dotData.push({time: timeVal, value: markerPrice, _tags: tags});
     dotMarkers.push({
       time: timeVal, position: 'inBar', color: dotColor,
-      shape: dotShape, text: '', size: dotSize, _tag: bubbleTag,
+      shape: 'circle', text: '', size: dotSize, _tags: tags,
     });
 
-    // Combined text label below bubble: "$63.9M · ▸#1"
-    // Anchor at candle low (not VWAP) for more distance from the dot
+    // Combined text label below bubble
     var textAnchor = candle ? candle.low : markerPrice;
     var label = fmt$(cb.total_notional);
-    if(cb.rank) label += '  ▸#' + cb.rank;
-    textData.push({time: timeVal, value: textAnchor, _tag: bubbleTag});
+    if(dailyRank != null) label += '  D#' + dailyRank;
+    if(sweepRank != null) label += '  S#' + sweepRank;
+    textData.push({time: timeVal, value: textAnchor, _tags: tags});
     textMarkers.push({
       time: timeVal, position: 'belowBar', color: textColor,
-      shape: 'circle', text: label, size: 0, _tag: bubbleTag,
+      shape: 'circle', text: label, size: 0, _tags: tags,
     });
   });
 
@@ -2160,9 +2134,9 @@ function cycleVol(){
 
 // BUBBLE FILTER — cycle which event types show markers on chart
 // ====================================================================
-var _bubbleCycle = ['all','ranked','rare','cb','off'];
-var _bubbleLabels = {all:'Bubbles: All',ranked:'Bubbles: Ranked',rare:'Bubbles: Rare',cb:'Bubbles: CBs',off:'Bubbles: Off'};
-var _bubbleColors = {all:'#f59e0b',ranked:'#3b82f6',rare:'#a78bfa',cb:'#f59e0b',off:'#555'};
+var _bubbleCycle = ['all','single','daily','rare','off'];
+var _bubbleLabels = {all:'Bubbles: All',single:'Bubbles: Single',daily:'Bubbles: Daily',rare:'Bubbles: Rare',off:'Bubbles: Off'};
+var _bubbleColors = {all:'#f59e0b',single:'#3b82f6',daily:'#f59e0b',rare:'#a78bfa',off:'#555'};
 
 function cycleBubbles(){
   var idx = _bubbleCycle.indexOf(_bubbleFilter);
@@ -2189,11 +2163,8 @@ function _applyBubbleFilter(){
   }
   var fDot = [], fDotM = [], fTxt = [], fTxtM = [];
   for(var i = 0; i < _allDotData.length; i++){
-    var tag = _allDotMarkers[i]._tag;
-    var pass = _bubbleFilter === 'all'
-      || (_bubbleFilter === 'ranked' && tag === 'ranked')
-      || (_bubbleFilter === 'rare' && tag === 'rare')
-      || (_bubbleFilter === 'cb' && tag === 'cb');
+    var tags = _allDotMarkers[i]._tags || [];
+    var pass = _bubbleFilter === 'all' || tags.indexOf(_bubbleFilter) >= 0;
     if(pass){
       fDot.push(_allDotData[i]);
       fDotM.push(_allDotMarkers[i]);
@@ -2406,7 +2377,7 @@ function copyPineScript(){
       navigator.clipboard.writeText(d.script).then(function(){
         var s = d.stats;
         var kb = (d.script_size / 1024).toFixed(1);
-        showToast(s.tickers + ' tickers copied (' + s.clusterbombs + ' CB, ' + (s.ranked || s.monsters || 0) + ' Rk, ' + s.rare + ' R) — ' + kb + 'KB');
+        showToast(s.tickers + ' tickers copied (' + (s.daily_events || s.clusterbombs || 0) + ' D, ' + (s.ranked || 0) + ' S, ' + s.rare + ' R) — ' + kb + 'KB');
       }).catch(function(){
         var w = window.open('', '_blank');
         w.document.write('<pre style="background:#1a1a2e;color:#d0d0d8;padding:20px;font-size:12px;white-space:pre-wrap;">'
@@ -2613,7 +2584,7 @@ function pollFetchProgress(){
 
       // Update title with phase info
       if(phase === 'detecting'){
-        document.getElementById('fetchTitle').textContent = 'Detecting clusterbombs & rare sweeps...';
+        document.getElementById('fetchTitle').textContent = 'Detecting sweep events...';
         document.getElementById('fetchFill').style.width = '95%';
       } else if(phase === 'fetching' && p.total > 0){
         document.getElementById('fetchTitle').textContent =
@@ -2800,14 +2771,14 @@ function loadDetectionConfig(){
     .then(function(r){return r.json();})
     .then(function(cfg){
       var s = cfg.etf || cfg.stock || {};
-      document.getElementById('settMinSweepsStock').value = s.min_sweeps || 3;
-      document.getElementById('settMinNotionalStock').value = fmtSettingVal(s.min_notional || 1000000);
-      document.getElementById('settMinTotalStock').value = fmtSettingVal(s.min_total || 10000000);
+      document.getElementById('settMinSweepsStock').value = s.min_sweeps || 2;
       document.getElementById('settRarityDaysStock').value = s.rarity_days || 60;
       if(document.getElementById('settRareNotionalStock'))
         document.getElementById('settRareNotionalStock').value = fmtSettingVal(s.rare_min_notional || 1000000);
-      if(document.getElementById('settRankedDepth'))
-        document.getElementById('settRankedDepth').value = 100;
+      if(document.getElementById('settDailyDepth'))
+        document.getElementById('settDailyDepth').value = 100;
+      if(document.getElementById('settSingleDepth'))
+        document.getElementById('settSingleDepth').value = 100;
     })
     .catch(function(e){ console.error('Load detection config error:', e); });
 }
@@ -2823,12 +2794,9 @@ function getDetectionParams(){
   return {
     profile: "etf",
     etf: {
-      min_sweeps: parseInt(document.getElementById('settMinSweepsStock').value) || 3,
-      min_notional: parseMinInput(document.getElementById('settMinNotionalStock').value) || 1000000,
-      min_total: parseMinInput(document.getElementById('settMinTotalStock').value) || 10000000,
+      min_sweeps: parseInt(document.getElementById('settMinSweepsStock').value) || 2,
       rarity_days: parseInt(document.getElementById('settRarityDaysStock').value) || 60,
       rare_min_notional: parseMinInput(document.getElementById('settRareNotionalStock').value) || 1000000,
-      monster_min_notional: 250000000,  // kept for backend compatibility
     },
   };
 }
@@ -3002,9 +2970,9 @@ function updateLiveUI(s){
     document.getElementById('liveTickersActive').textContent = fmtN(s.tickers_active || 0);
     document.getElementById('liveSweepsWritten').textContent = fmtN(s.sweeps_written || 0);
     var ev = s.events_detected || {};
-    document.getElementById('liveCBs').textContent = ev.clusterbomb || 0;
+    document.getElementById('liveDaily').textContent = ev.daily || ev.clusterbomb || 0;
     document.getElementById('liveRares').textContent = ev.rare_sweep || 0;
-    document.getElementById('liveRanked').textContent = ev.ranked_sweep || ev.monster_sweep || 0;
+    document.getElementById('liveSingle').textContent = ev.ranked_sweep || 0;
 
     var sweepList = s.recent_sweeps || (s.last_sweep ? [s.last_sweep] : []);
     if(sweepList.length){
