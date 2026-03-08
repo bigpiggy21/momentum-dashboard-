@@ -3267,12 +3267,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 ppl = float(p.get("ppl") or 0)
                 fx_ppl = float(p.get("fxPpl") or 0)
 
-                # Position value as % of total portfolio
-                position_value = cur_price * qty
-                weight_pct = round(position_value / total_value * 100, 2)
-
-                # Gain % (cost basis)
+                # Cost basis in account currency (from T212's averagePrice)
                 cost_basis = avg_price * qty
+
+                # Position current value = cost + profit/loss (all in account currency)
+                position_value = cost_basis + ppl + fx_ppl
+                weight_pct = round(position_value / total_value * 100, 2) if total_value > 0 else 0.0
+
+                # Gain % (profit/loss relative to cost)
                 gain_pct = round((ppl + fx_ppl) / cost_basis * 100, 2) if cost_basis > 0 else 0.0
 
                 pos_list.append({
