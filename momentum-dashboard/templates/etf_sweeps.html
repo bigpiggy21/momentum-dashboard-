@@ -2683,10 +2683,11 @@ function loadWatchlists(){
       opt.textContent = wl.name + ' (' + watchlistData[wl.name].length + ')';
       sel.appendChild(opt);
     });
-    // Default to ETF watchlist if available
-    if(watchlistData['ETF']){
-      sel.value = 'ETF';
-      updateCategoryDropdown('ETF');
+    // Default to ETF watchlist if available (case-insensitive match)
+    var etfWl = Object.keys(watchlistData).find(function(k){ return k.toLowerCase() === 'etf'; });
+    if(etfWl){
+      sel.value = etfWl;
+      updateCategoryDropdown(etfWl);
     }
     // Initial data load (after watchlist is set)
     loadAll();
