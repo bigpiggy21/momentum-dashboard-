@@ -3928,7 +3928,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 def start_server(port=8080):
     """Start the dashboard HTTP server."""
     server = ThreadingHTTPServer(("0.0.0.0", port), DashboardHandler)
-    print(f"\nDashboard running at http://localhost:{port}")
+    print(f"\nDashboard running on port {port}")
+    print(f"   Local:     http://localhost:{port}")
+    print(f"   Tailscale: http://100.97.33.3:{port}")
     print(f"   Press Ctrl+C to stop\n")
     server.serve_forever()
 
