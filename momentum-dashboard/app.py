@@ -3256,14 +3256,16 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             pos_list = []
             for p in positions:
                 raw_ticker = p.get("ticker", "")
-                # Clean: AAPL_US_EQ → AAPL
+                # Clean: AAPL_US_EQ → AAPL, SGDXl_EQ → SGDX
                 clean_ticker = raw_ticker.split("_")[0] if "_" in raw_ticker else raw_ticker
+                # Strip trailing lowercase suffixes (T212 fractional indicators like 'l')
+                clean_ticker = clean_ticker.rstrip("abcdefghijklmnopqrstuvwxyz") or clean_ticker
 
-                qty = float(p.get("quantity", 0))
-                avg_price = float(p.get("averagePrice", 0))
-                cur_price = float(p.get("currentPrice", 0))
-                ppl = float(p.get("ppl", 0))
-                fx_ppl = float(p.get("fxPpl", 0))
+                qty = float(p.get("quantity") or 0)
+                avg_price = float(p.get("averagePrice") or 0)
+                cur_price = float(p.get("currentPrice") or 0)
+                ppl = float(p.get("ppl") or 0)
+                fx_ppl = float(p.get("fxPpl") or 0)
 
                 # Position value as % of total portfolio
                 position_value = cur_price * qty
