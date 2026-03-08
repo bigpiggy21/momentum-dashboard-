@@ -614,11 +614,11 @@ td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;borde
       <div id="profileStock" class="detection-profile">
         <div class="settings-row">
           <div><div class="settings-label">Min Sweeps / Day</div><div class="settings-label-sub">Required sweeps to qualify as a daily event</div></div>
-          <input type="number" class="settings-input" id="settMinSweepsStock" value="2" min="1" max="50">
+          <input type="number" class="settings-input" id="settMinSweepsStock" value="1" min="1" max="50">
         </div>
         <div class="settings-row">
           <div><div class="settings-label">Rarity Window</div><div class="settings-label-sub">Trading days with no prior sweeps = "rare"</div></div>
-          <input type="number" class="settings-input" id="settRarityDaysStock" value="60" min="5" max="365">
+          <input type="number" class="settings-input" id="settRarityDaysStock" value="20" min="5" max="365">
         </div>
         <div class="settings-row">
           <div><div class="settings-label">Rare Threshold</div><div class="settings-label-sub">Min notional to break dormancy</div></div>
@@ -2811,8 +2811,8 @@ function loadDetectionConfig(){
     .then(function(r){return r.json();})
     .then(function(cfg){
       var s = cfg.etf || cfg.stock || {};
-      document.getElementById('settMinSweepsStock').value = s.min_sweeps || 2;
-      document.getElementById('settRarityDaysStock').value = s.rarity_days || 60;
+      document.getElementById('settMinSweepsStock').value = s.min_sweeps || 1;
+      document.getElementById('settRarityDaysStock').value = s.rarity_days || 20;
       if(document.getElementById('settRareNotionalStock'))
         document.getElementById('settRareNotionalStock').value = fmtSettingVal(s.rare_min_notional || 1000000);
       if(document.getElementById('settDailyDepth'))
@@ -2834,8 +2834,8 @@ function getDetectionParams(){
   return {
     profile: "etf",
     etf: {
-      min_sweeps: parseInt(document.getElementById('settMinSweepsStock').value) || 2,
-      rarity_days: parseInt(document.getElementById('settRarityDaysStock').value) || 60,
+      min_sweeps: parseInt(document.getElementById('settMinSweepsStock').value) || 1,
+      rarity_days: parseInt(document.getElementById('settRarityDaysStock').value) || 20,
       rare_min_notional: parseMinInput(document.getElementById('settRareNotionalStock').value) || 1000000,
     },
   };

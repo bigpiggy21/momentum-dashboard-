@@ -452,11 +452,11 @@ def get_detection_config():
         "monster_min_notional": DEFAULT_MONSTER_MIN_NOTIONAL,  # $100M — single monster sweep
     }
     etf_defaults = {
-        "min_sweeps": 3,
+        "min_sweeps": 1,
         "min_notional": 5_000_000,        # $5M — ETFs have higher volume
         "min_total": 75_000_000,          # $75M
-        "rarity_days": 60,
-        "rare_min_notional": 3_000_000,   # $3M
+        "rarity_days": 20,
+        "rare_min_notional": 1_000_000,   # $1M
         "monster_min_notional": 250_000_000,  # $250M
     }
     config = {"stock": dict(stock_defaults), "etf": dict(etf_defaults)}
