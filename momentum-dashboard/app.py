@@ -3215,8 +3215,16 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 self.send_json({"error": "Trading 212 API key not configured"})
                 return
 
+            # T212 also has a secret key for Basic auth
+            t212_secret = getattr(__import__("config"), "TRADING212_API_SECRET", "")
+
+            import base64
             base = "https://live.trading212.com/api/v0"
-            headers = {"Authorization": TRADING212_API_KEY}
+            if t212_secret:
+                creds = base64.b64encode(f"{TRADING212_API_KEY}:{t212_secret}".encode()).decode()
+                headers = {"Authorization": f"Basic {creds}"}
+            else:
+                headers = {"Authorization": TRADING212_API_KEY}
 
             # Fetch account cash info
             cash_resp = requests.get(f"{base}/equity/account/cash", headers=headers, timeout=15)
