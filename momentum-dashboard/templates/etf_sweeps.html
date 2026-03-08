@@ -160,6 +160,8 @@ input,select,textarea,button{color-scheme:dark;}
 .profile-select:hover{border-color:#555;}
 .profile-save-btn{background:none;border:1px solid #1e1e2e;color:#888;font-size:12px;cursor:pointer;width:24px;height:24px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;padding:0;}
 .profile-save-btn:hover{color:#f59e0b;border-color:#f59e0b66;}
+.tracker-nav-btn{flex:1;background:#14141e;color:#555;border:1px solid #1e1e2e;border-radius:3px;cursor:pointer;font-size:9px;height:20px;display:inline-flex;align-items:center;justify-content:center;padding:0;}
+.tracker-nav-btn:hover{color:#f59e0b;background:#1a1a26;border-color:#f59e0b44;}
 .tracker-filter-btn{background:#14141e;color:#888;border:1px solid #1e1e2e;padding:4px 10px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;height:24px;display:inline-flex;align-items:center;text-transform:uppercase;letter-spacing:0.3px;white-space:nowrap;}
 .tracker-filter-btn:hover{color:#ccc;background:#1a1a26;}
 .tracker-filter-btn.active{background:#1a1a26;}
@@ -414,8 +416,12 @@ td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;borde
     <button class="tracker-tab active" id="tabStocks" onclick="switchTrackerTab('stocks',this)">&#x1F4C8; Tracker <span class="tab-count" id="stocksCount">0</span></button>
   </div>
   <div class="tracker-type-filter">
-    <div class="filter-col filter-col-all">
+    <div class="filter-col filter-col-all" style="gap:2px;">
       <button class="tracker-filter-btn flt-all active" id="filterAll" onclick="setTrackerTypeFilter('all',this)">All</button>
+      <div style="display:flex;gap:2px;">
+        <button class="tracker-nav-btn" id="navPrev" onclick="navigateCards(-1)" title="Previous ticker (←)">&#x25C0;</button>
+        <button class="tracker-nav-btn" id="navNext" onclick="navigateCards(1)" title="Next ticker (→)">&#x25B6;</button>
+      </div>
     </div>
     <div class="filter-col" data-type="daily">
       <button class="tracker-filter-btn flt-daily" id="filterDaily" onclick="setTrackerTypeFilter('daily',this)">Daily</button>
@@ -1420,6 +1426,23 @@ function selectTrackerTicker(ticker){
   loadDetailTable();
 }
 
+function navigateCards(dir){
+  // Get visible cards in the active tracker body
+  var activeBody = document.getElementById('trackerStocksBody');
+  if(activeBody.style.display === 'none') activeBody = document.getElementById('trackerFavsBody');
+  var cards = activeBody.querySelectorAll('.tracker-card[data-ticker]');
+  if(cards.length === 0) return;
+  var tickers = [];
+  cards.forEach(function(c){ tickers.push(c.getAttribute('data-ticker')); });
+  var idx = _selectedTicker ? tickers.indexOf(_selectedTicker) : -1;
+  var next = idx + dir;
+  if(next < 0) next = tickers.length - 1;
+  if(next >= tickers.length) next = 0;
+  selectTrackerTicker(tickers[next]);
+  // Scroll the selected card into view
+  cards[next].scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+
 // ====================================================================
 // LOADING INDICATORS
 // ====================================================================
@@ -1845,6 +1868,12 @@ function renderChart(ticker, chartData, containerId){
   _layerSeries.rare = {dot: _addInvisibleSeries(), text: _addInvisibleSeries(),
                         dotData: [], dotMarkers: [], textData: [], textMarkers: []};
 
+  // Read rank ranges from filter inputs — bubbles only show within these ranges
+  var _chartDailyFrom = parseInt(document.getElementById('trackerDailyFrom').value) || 1;
+  var _chartDailyTo   = parseInt(document.getElementById('trackerDailyTo').value) || 50;
+  var _chartSingleFrom = parseInt(document.getElementById('trackerRankFrom').value) || 1;
+  var _chartSingleTo   = parseInt(document.getElementById('trackerRankTo').value) || 50;
+
   var cbDateKeys = Object.keys(cbDates).sort();
 
   cbDateKeys.forEach(function(d){
@@ -1895,8 +1924,8 @@ function renderChart(ticker, chartData, containerId){
     var textAnchor = candle ? candle.low : markerPrice;
     var label = fmt$(cb.total_notional);
 
-    // --- DAILY layer (amber/yellow) ---
-    if(dailyRank != null){
+    // --- DAILY layer (amber/yellow) — respect rank range from filter ---
+    if(dailyRank != null && dailyRank >= _chartDailyFrom && dailyRank <= _chartDailyTo){
       var dSize, dColor;
       if(dailyRank <= 3){        dSize = 9; dColor = 'rgba(255, 215, 0, 0.85)'; }
       else if(dailyRank <= 10){  dSize = 7; dColor = 'rgba(251, 191, 36, 0.75)'; }
@@ -1914,8 +1943,8 @@ function renderChart(ticker, chartData, containerId){
       });
     }
 
-    // --- SINGLE layer (blue) ---
-    if(sweepRank != null){
+    // --- SINGLE layer (blue) — respect rank range from filter ---
+    if(sweepRank != null && sweepRank >= _chartSingleFrom && sweepRank <= _chartSingleTo){
       var sSize, sColor;
       if(sweepRank <= 3){        sSize = 9; sColor = 'rgba(29, 78, 216, 0.90)'; }
       else if(sweepRank <= 10){  sSize = 8; sColor = 'rgba(59, 130, 246, 0.85)'; }
