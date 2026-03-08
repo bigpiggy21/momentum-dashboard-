@@ -103,6 +103,16 @@
       "compute_workers": 8,
       "market_hours_only": false,
       "after_close_delay_minutes": 30
+    },
+    "Etf": {
+      "enabled": false,
+      "mode": "manual",
+      "interval_minutes": 15,
+      "priority": 99,
+      "collect_workers": 4,
+      "compute_workers": 8,
+      "market_hours_only": false,
+      "after_close_delay_minutes": 30
     }
   },
   "eod_compute": {

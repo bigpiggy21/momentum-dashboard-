@@ -166,7 +166,7 @@ input,select,textarea,button{color-scheme:dark;}
 .tracker-filter-btn.flt-all{border-color:#94a3b844;}.tracker-filter-btn.flt-all:hover{border-color:#94a3b8;}.tracker-filter-btn.flt-all.active{color:#e2e8f0;border-color:#94a3b8;}
 .tracker-filter-btn.flt-cb{border-color:#f59e0b44;}.tracker-filter-btn.flt-cb:hover{border-color:#f59e0b;}.tracker-filter-btn.flt-cb.active{color:#f59e0b;border-color:#f59e0b;}
 .tracker-filter-btn.flt-rare{border-color:#a78bfa44;}.tracker-filter-btn.flt-rare:hover{border-color:#a78bfa;}.tracker-filter-btn.flt-rare.active{color:#c4b5fd;border-color:#a78bfa;}
-.tracker-filter-btn.flt-monster{border-color:#f9731644;}.tracker-filter-btn.flt-monster:hover{border-color:#f97316;}.tracker-filter-btn.flt-monster.active{color:#fb923c;border-color:#f97316;}
+.tracker-filter-btn.flt-ranked{border-color:#ef444444;}.tracker-filter-btn.flt-ranked:hover{border-color:#ef4444;}.tracker-filter-btn.flt-ranked.active{color:#f87171;border-color:#ef4444;}
 .chart-setting-sep{width:1px;height:14px;background:#1e1e2e;margin:0 2px;}
 
 /* Chart fullscreen overlay */
@@ -187,7 +187,7 @@ input,select,textarea,button{color-scheme:dark;}
 .tab-btn.dtab-all.active{color:#e2e8f0;border-color:#94a3b8;border-bottom-color:#1a1a26;}
 .tab-btn.dtab-cb.active{color:#f59e0b;border-color:#f59e0b;border-bottom-color:#1a1a26;}
 .tab-btn.dtab-rare.active{color:#c4b5fd;border-color:#a78bfa;border-bottom-color:#1a1a26;}
-.tab-btn.dtab-monster.active{color:#fb923c;border-color:#f97316;border-bottom-color:#1a1a26;}
+.tab-btn.dtab-ranked.active{color:#f87171;border-color:#ef4444;border-bottom-color:#1a1a26;}
 .table-wrap{flex:1;overflow-y:auto;overflow-x:auto;border:1px solid #1e1e2e;border-radius:0 0 6px 6px;min-height:0;}
 table{width:100%;border-collapse:collapse;}
 th{background:#0e0e16;color:#666;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;padding:6px 8px;text-align:left;position:sticky;top:0;z-index:1;border-bottom:1px solid #1e1e2e;cursor:pointer;user-select:none;white-space:nowrap;}
@@ -195,9 +195,9 @@ th:hover{color:#f59e0b;}
 td{padding:5px 8px;border-bottom:1px solid #111118;font-size:10px;white-space:nowrap;}
 td.col-key{font-size:12px;}
 tr:hover td{background:#0e0e18;}
-tr.row-monster td{background:rgba(124,45,18,0.10);}
-tr.row-monster td:first-child{box-shadow:inset 3px 0 0 #f97316;}
-tr.row-monster:hover td{background:rgba(124,45,18,0.18);}
+tr.row-ranked td{background:rgba(127,29,29,0.10);}
+tr.row-ranked td:first-child{box-shadow:inset 3px 0 0 #ef4444;}
+tr.row-ranked:hover td{background:rgba(127,29,29,0.18);}
 tr.row-rare td{background:rgba(30,41,59,0.15);}
 tr.row-rare td:first-child{box-shadow:inset 3px 0 0 #a78bfa;}
 tr.row-rare:hover td{background:rgba(30,41,59,0.25);}
@@ -228,8 +228,8 @@ tr.row-focused td:first-child{box-shadow:inset 3px 0 0 #f59e0b !important;}
 /* Event type badges */
 .cb-badge{display:inline-block;background:#422006;color:#f59e0b;font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:0.5px;}
 .rare-flag{display:inline-flex;align-items:center;background:#4c1d95;color:#c4b5fd;font-size:12px;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;line-height:1;}
-.monster-flag{display:inline-flex;align-items:center;background:#7c2d12;color:#fb923c;font-size:12px;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;line-height:1;}
-td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;margin-left:3px;}
+.ranked-flag{display:inline-flex;align-items:center;background:#7f1d1d;color:#f87171;font-size:12px;font-weight:700;padding:1px 6px;border-radius:3px;margin-left:6px;line-height:1;}
+td .rare-flag,td .ranked-flag{font-size:9px;padding:1px 4px;border-radius:2px;margin-left:3px;}
 
 /* Toast */
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e293b;color:#f59e0b;border:1px solid #334155;padding:10px 20px;border-radius:6px;font-size:12px;z-index:9999;opacity:0;transition:opacity 0.3s;pointer-events:none;}
@@ -405,7 +405,7 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
       <div class="stat-item"><div class="stat-label">Notional</div><div class="stat-value green" id="statNotional">—</div></div>
       <div class="stat-item"><div class="stat-label">Clusterbombs</div><div class="stat-value text-amber" id="statCBs">—</div></div>
       <div class="stat-item"><div class="stat-label">Rare</div><div class="stat-value purple" id="statRare">—</div></div>
-      <div class="stat-item"><div class="stat-label">Monster</div><div class="stat-value" style="color:#f97316;" id="statMonster">—</div></div>
+      <div class="stat-item"><div class="stat-label">Ranked</div><div class="stat-value" style="color:#ef4444;" id="statRanked">—</div></div>
     </div>
   </div>
   <div class="tracker-tab-bar">
@@ -434,11 +434,13 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
         <input type="number" class="filter-input" id="trackerRareDays" value="60" min="5" max="365" title="Rare min dormancy days" oninput="debouncedTrackerRefresh()" style="border-color:#a78bfa44;color:#a78bfa;">
       </div>
     </div>
-    <div class="filter-col" data-type="monster_sweep">
-      <button class="tracker-filter-btn flt-monster" id="filterMonster" onclick="setTrackerTypeFilter('monster_sweep',this)">Monsters</button>
+    <div class="filter-col" data-type="ranked_sweep">
+      <button class="tracker-filter-btn flt-ranked" id="filterRanked" onclick="setTrackerTypeFilter('ranked_sweep',this)">Ranked</button>
       <div class="filter-group">
-        <span class="filter-group-label" style="color:#f97316;">$M</span>
-        <input type="number" class="filter-input" id="trackerMonsterMin" value="100" min="1" title="Monster min notional ($M)" oninput="debouncedTrackerRefresh()" style="flex:1;border-color:#f9731644;color:#f97316;">
+        <span class="filter-group-label" style="color:#ef4444;">From</span>
+        <input type="number" class="filter-input" id="trackerRankFrom" value="1" min="1" title="Rank from (top)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#ef444444;color:#ef4444;">
+        <span class="filter-group-label" style="color:#ef4444;">To</span>
+        <input type="number" class="filter-input" id="trackerRankTo" value="50" min="1" title="Rank to (bottom)" oninput="debouncedTrackerRefresh()" style="width:45px;border-color:#ef444444;color:#ef4444;">
       </div>
     </div>
     <div style="margin-left:auto;display:flex;align-items:center;gap:4px;align-self:center;">
@@ -482,7 +484,7 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
           <span style="margin-left:10px;"><span class="text-dim">Total $</span>&nbsp;<span id="tsNotional" style="color:#f59e0b;font-weight:600;">—</span></span>
           <span style="margin-left:10px;"><span class="text-dim">Sweeps</span>&nbsp;<span id="tsSweeps" style="color:#fff;font-weight:600;">—</span></span>
           <span style="margin-left:10px;"><span class="text-dim">Rare</span>&nbsp;<span id="tsRare" style="color:#c4b5fd;font-weight:600;">—</span></span>
-          <span style="margin-left:10px;"><span class="text-dim">Monster</span>&nbsp;<span id="tsMonster" style="color:#fb923c;font-weight:600;">—</span></span>
+          <span style="margin-left:10px;"><span class="text-dim">Ranked</span>&nbsp;<span id="tsRanked" style="color:#ef4444;font-weight:600;">—</span></span>
         </span>
       </div>
     </div>
@@ -496,7 +498,7 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
         <div class="chart-setting-sep"></div>
         <button class="chart-setting-btn" id="btnCumToggle" onclick="toggleCumulative(this)" style="color:#22c55e;border-color:#334155;" title="Toggle cumulative sweep notional line">Cumulative $</button>
         <button class="chart-setting-btn active" id="btnVolCycle" onclick="cycleVol()" title="Click to cycle: Sweep Volume → Top 10 → Stock Volume">Sweep Volume</button>
-        <button class="chart-setting-btn active" id="btnBubbleCycle" onclick="cycleBubbles()" title="Click to cycle: All → Monsters → Rare → CBs → Off" style="color:#f59e0b;border-color:#f59e0b66;">Bubbles: All</button>
+        <button class="chart-setting-btn active" id="btnBubbleCycle" onclick="cycleBubbles()" title="Click to cycle: All → Ranked → Rare → CBs → Off" style="color:#f59e0b;border-color:#f59e0b66;">Bubbles: All</button>
         <div class="chart-setting-sep"></div>
         <button class="chart-setting-btn" id="btn50SMA" onclick="toggle50SMA(this)" title="Toggle 50-day simple moving average" style="color:#0097a7;">50D</button>
         <button class="chart-setting-btn" id="btn200SMA" onclick="toggle200SMA(this)" title="Toggle 200-day simple moving average" style="color:#b22833;">200D</button>
@@ -527,7 +529,7 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
       <button class="tab-btn dtab-all active" onclick="switchDetailFilter('all',this)">All</button>
       <button class="tab-btn dtab-cb" onclick="switchDetailFilter('clusterbomb',this)">Clusterbombs</button>
       <button class="tab-btn dtab-rare" onclick="switchDetailFilter('rare_sweep',this)">Rare Sweeps</button>
-      <button class="tab-btn dtab-monster" onclick="switchDetailFilter('monster_sweep',this)">Monsters</button>
+      <button class="tab-btn dtab-ranked" onclick="switchDetailFilter('ranked_sweep',this)">Ranked</button>
     </div>
 
     <!-- Events table (for _selectedTicker, filtered by type) -->
@@ -626,8 +628,8 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
         </div>
         <div class="settings-divider" style="margin:6px 0;"></div>
         <div class="settings-row">
-          <div><div class="settings-label" style="color:#f97316;">Monster Threshold</div><div class="settings-label-sub">Single sweep notional for Monster</div></div>
-          <input type="text" class="settings-input settings-input-wide" id="settMonsterNotionalStock" value="100M" title="e.g. 50M, 100M, 200M">
+          <div><div class="settings-label" style="color:#ef4444;">Ranked Sweep Depth</div><div class="settings-label-sub">Top N trades per ticker to track</div></div>
+          <input type="number" class="settings-input settings-input-wide" id="settRankedDepth" value="200" min="10" max="500" title="e.g. 50, 100, 200">
         </div>
       </div>
 
@@ -674,7 +676,7 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
           <div style="display:flex;gap:10px;font-size:10px;">
             <span><span style="color:#f59e0b;" id="liveCBs">0</span> CBs</span>
             <span><span style="color:#a855f7;" id="liveRares">0</span> Rare</span>
-            <span><span style="color:#f97316;" id="liveMonsters">0</span> Monsters</span>
+            <span><span style="color:#ef4444;" id="liveRanked">0</span> Ranked</span>
           </div>
           <div id="liveLastDetection" style="font-size:9px;color:#444;margin-top:2px;"></div>
         </div>
@@ -739,7 +741,7 @@ var _sma50Visible = false;   // Toggle state for 50D SMA
 var _sma200Series = null;    // 200-day SMA line series
 var _sma200Visible = false;  // Toggle state for 200D SMA
 var _gridVisible = false;    // Toggle state for background gridlines (default off)
-var _bubbleFilter = 'all';   // 'all' | 'monster' | 'rare' | 'cb' | 'off'
+var _bubbleFilter = 'all';   // 'all' | 'ranked' | 'rare' | 'cb' | 'off'
 
 // Cache last chart data for maximize/restore without re-fetch
 var _lastChartTicker = null;
@@ -882,8 +884,10 @@ function buildFilterParams(){
   // Per-type display filters
   var minSweeps = parseInt(document.getElementById('trackerMinSweeps').value) || 0;
   if(minSweeps > 0) params.set('min_sweeps', minSweeps);
-  var monsterMin = (parseFloat(document.getElementById('trackerMonsterMin').value) || 0) * 1e6;
-  if(monsterMin > 0) params.set('monster_min', monsterMin);
+  var rankFrom = parseInt(document.getElementById('trackerRankFrom').value) || 1;
+  var rankTo = parseInt(document.getElementById('trackerRankTo').value) || 50;
+  params.set('rank_from', rankFrom);
+  params.set('rank_to', rankTo);
   var rareMin = (parseFloat(document.getElementById('trackerRareMin').value) || 0) * 1e6;
   if(rareMin > 0) params.set('rare_min', rareMin);
   var rareDays = parseInt(document.getElementById('trackerRareDays').value) || 0;
@@ -956,28 +960,28 @@ function renderDetailEvents(){
   updateDetailDateLabel();
   var events = _detailEvents;
   // Client-side type filter
-  // Monsters tab shows ANY event with is_monster=1 (standalone OR CB+monster overlay).
+  // Ranked tab shows ANY event with sweep_rank set.
   // CB and Rare tabs filter by primary event_type only.
   if(_detailTypeFilter !== 'all'){
     events = events.filter(function(ev){
       var et = ev.event_type || 'clusterbomb';
-      if(_detailTypeFilter === 'monster_sweep') return ev.is_monster || et === 'monster_sweep';
+      if(_detailTypeFilter === 'ranked_sweep') return ev.sweep_rank != null;
       if(_detailTypeFilter === 'clusterbomb') return et === 'clusterbomb';
       if(_detailTypeFilter === 'rare_sweep') return et === 'rare_sweep';
       return true;
     });
   }
 
-  // Update tab counts — Monsters includes any event with is_monster flag
+  // Update tab counts — Ranked includes any event with sweep_rank
   var allCount = _detailEvents.length;
   var cbCount = _detailEvents.filter(function(ev){ return (ev.event_type||'clusterbomb')==='clusterbomb'; }).length;
   var rareCount = _detailEvents.filter(function(ev){ return (ev.event_type||'clusterbomb')==='rare_sweep'; }).length;
-  var monsterCount = _detailEvents.filter(function(ev){ return ev.is_monster || (ev.event_type||'clusterbomb')==='monster_sweep'; }).length;
+  var rankedCount = _detailEvents.filter(function(ev){ return ev.sweep_rank != null; }).length;
   var tabs = document.querySelectorAll('#detailTabBar .tab-btn');
   tabs[0].textContent = 'All (' + allCount + ')';
   tabs[1].textContent = 'Clusterbombs (' + cbCount + ')';
   tabs[2].textContent = 'Rare Sweeps (' + rareCount + ')';
-  tabs[3].textContent = 'Monsters (' + monsterCount + ')';
+  tabs[3].textContent = 'Ranked (' + rankedCount + ')';
 
   // Populate ticker stats strip (always from full _detailEvents, not filtered)
   var strip = document.getElementById('tickerStatsStrip');
@@ -991,14 +995,14 @@ function renderDetailEvents(){
     document.getElementById('tsNotional').textContent = fmt$(totalNotional);
     document.getElementById('tsSweeps').textContent = totalSweeps.toLocaleString();
     document.getElementById('tsRare').textContent = rareCount;
-    document.getElementById('tsMonster').textContent = monsterCount;
+    document.getElementById('tsRanked').textContent = rankedCount;
     strip.style.display = '';
   } else if(_selectedTicker){
     document.getElementById('tsEvents').textContent = '0';
     document.getElementById('tsNotional').textContent = '$0';
     document.getElementById('tsSweeps').textContent = '0';
     document.getElementById('tsRare').textContent = '0';
-    document.getElementById('tsMonster').textContent = '0';
+    document.getElementById('tsRanked').textContent = '0';
     strip.style.display = '';
   } else {
     strip.style.display = 'none';
@@ -1021,26 +1025,25 @@ function renderDetailEvents(){
   events.forEach(function(ev){
     var evType = ev.event_type || 'clusterbomb';
     var isRareSweep = evType === 'rare_sweep';
-    var isStandaloneMonster = evType === 'monster_sweep';
-    var isMonster = ev.is_monster;
-    // Table type badges: CB is default (dim), rare/monster get colour badges
+    var hasRank = ev.sweep_rank != null;
+    // Table type badges: CB is default (dim), rare get colour badges, ranked get rank number
     var typeTag = '';
-    if(isStandaloneMonster){
-      typeTag = '<span class="monster-flag">M</span>';
-    } else if(isRareSweep){
+    if(isRareSweep){
       typeTag = '<span class="rare-flag">R</span>';
-      if(isMonster) typeTag += ' <span class="monster-flag">M</span>';
+      if(hasRank) typeTag += ' <span class="ranked-flag">#' + ev.sweep_rank + '</span>';
     } else if(ev.is_rare){
       typeTag = '<span class="rare-flag">R</span>';
-      if(isMonster) typeTag += ' <span class="monster-flag">M</span>';
+      if(hasRank) typeTag += ' <span class="ranked-flag">#' + ev.sweep_rank + '</span>';
+    } else if(hasRank && evType === 'ranked_sweep'){
+      typeTag = '<span class="ranked-flag">#' + ev.sweep_rank + '</span>';
     } else {
       typeTag = '<span class="text-dim" style="font-size:9px;">CB</span>';
-      if(isMonster) typeTag += ' <span class="monster-flag">M</span>';
+      if(hasRank) typeTag += ' <span class="ranked-flag">#' + ev.sweep_rank + '</span>';
     }
     var rankLabel = ev.rank ? '<span class="text-amber" style="font-weight:700;">#' + ev.rank + '</span><span class="text-dim"> / ' + ev.total_days + '</span>' : '<span class="text-dim">\u2014</span>';
     var gainCls = (ev.pct_gain||0) >= 0 ? 'up' : 'down';
     var gainStr = (ev.pct_gain!=null) ? '<span class="tracker-value '+gainCls+'">'+((ev.pct_gain>=0)?'+':'')+ev.pct_gain.toFixed(1)+'%</span>' : '<span class="text-dim">\u2014</span>';
-    var rowCls = isStandaloneMonster ? 'row-monster' : isMonster ? 'row-monster' : isRareSweep ? 'row-rare' : (ev.is_rare ? 'row-rare' : '');
+    var rowCls = hasRank ? 'row-ranked' : isRareSweep ? 'row-rare' : (ev.is_rare ? 'row-rare' : '');
     html += '<tr class="' + rowCls + '" onclick="focusChartOnDate(\'' + ev.date + '\')" ondblclick="drillDown(\'' + ev.ticker + '\',\'' + ev.date + '\')" style="cursor:pointer">'
       + '<td class="mono col-key">' + ev.date + '</td>'
       + '<td>' + typeTag + '</td>'
@@ -1140,7 +1143,7 @@ function toggleFilterGroupVisibility(activeType){
 // FILTER PROFILES — localStorage persistence
 // ====================================================================
 var _PROFILE_KEY = 'etf_sweep_filter_profiles';
-var _DEFAULT_PROFILE = {min_total:'38',min_sweeps:'3',monster_min:'100',rare_min:'1',rare_days:'60'};
+var _DEFAULT_PROFILE = {min_total:'38',min_sweeps:'3',rank_from:'1',rank_to:'50',rare_min:'1',rare_days:'60'};
 
 function getFilterProfiles(){
   try {
@@ -1175,7 +1178,8 @@ function applyFilterProfile(name){
   var p = profiles[name] || _DEFAULT_PROFILE;
   document.getElementById('trackerMinTotal').value = p.min_total || '38';
   document.getElementById('trackerMinSweeps').value = p.min_sweeps || '3';
-  document.getElementById('trackerMonsterMin').value = p.monster_min || '100';
+  document.getElementById('trackerRankFrom').value = p.rank_from || '1';
+  document.getElementById('trackerRankTo').value = p.rank_to || '50';
   document.getElementById('trackerRareMin').value = p.rare_min || '1';
   document.getElementById('trackerRareDays').value = p.rare_days || '60';
   loadAll();
@@ -1185,7 +1189,8 @@ function getCurrentFilterValues(){
   return {
     min_total: document.getElementById('trackerMinTotal').value,
     min_sweeps: document.getElementById('trackerMinSweeps').value,
-    monster_min: document.getElementById('trackerMonsterMin').value,
+    rank_from: document.getElementById('trackerRankFrom').value,
+    rank_to: document.getElementById('trackerRankTo').value,
     rare_min: document.getElementById('trackerRareMin').value,
     rare_days: document.getElementById('trackerRareDays').value
   };
@@ -1213,9 +1218,9 @@ function deleteProfile(name){
 
 function filterByType(events){
   if(_trackerTypeFilter === 'all') return events;
-  // Monsters includes any event with is_monster flag (standalone OR CB+monster overlay)
-  if(_trackerTypeFilter === 'monster_sweep'){
-    return events.filter(function(ev){ return ev.is_monster || (ev.event_type||'clusterbomb') === 'monster_sweep'; });
+  // Ranked includes any event with sweep_rank set
+  if(_trackerTypeFilter === 'ranked_sweep'){
+    return events.filter(function(ev){ return ev.sweep_rank != null; });
   }
   return events.filter(function(ev){ return (ev.event_type||'clusterbomb') === _trackerTypeFilter; });
 }
@@ -1332,7 +1337,7 @@ function renderTrackerCards(containerId, events, showRemove){
     var emptyMsg = containerId === 'trackerFavsBody'
       ? 'No favourites yet. Click the &#x2B50; on any tracker card to add it.'
       : _trackerTypeFilter === 'rare_sweep' ? 'No rare sweeps detected'
-      : _trackerTypeFilter === 'monster_sweep' ? 'No monster sweeps detected'
+      : _trackerTypeFilter === 'ranked_sweep' ? 'No ranked sweeps detected'
       : _trackerTypeFilter === 'clusterbomb' ? 'No clusterbombs above threshold'
       : 'No events above threshold';
     body.innerHTML = '<div class="tracker-empty">' + emptyMsg + '</div>';
@@ -1346,16 +1351,15 @@ function renderTrackerCards(containerId, events, showRemove){
     var biasLabel = ev.bias === 'bullish' ? 'BULL' : 'BEAR';
     var evType = ev.event_type || 'clusterbomb';
     var isRareSweep = evType === 'rare_sweep';
-    var isStandaloneMonster = evType === 'monster_sweep';
-    var isMonster = ev.is_monster;
+    var hasRank = ev.sweep_rank != null;
     var isRare = isRareSweep || ev.is_rare;
-    // Cards: CBs are default (no badge). Only show [R] for rare and [M] for monster.
+    // Cards: CBs are default (no badge). Show [R] for rare, [#N] for ranked.
     var typeTag = '';
     if(isRare) typeTag += ' <span class="rare-flag">R</span>';
-    if(isMonster) typeTag += ' <span class="monster-flag">M</span>';
-    var totalLabel = isStandaloneMonster ? 'Monster Total' : isRareSweep ? 'Sweep Total' : 'CB Total';
-    var totalColor = isStandaloneMonster ? 'style="color:#fb923c;"' : isRareSweep ? 'style="color:#c4b5fd;"' : '';
-    var cardBorder = isStandaloneMonster ? 'border-left:3px solid #f97316;' : isMonster ? 'border-left:3px solid #f97316;' : isRareSweep ? 'border-left:3px solid #a78bfa;' : 'border-left:3px solid #f59e0b44;';
+    if(hasRank) typeTag += ' <span class="ranked-flag">#' + ev.sweep_rank + '</span>';
+    var totalLabel = (hasRank && evType === 'ranked_sweep') ? 'Ranked Total' : isRareSweep ? 'Sweep Total' : 'CB Total';
+    var totalColor = (hasRank && evType === 'ranked_sweep') ? 'style="color:#f87171;"' : isRareSweep ? 'style="color:#c4b5fd;"' : '';
+    var cardBorder = hasRank ? 'border-left:3px solid #ef4444;' : isRareSweep ? 'border-left:3px solid #a78bfa;' : 'border-left:3px solid #f59e0b44;';
     var starred = isFavourite(ev.ticker, ev.date);
     var starBtn = showRemove
       ? '<button class="tracker-remove" onclick="removeFavourite(\'' + ev.ticker + '\',\'' + ev.date + '\',event)" title="Remove from favourites">&#x2715;</button>'
@@ -1458,7 +1462,7 @@ function loadStats(){
     document.getElementById('statTickers').textContent = fmtN(d.tickers_tracked);
     document.getElementById('statCBs').textContent = fmtN(d.clusterbombs);
     document.getElementById('statRare').textContent = fmtN(d.rare_clusterbombs);
-    document.getElementById('statMonster').textContent = fmtN(d.monster_sweeps || 0);
+    document.getElementById('statRanked').textContent = fmtN(d.ranked_sweeps || 0);
     var rangeEl = document.getElementById('statRange');
     if(rangeEl && d.date_range && d.date_range.from){
       rangeEl.textContent = d.date_range.from + ' \u2192 ' + d.date_range.to;
@@ -1532,11 +1536,13 @@ function loadChart(){
   if(to) params.set('date_to', to);
   // Pass per-type display filters so chart bubbles respect the same filters as cards
   var _ms = parseInt(document.getElementById('trackerMinSweeps').value) || 0;
-  var _mm = (parseFloat(document.getElementById('trackerMonsterMin').value) || 0) * 1e6;
+  var _rf = parseInt(document.getElementById('trackerRankFrom').value) || 1;
+  var _rt = parseInt(document.getElementById('trackerRankTo').value) || 50;
   var _rm = (parseFloat(document.getElementById('trackerRareMin').value) || 0) * 1e6;
   var _rd = parseInt(document.getElementById('trackerRareDays').value) || 0;
   if(_ms > 0) params.set('min_sweeps', _ms);
-  if(_mm > 0) params.set('monster_min', _mm);
+  params.set('rank_from', _rf);
+  params.set('rank_to', _rt);
   if(_rm > 0) params.set('rare_min', _rm);
   if(_rd > 0) params.set('rare_days', _rd);
 
@@ -1776,10 +1782,16 @@ function renderChart(ticker, chartData, containerId){
     var barColor;
     if(cb){
       var r = cb.rank || 999;
+      var sr = cb.sweep_rank;
       var evType = cb.event_type || 'clusterbomb';
       var isRare = evType === 'rare_sweep' || cb.is_rare;
-      var isMonster = cb.is_monster;
-      if(isMonster)    barColor = 'rgba(249, 115, 22, 0.75)';
+      // Ranked sweeps get red-orange gradient based on rank
+      if(sr != null){
+        if(sr <= 3)       barColor = 'rgba(220, 38, 38, 0.80)';
+        else if(sr <= 10) barColor = 'rgba(239, 68, 68, 0.70)';
+        else if(sr <= 25) barColor = 'rgba(249, 115, 22, 0.65)';
+        else              barColor = 'rgba(251, 146, 60, 0.55)';
+      }
       else if(isRare)  barColor = 'rgba(167, 139, 250, 0.70)';
       else if(r === 1) barColor = 'rgba(255, 215, 0, 0.85)';
       else if(r === 2) barColor = 'rgba(251, 191, 36, 0.75)';
@@ -1872,15 +1884,30 @@ function renderChart(ticker, chartData, containerId){
 
     var evType = cb.event_type || 'clusterbomb';
     var isRare = evType === 'rare_sweep' || cb.is_rare;
-    var isMonsterEv = cb.is_monster;
+    var sweepRank = cb.sweep_rank;
     var rank = cb.rank || 999;
 
-    // Dynamic bubble colour based on rank (gold for #1, uniform size otherwise)
+    // Dynamic bubble colour: ranked sweeps get red-orange gradient, rare gets purple, CBs get amber
     var dotSize, dotColor, dotShape;
-    if(isMonsterEv){
-      dotSize = 8;
-      dotColor = 'rgba(249, 115, 22, 0.90)';   // bright orange
-      dotShape = 'circle';
+    if(sweepRank != null){
+      // Ranked sweep: deep red for top ranks → orange for lower ranks
+      if(sweepRank <= 3){
+        dotSize = 9;
+        dotColor = 'rgba(220, 38, 38, 0.90)';   // deep red
+        dotShape = 'circle';
+      } else if(sweepRank <= 10){
+        dotSize = 8;
+        dotColor = 'rgba(239, 68, 68, 0.85)';   // red
+        dotShape = 'circle';
+      } else if(sweepRank <= 25){
+        dotSize = 7;
+        dotColor = 'rgba(249, 115, 22, 0.80)';  // orange-red
+        dotShape = 'circle';
+      } else {
+        dotSize = 6;
+        dotColor = 'rgba(251, 146, 60, 0.70)';  // warm orange
+        dotShape = 'circle';
+      }
     } else if(isRare){
       dotSize = 6;
       dotColor = 'rgba(167, 139, 250, 0.75)';
@@ -1902,9 +1929,9 @@ function renderChart(ticker, chartData, containerId){
       dotColor = 'rgba(245, 158, 11, 0.60)';   // slightly faded
       dotShape = 'circle';
     }
-    var textColor = isMonsterEv ? '#fb923c' : isRare ? '#c4b5fd' : '#f59e0b';
-    // Tag for bubble filter: monster > rare > cb
-    var bubbleTag = isMonsterEv ? 'monster' : isRare ? 'rare' : 'cb';
+    var textColor = (sweepRank != null) ? '#ef4444' : isRare ? '#c4b5fd' : '#f59e0b';
+    // Tag for bubble filter: ranked > rare > cb
+    var bubbleTag = (sweepRank != null) ? 'ranked' : isRare ? 'rare' : 'cb';
 
     // Main bubble at VWAP — dynamic size & shape
     dotData.push({time: timeVal, value: markerPrice, _tag: bubbleTag});
@@ -2133,9 +2160,9 @@ function cycleVol(){
 
 // BUBBLE FILTER — cycle which event types show markers on chart
 // ====================================================================
-var _bubbleCycle = ['all','monster','rare','cb','off'];
-var _bubbleLabels = {all:'Bubbles: All',monster:'Bubbles: Monsters',rare:'Bubbles: Rare',cb:'Bubbles: CBs',off:'Bubbles: Off'};
-var _bubbleColors = {all:'#f59e0b',monster:'#f97316',rare:'#a78bfa',cb:'#f59e0b',off:'#555'};
+var _bubbleCycle = ['all','ranked','rare','cb','off'];
+var _bubbleLabels = {all:'Bubbles: All',ranked:'Bubbles: Ranked',rare:'Bubbles: Rare',cb:'Bubbles: CBs',off:'Bubbles: Off'};
+var _bubbleColors = {all:'#f59e0b',ranked:'#ef4444',rare:'#a78bfa',cb:'#f59e0b',off:'#555'};
 
 function cycleBubbles(){
   var idx = _bubbleCycle.indexOf(_bubbleFilter);
@@ -2164,7 +2191,7 @@ function _applyBubbleFilter(){
   for(var i = 0; i < _allDotData.length; i++){
     var tag = _allDotMarkers[i]._tag;
     var pass = _bubbleFilter === 'all'
-      || (_bubbleFilter === 'monster' && tag === 'monster')
+      || (_bubbleFilter === 'ranked' && tag === 'ranked')
       || (_bubbleFilter === 'rare' && tag === 'rare')
       || (_bubbleFilter === 'cb' && tag === 'cb');
     if(pass){
@@ -2379,7 +2406,7 @@ function copyPineScript(){
       navigator.clipboard.writeText(d.script).then(function(){
         var s = d.stats;
         var kb = (d.script_size / 1024).toFixed(1);
-        showToast(s.tickers + ' tickers copied (' + s.clusterbombs + ' CB, ' + s.monsters + ' M, ' + s.rare + ' R) — ' + kb + 'KB');
+        showToast(s.tickers + ' tickers copied (' + s.clusterbombs + ' CB, ' + (s.ranked || s.monsters || 0) + ' Rk, ' + s.rare + ' R) — ' + kb + 'KB');
       }).catch(function(){
         var w = window.open('', '_blank');
         w.document.write('<pre style="background:#1a1a2e;color:#d0d0d8;padding:20px;font-size:12px;white-space:pre-wrap;">'
@@ -2779,8 +2806,8 @@ function loadDetectionConfig(){
       document.getElementById('settRarityDaysStock').value = s.rarity_days || 60;
       if(document.getElementById('settRareNotionalStock'))
         document.getElementById('settRareNotionalStock').value = fmtSettingVal(s.rare_min_notional || 1000000);
-      if(document.getElementById('settMonsterNotionalStock'))
-        document.getElementById('settMonsterNotionalStock').value = fmtSettingVal(s.monster_min_notional || 100000000);
+      if(document.getElementById('settRankedDepth'))
+        document.getElementById('settRankedDepth').value = 200;
     })
     .catch(function(e){ console.error('Load detection config error:', e); });
 }
@@ -2801,7 +2828,7 @@ function getDetectionParams(){
       min_total: parseMinInput(document.getElementById('settMinTotalStock').value) || 10000000,
       rarity_days: parseInt(document.getElementById('settRarityDaysStock').value) || 60,
       rare_min_notional: parseMinInput(document.getElementById('settRareNotionalStock').value) || 1000000,
-      monster_min_notional: parseMinInput(document.getElementById('settMonsterNotionalStock').value) || 100000000,
+      monster_min_notional: 250000000,  // kept for backend compatibility
     },
   };
 }
@@ -2977,7 +3004,7 @@ function updateLiveUI(s){
     var ev = s.events_detected || {};
     document.getElementById('liveCBs').textContent = ev.clusterbomb || 0;
     document.getElementById('liveRares').textContent = ev.rare_sweep || 0;
-    document.getElementById('liveMonsters').textContent = ev.monster_sweep || 0;
+    document.getElementById('liveRanked').textContent = ev.ranked_sweep || ev.monster_sweep || 0;
 
     var sweepList = s.recent_sweeps || (s.last_sweep ? [s.last_sweep] : []);
     if(sweepList.length){
@@ -3084,7 +3111,7 @@ function startLiveAutoRefresh(){
         return;
       }
       var ev = s.events_detected || {};
-      var total = (ev.clusterbomb||0) + (ev.rare_sweep||0) + (ev.monster_sweep||0);
+      var total = (ev.clusterbomb||0) + (ev.rare_sweep||0) + (ev.monster_sweep||0) + (ev.ranked_sweep||0);
       if(_liveLastEventCounts !== null && total > _liveLastEventCounts){
         // New events detected — refresh tracker
         loadAll();
