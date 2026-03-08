@@ -902,6 +902,17 @@ function switchDetailFilter(filter, btn){
   document.querySelectorAll('#detailTabBar .tab-btn').forEach(function(b){ b.classList.remove('active'); });
   btn.classList.add('active');
   renderDetailEvents();
+  // Sync chart bubble filter with detail tab
+  var bubbleMap = {all:'all', daily:'daily', single:'single', rare_sweep:'rare'};
+  _bubbleFilter = bubbleMap[filter] || 'all';
+  var bbtn = document.getElementById('btnBubbleCycle');
+  if(bbtn){
+    bbtn.textContent = _bubbleLabels[_bubbleFilter];
+    bbtn.style.color = _bubbleColors[_bubbleFilter];
+    bbtn.style.borderColor = _bubbleColors[_bubbleFilter] + '66';
+    bbtn.classList.toggle('active', _bubbleFilter !== 'off');
+  }
+  _applyBubbleFilter();
 }
 
 function exitDrillDown(){
@@ -956,21 +967,25 @@ function updateDetailDateLabel(){
 function renderDetailEvents(){
   updateDetailDateLabel();
   var events = _detailEvents;
-  // Client-side type filter — independent layers
+  // Client-side type filter — independent layers, respecting rank ranges
+  var _df = parseInt(document.getElementById('trackerDailyFrom').value) || 1;
+  var _dt = parseInt(document.getElementById('trackerDailyTo').value) || 50;
+  var _rf = parseInt(document.getElementById('trackerRankFrom').value) || 1;
+  var _rt = parseInt(document.getElementById('trackerRankTo').value) || 50;
   if(_detailTypeFilter !== 'all'){
     events = events.filter(function(ev){
-      if(_detailTypeFilter === 'daily') return ev.daily_rank != null;
-      if(_detailTypeFilter === 'single') return ev.sweep_rank != null;
+      if(_detailTypeFilter === 'daily') return ev.daily_rank != null && ev.daily_rank >= _df && ev.daily_rank <= _dt;
+      if(_detailTypeFilter === 'single') return ev.sweep_rank != null && ev.sweep_rank >= _rf && ev.sweep_rank <= _rt;
       if(_detailTypeFilter === 'rare_sweep') return ev.is_rare == 1;
       return true;
     });
   }
 
-  // Update tab counts — each layer is independent
+  // Update tab counts — respect rank ranges
   var allCount = _detailEvents.length;
-  var dailyCount = _detailEvents.filter(function(ev){ return ev.daily_rank != null; }).length;
+  var dailyCount = _detailEvents.filter(function(ev){ return ev.daily_rank != null && ev.daily_rank >= _df && ev.daily_rank <= _dt; }).length;
   var rareCount = _detailEvents.filter(function(ev){ return ev.is_rare == 1; }).length;
-  var singleCount = _detailEvents.filter(function(ev){ return ev.sweep_rank != null; }).length;
+  var singleCount = _detailEvents.filter(function(ev){ return ev.sweep_rank != null && ev.sweep_rank >= _rf && ev.sweep_rank <= _rt; }).length;
   var tabs = document.querySelectorAll('#detailTabBar .tab-btn');
   tabs[0].textContent = 'All (' + allCount + ')';
   tabs[1].textContent = 'Daily (' + dailyCount + ')';
@@ -1112,6 +1127,17 @@ function setTrackerTypeFilter(filter, btn){
   document.getElementById('stocksCount').textContent = filtered.length + (_trackerTotal > _trackerOffset ? '+' : '');
   renderTrackerCards('trackerStocksBody', filtered, false);
   renderLoadMoreBtn();
+  // Sync chart bubble filter with card filter
+  var bubbleMap = {all:'all', daily:'daily', single:'single', rare_sweep:'rare'};
+  _bubbleFilter = bubbleMap[filter] || 'all';
+  var bbtn = document.getElementById('btnBubbleCycle');
+  if(bbtn){
+    bbtn.textContent = _bubbleLabels[_bubbleFilter];
+    bbtn.style.color = _bubbleColors[_bubbleFilter];
+    bbtn.style.borderColor = _bubbleColors[_bubbleFilter] + '66';
+    bbtn.classList.toggle('active', _bubbleFilter !== 'off');
+  }
+  _applyBubbleFilter();
 }
 
 function toggleFilterGroupVisibility(activeType){
@@ -1208,10 +1234,14 @@ function deleteProfile(name){
 function filterByType(events){
   if(_trackerTypeFilter === 'all') return events;
   if(_trackerTypeFilter === 'daily'){
-    return events.filter(function(ev){ return ev.daily_rank != null; });
+    var df = parseInt(document.getElementById('trackerDailyFrom').value) || 1;
+    var dt = parseInt(document.getElementById('trackerDailyTo').value) || 50;
+    return events.filter(function(ev){ return ev.daily_rank != null && ev.daily_rank >= df && ev.daily_rank <= dt; });
   }
   if(_trackerTypeFilter === 'single'){
-    return events.filter(function(ev){ return ev.sweep_rank != null; });
+    var rf = parseInt(document.getElementById('trackerRankFrom').value) || 1;
+    var rt = parseInt(document.getElementById('trackerRankTo').value) || 50;
+    return events.filter(function(ev){ return ev.sweep_rank != null && ev.sweep_rank >= rf && ev.sweep_rank <= rt; });
   }
   if(_trackerTypeFilter === 'rare_sweep'){
     return events.filter(function(ev){ return ev.is_rare == 1; });
