@@ -2708,11 +2708,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                             rarity_days=ecfg.get("rarity_days", 60),
                             tickers=tickers, exclude_etfs=False, etf_only=True,
                         )
-                        _em = ecfg.get("monster_min_notional")
-                        if _em:
-                            detect_monster_sweeps(monster_min_notional=float(_em),
-                                                  tickers=tickers, exclude_etfs=False, etf_only=True)
-                        # Ranked sweeps for ETFs
+                        # Ranked sweeps for ETFs (replaces monster for ETFs)
                         detect_ranked_sweeps(rank_limit=200, tickers=tickers,
                                              exclude_etfs=False, etf_only=True)
                     _clear_fetch_job()  # fetch complete — remove job file
@@ -3171,7 +3167,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             monster_events = []
             etf_events = []
             etf_rare = []
-            etf_monsters = []
             etf_ranked = {"updated": 0, "inserted": 0}
 
             # --- Stock detection ---
@@ -3218,13 +3213,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         tickers=all_tickers,
                         exclude_etfs=False, etf_only=True,
                     )
-                    _em = etf_params.get("monster_min_notional")
-                    if _em:
-                        etf_monsters = detect_monster_sweeps(
-                            monster_min_notional=float(_em),
-                            tickers=all_tickers,
-                            exclude_etfs=False, etf_only=True,
-                        )
                     # Ranked sweeps for ETFs (replaces monster concept on ETF page)
                     etf_ranked = detect_ranked_sweeps(
                         rank_limit=200,
@@ -3237,7 +3225,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             rare_cb_count = sum(1 for e in events if e.get("is_rare"))
             total_events = len(events) + len(etf_events)
             total_rare = len(rare_sweep_events) + len(etf_rare)
-            total_monsters = len(monster_events) + len(etf_monsters)
             etf_ranked_total = (etf_ranked.get("updated", 0) + etf_ranked.get("inserted", 0))
             self.send_json({
                 "ok": True,
@@ -3245,13 +3232,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "events_detected": total_events,
                 "rare_cb_count": rare_cb_count,
                 "rare_sweep_days": total_rare,
-                "monster_sweeps": total_monsters,
+                "monster_sweeps": len(monster_events),
                 "etf_events": len(etf_events),
                 "etf_rare": len(etf_rare),
-                "etf_monsters": len(etf_monsters),
                 "etf_ranked": etf_ranked_total,
                 "message": f"Re-detected ({profile}): {len(events)} stock + {len(etf_events)} ETF clusterbombs, "
-                           f"{total_rare} rare sweep days, {total_monsters} monster sweeps, "
+                           f"{total_rare} rare sweep days, {len(monster_events)} stock monster sweeps, "
                            f"{etf_ranked_total} ETF ranked",
             })
         except Exception as e:

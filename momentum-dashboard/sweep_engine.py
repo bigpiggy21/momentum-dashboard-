@@ -2062,8 +2062,8 @@ def detect_today():
         date_from=today, date_to=today,
         exclude_etfs=False, etf_only=True,
     )
-    etf_monsters = detect_monster_sweeps(
-        monster_min_notional=ecfg.get("monster_min_notional", 250_000_000),
+    etf_ranked = detect_ranked_sweeps(
+        rank_limit=200,
         date_from=today, date_to=today,
         exclude_etfs=False, etf_only=True,
     )
@@ -2074,7 +2074,7 @@ def detect_today():
         "monster_sweep": len(monsters),
         "etf_clusterbomb": len(etf_cbs),
         "etf_rare_sweep": len(etf_rares),
-        "etf_monster_sweep": len(etf_monsters),
+        "etf_ranked": etf_ranked.get("updated", 0) + etf_ranked.get("inserted", 0),
     }
 
 
