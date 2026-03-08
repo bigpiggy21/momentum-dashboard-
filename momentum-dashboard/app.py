@@ -14,6 +14,7 @@ import argparse
 import gzip
 import json
 import os
+import requests
 import sys
 import threading
 import time
