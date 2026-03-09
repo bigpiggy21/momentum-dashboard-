@@ -1998,17 +1998,52 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             })
 
     def serve_all_tickers(self):
-        """GET /api/scheduler/all-tickers — unique tickers across all watchlists."""
-        reload_watchlists()
+        """GET /api/scheduler/all-tickers — unique tickers across all sources.
+
+        Unions: watchlist tickers + indicator DB + sweep DB + CSV cache files.
+        This captures tickers from old backfills, one-off fetches, and sweep data.
+        """
         seen = set()
-        tickers = []
+
+        # 1. Watchlist tickers
+        reload_watchlists()
         for _name, groups in WATCHLISTS.items():
             for _group_name, group_tickers in groups:
-                for display, api_ticker, asset_type in group_tickers:
-                    if display not in seen:
-                        seen.add(display)
-                        tickers.append(display)
-        tickers.sort()
+                for display, _api, _atype in group_tickers:
+                    seen.add(display)
+
+        # 2. Indicator DB (snapshots table)
+        try:
+            db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "momentum_dashboard.db")
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            for row in conn.execute("SELECT DISTINCT ticker FROM snapshots"):
+                seen.add(row[0])
+            conn.close()
+        except Exception:
+            pass
+
+        # 3. Sweep DB (sweep_daily_summary — faster than sweep_trades)
+        try:
+            db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "momentum_dashboard.db")
+            conn = sqlite3.connect(db_path)
+            for row in conn.execute("SELECT DISTINCT ticker FROM sweep_daily_summary"):
+                seen.add(row[0])
+            conn.close()
+        except Exception:
+            pass
+
+        # 4. CSV cache files ({TICKER}_day.csv)
+        try:
+            cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
+            if os.path.isdir(cache_dir):
+                for fname in os.listdir(cache_dir):
+                    if fname.endswith("_day.csv"):
+                        seen.add(fname.replace("_day.csv", ""))
+        except Exception:
+            pass
+
+        tickers = sorted(seen)
         self.send_json({"tickers": tickers, "count": len(tickers)})
 
     # ── TradingView UDF Datafeed ──────────────────────────────────────
