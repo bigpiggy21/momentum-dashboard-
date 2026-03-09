@@ -213,20 +213,18 @@ input,select,textarea,button{color-scheme:dark;}
     </div>
 
     <!-- Performance chart + Trades grid -->
-    <div class="content-grid" style="grid-template-columns:1fr 1.85fr;">
+    <div class="content-grid" style="grid-template-columns:1fr 1fr;">
       <div class="card">
         <div class="card-title">
           Portfolio Performance
-          <div style="display:flex;align-items:center;gap:12px;">
-            <span class="card-subtitle" id="perfLabel"></span>
-            <div class="chart-range-btns">
-              <button class="range-btn active" onclick="switchRange('1d',this)">1D</button>
-              <button class="range-btn" onclick="switchRange('1w',this)">1W</button>
-              <button class="range-btn" onclick="switchRange('1m',this)">1M</button>
-              <button class="range-btn" onclick="switchRange('all',this)">All</button>
-            </div>
+          <div class="chart-range-btns">
+            <button class="range-btn active" onclick="switchRange('1d',this)">1D</button>
+            <button class="range-btn" onclick="switchRange('1w',this)">1W</button>
+            <button class="range-btn" onclick="switchRange('1m',this)">1M</button>
+            <button class="range-btn" onclick="switchRange('all',this)">All</button>
           </div>
         </div>
+        <div class="card-subtitle" id="perfLabel" style="margin-top:-8px;margin-bottom:10px;"></div>
         <div class="value-chart-wrap">
           <canvas id="valueChart"></canvas>
         </div>
