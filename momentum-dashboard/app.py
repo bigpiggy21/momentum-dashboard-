@@ -3463,7 +3463,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "sweep": {"trades_per_sec": 0, "sweeps_today": 0,
                            "tickers_active": 0, "sweeps_written": 0,
                            "events_detected": {"clusterbomb": 0, "rare_sweep": 0, "monster_sweep": 0},
-                           "last_detection_at": None},
+                           "last_detection_at": None, "recent_sweeps": []},
                 "watchdog_active": not _daemon_intentionally_stopped,
             })
             return
@@ -3494,6 +3494,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "events_detected": full["events_detected"],
                 "last_detection_at": full["last_detection_at"],
                 "last_sweep_flush_at": full["last_sweep_flush_at"],
+                "recent_sweeps": full.get("recent_sweeps", []),
             },
         })
 

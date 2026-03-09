@@ -438,8 +438,8 @@ class UnifiedLiveDaemon:
         self._bars_lock = threading.Lock()
         self._trading_date = None
         self._price_msg_timestamps = []
-        self._cached_tickers = None   # set of safe-name prefixes with cache CSVs
-        self._cached_tickers_ts = 0   # last refresh time
+        self._flush_tickers = None    # set of safe-name tickers from watchlists
+        self._flush_tickers_ts = 0    # last refresh time
 
         # ── Sweep state ──
         self._sweep_buffer = []
@@ -468,7 +468,7 @@ class UnifiedLiveDaemon:
             "sweeps_buffered": 0,
             "sweeps_written": 0,
             "last_sweep": None,
-            "recent_sweeps": deque(maxlen=10),
+            "recent_sweeps": deque(maxlen=20),
             "sweep_tickers_active": set(),
             "events_detected": {"clusterbomb": 0, "rare_sweep": 0, "monster_sweep": 0,
                                 "etf_daily": 0, "etf_rare_sweep": 0, "etf_ranked": 0},
@@ -1023,32 +1023,38 @@ class UnifiedLiveDaemon:
                 traceback.print_exc()
                 self._stop_event.wait(timeout=10)  # cooldown before retry
 
-    def _refresh_cached_tickers(self):
-        """Scan cache/ for tickers that have existing CSV files."""
+    def _refresh_flush_tickers(self):
+        """Build set of safe-name tickers from indicator compute watchlists."""
         try:
-            cached = set()
-            for fname in os.listdir(CACHE_DIR):
-                if fname.endswith("_day.csv"):
-                    cached.add(fname[:-8].upper())
-                elif fname.endswith("_hour.csv"):
-                    cached.add(fname[:-9].upper())
-            self._cached_tickers = cached
-            self._cached_tickers_ts = time.time()
-            print(f"[LIVE] Cache scan: {len(cached)} tickers with CSV files",
-                  flush=True)
+            from config import _load_watchlists
+            cfg = self._indicator_compute_config
+            wl_names = cfg.get("watchlists", ["Leverage"])
+            all_wl = _load_watchlists()
+            tickers = set()
+            for wl_name in wl_names:
+                groups = all_wl.get(wl_name, [])
+                for _group_name, ticker_list in groups:
+                    for display, _api, _atype in ticker_list:
+                        safe = display.replace(":", "_").replace("/", "_").upper()
+                        tickers.add(safe)
+            self._flush_tickers = tickers
+            self._flush_tickers_ts = time.time()
+            print(f"[LIVE] Flush scope: {len(tickers)} tickers from "
+                  f"watchlists {wl_names}", flush=True)
         except Exception as e:
-            print(f"[LIVE] Cache scan error: {e}", flush=True)
+            print(f"[LIVE] Flush scope error: {e}", flush=True)
+            self._flush_tickers = set()
 
     def _get_flush_tickers(self):
-        """Return set of safe-name prefixes for tickers with existing CSV cache.
+        """Return set of safe-name tickers from indicator compute watchlists.
 
-        Flushes ALL tickers that have cache files (not just watchlist tickers),
-        so sweep page charts stay fresh for all tracked tickers.
-        Refreshes the set every hour.
+        Only flushes watchlist tickers (small set, fast) — not all cached tickers.
+        The broad universe gets its CSVs updated via REST scheduler instead.
+        Refreshes every hour.
         """
-        if self._cached_tickers is None or (time.time() - self._cached_tickers_ts > 3600):
-            self._refresh_cached_tickers()
-        return self._cached_tickers
+        if self._flush_tickers is None or (time.time() - self._flush_tickers_ts > 3600):
+            self._refresh_flush_tickers()
+        return self._flush_tickers
 
     def _flush_price_csv(self):
         """Flush in-memory bars to CSV files.

@@ -213,6 +213,7 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
       <span>Monster: <span class="val" id="swMonster">0</span></span>
       <span>Last detection: <span class="val" id="swLastDetect">--</span></span>
     </div>
+    <div id="swRecentSweeps" style="display:none;background:#14141e;border:1px solid #1e1e2e;border-radius:4px;padding:6px 8px;margin-top:6px;max-height:160px;overflow-y:auto;font-size:10px;"></div>
     <div class="daemon-sub-settings">
       <label>Detection interval: <input type="number" id="swDetectionInterval" min="1" max="60" value="5" style="width:44px;"> min</label>
       <label>Min notional: <input type="text" id="swMinNotional" value="500K" style="width:56px;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;"></label>
@@ -740,9 +741,26 @@ function updateDaemonUI(s){
     document.getElementById('swRare').textContent=ev.rare_sweep||0;
     document.getElementById('swMonster').textContent=ev.monster_sweep||0;
     document.getElementById('swLastDetect').textContent=_timeAgo(sw.last_detection_at);
+    // Recent sweeps
+    var rsList=sw.recent_sweeps||[];
+    var rsEl=document.getElementById('swRecentSweeps');
+    if(rsList.length>0){
+      rsEl.style.display='';
+      var html='<div style="color:#444;margin-bottom:3px;">Recent sweeps:</div>';
+      rsList.forEach(function(rs){
+        var n=rs.notional||0;
+        var fmt=n>=1e6?'$'+(n/1e6).toFixed(1)+'M':'$'+(n/1e3).toFixed(0)+'K';
+        html+='<div style="color:#888;line-height:1.5;"><span style="color:#f59e0b;font-weight:600;">'+rs.ticker+'</span> '
+          +fmt+' <span style="color:#555;">@ '+(rs.time||'')+'</span></div>';
+      });
+      rsEl.innerHTML=html;
+    }else{
+      rsEl.style.display='none';
+    }
   }else{
     swStats.style.display='none';
     swEvents.style.display='none';
+    document.getElementById('swRecentSweeps').style.display='none';
   }
 
   // Polling
