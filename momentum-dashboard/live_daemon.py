@@ -35,6 +35,19 @@ except ImportError:
 
 from config import MASSIVE_API_KEY, DB_PATH
 
+
+def _daemon_log(event, detail=None):
+    """Persist a daemon lifecycle event to the daemon_log table."""
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        conn.execute(
+            "INSERT INTO daemon_log (ts, event, detail) VALUES (?, ?, ?)",
+            (datetime.now(timezone.utc).isoformat(), event, detail))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass  # never let logging break the daemon
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -617,6 +630,7 @@ class UnifiedLiveDaemon:
             self._run_loop_inner()
         except Exception as e:
             print(f"[LIVE] FATAL: _run_loop crashed: {e}", flush=True)
+            _daemon_log("fatal_crash", str(e)[:200])
             traceback.print_exc()
             with self._lock:
                 self._status["running"] = False
@@ -650,6 +664,8 @@ class UnifiedLiveDaemon:
     def _run_loop_inner(self):
         reconnect_wait = RECONNECT_MIN_WAIT
 
+        _daemon_log("daemon_start", "Unified daemon starting")
+
         # Start background timer threads (store references for health checks)
         self._start_sub_thread("_price_flush_thread", self._price_flush_loop, "live-price-flush")
         self._start_sub_thread("_sweep_flush_thread", self._sweep_flush_loop, "live-sweep-flush")
@@ -675,6 +691,7 @@ class UnifiedLiveDaemon:
 
             with self._lock:
                 self._status["reconnect_count"] += 1
+            _daemon_log("reconnecting", f"wait={reconnect_wait}s")
             print(f"[LIVE] Reconnecting in {reconnect_wait}s...", flush=True)
             self._stop_event.wait(timeout=reconnect_wait)
             reconnect_wait = min(reconnect_wait * 2, RECONNECT_MAX_WAIT)
@@ -698,6 +715,7 @@ class UnifiedLiveDaemon:
 
     def _on_open(self, ws):
         print("[LIVE] WebSocket connected, authenticating...", flush=True)
+        _daemon_log("ws_connected", "Authenticating...")
         with self._lock:
             self._status["connected"] = True
             self._status["error"] = None
@@ -725,6 +743,7 @@ class UnifiedLiveDaemon:
     def _on_error(self, ws, error):
         with self._lock:
             self._status["error"] = str(error)
+        _daemon_log("ws_error", str(error)[:200])
         print(f"[LIVE] WebSocket error: {error}", flush=True)
 
     def _on_close(self, ws, close_status_code, close_msg):
@@ -733,6 +752,7 @@ class UnifiedLiveDaemon:
             self._status["authenticated"] = False
             self._status["subscribed"] = False
         reason = f"code={close_status_code} msg={close_msg}" if close_status_code else "clean"
+        _daemon_log("ws_closed", reason)
         print(f"[LIVE] WebSocket closed ({reason})", flush=True)
 
     # ------------------------------------------------------------------
@@ -745,12 +765,14 @@ class UnifiedLiveDaemon:
 
         if status == "auth_success":
             print("[LIVE] Authenticated. Subscribing to AM.*,T.*...", flush=True)
+            _daemon_log("auth_success", "Subscribing to AM.*,T.*")
             with self._lock:
                 self._status["authenticated"] = True
             # Subscribe to BOTH channels in one call
             ws.send(json.dumps({"action": "subscribe", "params": "AM.*,T.*"}))
 
         elif status == "auth_failed":
+            _daemon_log("auth_failed", message)
             print(f"[LIVE] Authentication FAILED: {message}", flush=True)
             with self._lock:
                 self._status["error"] = f"Auth failed: {message}"
@@ -758,6 +780,7 @@ class UnifiedLiveDaemon:
 
         elif status == "success" and "subscribed" in message.lower():
             print(f"[LIVE] {message}", flush=True)
+            _daemon_log("subscribed", message)
             with self._lock:
                 self._status["subscribed"] = True
 
@@ -1331,10 +1354,10 @@ class UnifiedLiveDaemon:
         stock_str = f"{stock_total}" if not stock_total else f"{s_cb}cb {s_rare}r {s_mon}m"
         etf_str = f"{etf_total}" if not etf_total else f"{e_daily}d {e_rare}r {e_ranked}rk"
         now = datetime.now().strftime("%H:%M")
-        print(f"[{now}] Up {uptime} {conn} | "
-              f"Prices: {prices:,} tickers | Sweeps: {sweeps:,} | "
-              f"Stock: {stock_str} | ETF: {etf_str}",
-              flush=True)
+        summary = (f"Up {uptime} {conn} | Prices: {prices:,} | "
+                   f"Sweeps: {sweeps:,} | Stock: {stock_str} | ETF: {etf_str}")
+        _daemon_log("heartbeat", summary)
+        print(f"[{now}] {summary}", flush=True)
 
     # ------------------------------------------------------------------
     # End of Day compute — RS + HVC after market close

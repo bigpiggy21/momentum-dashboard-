@@ -851,6 +851,17 @@ def init_sweep_db():
         )
     """)
 
+    # --- Daemon connection log (persistent uptime tracking) ---
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS daemon_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            event TEXT NOT NULL,
+            detail TEXT
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_daemon_log_ts ON daemon_log(ts)")
+
     # Indexes for fast lookups
     c.execute("CREATE INDEX IF NOT EXISTS idx_sweep_ticker_date ON sweep_trades(ticker, trade_date)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_sweep_date ON sweep_trades(trade_date)")
