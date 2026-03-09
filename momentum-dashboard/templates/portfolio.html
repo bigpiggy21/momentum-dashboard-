@@ -15,7 +15,7 @@ input,select,textarea,button{color-scheme:dark;}
 .portfolio-page{max-width:1200px;margin:0 auto;padding:24px 32px 60px;}
 
 /* ── Page header ── */
-.portfolio-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
+.portfolio-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
 .portfolio-title{font-size:22px;font-weight:700;color:#fff;display:flex;align-items:center;gap:10px;}
 .portfolio-title .icon{font-size:24px;}
 .header-right-info{display:flex;align-items:center;gap:14px;}
@@ -23,6 +23,14 @@ input,select,textarea,button{color-scheme:dark;}
 .btn-refresh{background:#1e293b;color:#f59e0b;border:1px solid #f59e0b;padding:5px 14px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;height:28px;display:inline-flex;align-items:center;gap:5px;}
 .btn-refresh:hover{background:#334155;color:#fbbf24;}
 .btn-refresh:disabled{opacity:0.4;cursor:not-allowed;}
+
+/* ── Trading hours info bar ── */
+.hours-bar{display:flex;gap:20px;align-items:center;margin-bottom:20px;padding:6px 12px;background:#0c0c14;border:1px solid #1e1e2e;border-radius:6px;font-size:11px;color:#555;}
+.hours-bar .hours-item{display:flex;align-items:center;gap:5px;}
+.hours-bar .flag{font-size:13px;}
+.hours-bar .exchange{color:#888;font-weight:600;}
+.hours-bar .times{color:#555;font-family:'Consolas',monospace;}
+.hours-bar .hours-sep{color:#1e1e2e;font-size:14px;}
 
 /* ── Summary bar (Cash vs Invested) ── */
 .summary-section{margin-bottom:28px;}
@@ -76,7 +84,23 @@ input,select,textarea,button{color-scheme:dark;}
 .weight-val{min-width:48px;text-align:right;}
 
 /* ── Value chart card ── */
-.value-chart-wrap{position:relative;height:220px;width:100%;}
+.value-chart-wrap{position:relative;height:240px;width:100%;}
+
+/* ── Chart range buttons ── */
+.chart-range-btns{display:flex;gap:4px;}
+.range-btn{background:#14141e;color:#888;border:1px solid #1e1e2e;padding:3px 12px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;text-transform:uppercase;letter-spacing:0.5px;}
+.range-btn:hover{background:#1e293b;color:#ccc;}
+.range-btn.active{background:#f59e0b;color:#000;border-color:#f59e0b;}
+
+/* ── Trades section tabs ── */
+.trades-tabs{display:flex;gap:4px;margin-bottom:12px;}
+.trades-tab{background:#14141e;color:#888;border:1px solid #1e1e2e;padding:4px 14px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;}
+.trades-tab:hover{background:#1e293b;color:#ccc;}
+.trades-tab.active{background:#f59e0b;color:#000;border-color:#f59e0b;}
+.trades-tab .tab-count{font-size:10px;opacity:0.7;margin-left:4px;}
+
+/* Fills badge */
+.fills-badge{font-size:9px;color:#555;font-weight:400;margin-left:3px;}
 
 /* ── Loading / Error ── */
 .loading-wrap{text-align:center;padding:80px 20px;color:#555;}
@@ -90,6 +114,7 @@ input,select,textarea,button{color-scheme:dark;}
   .content-grid{grid-template-columns:1fr;gap:20px;}
   .chart-wrap{width:240px;height:240px;}
   .portfolio-page{padding:16px;}
+  .hours-bar{flex-wrap:wrap;gap:8px;}
 }
 </style>
 </head>
@@ -110,6 +135,25 @@ input,select,textarea,button{color-scheme:dark;}
     <div class="header-right-info">
       <span class="last-updated" id="lastUpdated">--</span>
       <button class="btn-refresh" id="btnRefresh" onclick="loadPortfolio(true)">&#x21BB; Refresh</button>
+    </div>
+  </div>
+
+  <!-- Trading hours info bar -->
+  <div class="hours-bar">
+    <div class="hours-item">
+      <span class="flag">&#x1F1EC;&#x1F1E7;</span>
+      <span class="exchange">LSE</span>
+      <span class="times">08:00 – 16:30 GMT</span>
+    </div>
+    <span class="hours-sep">|</span>
+    <div class="hours-item">
+      <span class="flag">&#x1F1FA;&#x1F1F8;</span>
+      <span class="exchange">NYSE / NASDAQ</span>
+      <span class="times">14:30 – 21:00 GMT</span>
+    </div>
+    <span class="hours-sep">|</span>
+    <div class="hours-item" style="color:#444;">
+      Pre-market 09:00 GMT &middot; After-hours until 01:00 GMT
     </div>
   </div>
 
@@ -177,18 +221,29 @@ input,select,textarea,button{color-scheme:dark;}
     <div class="card" style="margin-bottom:28px;">
       <div class="card-title">
         Portfolio Performance
-        <span class="card-subtitle" id="perfLabel">Indexed from first deposit</span>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span class="card-subtitle" id="perfLabel">Since 01 Mar 2026</span>
+          <div class="chart-range-btns">
+            <button class="range-btn" onclick="switchRange('1w',this)">1W</button>
+            <button class="range-btn" onclick="switchRange('1m',this)">1M</button>
+            <button class="range-btn active" onclick="switchRange('all',this)">All</button>
+          </div>
+        </div>
       </div>
       <div class="value-chart-wrap">
         <canvas id="valueChart"></canvas>
       </div>
     </div>
 
-    <!-- Trades table -->
+    <!-- Trades section -->
     <div class="card">
       <div class="card-title">
         Trade History
         <span class="card-subtitle" id="tradeCount"></span>
+      </div>
+      <div class="trades-tabs">
+        <button class="trades-tab active" onclick="switchTradeTab('open',this)">Open<span class="tab-count" id="openCount"></span></button>
+        <button class="trades-tab" onclick="switchTradeTab('closed',this)">Closed<span class="tab-count" id="closedCount"></span></button>
       </div>
       <div id="tradesWrap">
         <table class="trades-table">
@@ -214,6 +269,9 @@ input,select,textarea,button{color-scheme:dark;}
 (function(){
   var _pieChart = null;
   var _valueChart = null;
+  var _currentRange = 'all';
+  var _tradeData = {open:[], closed:[]};
+  var _currentTradeTab = 'open';
 
   // Amber / gold palette for the pie slices
   var PIE_COLORS = [
@@ -258,7 +316,7 @@ input,select,textarea,button{color-scheme:dark;}
       }
 
       // Load chart + trades after main data
-      loadHistory();
+      loadHistory(_currentRange);
       loadTrades();
     }).catch(function(err){
       btn.disabled = false;
@@ -335,11 +393,24 @@ input,select,textarea,button{color-scheme:dark;}
   }
 
   // ── Portfolio value chart ──
-  function loadHistory(){
-    fetch('/api/portfolio/history').then(function(r){return r.json();}).then(function(d){
-      if(d.error || !d.snapshots || d.snapshots.length === 0) return;
+  function loadHistory(range){
+    _currentRange = range || 'all';
+    fetch('/api/portfolio/history?range=' + _currentRange).then(function(r){return r.json();}).then(function(d){
+      if(d.error || !d.snapshots || d.snapshots.length === 0){
+        // Show empty chart message
+        document.getElementById('perfLabel').textContent = 'No data yet';
+        return;
+      }
       renderValueChart(d.snapshots);
     }).catch(function(){});
+  }
+
+  function switchRange(range, btn){
+    // Update button styles
+    var btns = document.querySelectorAll('.range-btn');
+    for(var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
+    btn.classList.add('active');
+    loadHistory(range);
   }
 
   function renderValueChart(snapshots){
@@ -363,7 +434,7 @@ input,select,textarea,button{color-scheme:dark;}
           fill: true,
           tension: 0.3,
           borderWidth: 2,
-          pointRadius: 3,
+          pointRadius: data.length > 30 ? 0 : 3,
           pointBackgroundColor: lineColor,
           pointBorderColor: '#08080d',
           pointBorderWidth: 1,
@@ -373,6 +444,7 @@ input,select,textarea,button{color-scheme:dark;}
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        interaction: {mode: 'index', intersect: false},
         plugins: {
           legend: {display: false},
           tooltip: {
@@ -403,13 +475,14 @@ input,select,textarea,button{color-scheme:dark;}
       }
     });
 
-    // Update label with date range
-    if(snapshots.length > 0){
-      document.getElementById('perfLabel').textContent = 'Since ' + snapshots[0].date;
-    }
+    // Update label with date range and current %
+    var rangeLabels = {'1w':'Last 7 days','1m':'Last 30 days','all':'Since 01 Mar 2026'};
+    var label = rangeLabels[_currentRange] || 'Since 01 Mar 2026';
+    var curPct = lastVal >= 0 ? '+' + lastVal.toFixed(2) + '%' : lastVal.toFixed(2) + '%';
+    document.getElementById('perfLabel').textContent = label + '  ·  ' + curPct;
   }
 
-  // ── Trades table ──
+  // ── Trades ──
   function loadTrades(){
     fetch('/api/portfolio/trades').then(function(r){return r.json();}).then(function(d){
       if(d.error){
@@ -418,33 +491,59 @@ input,select,textarea,button{color-scheme:dark;}
         document.getElementById('tradesWrap').style.display = 'none';
         return;
       }
-      var trades = d.trades || [];
-      if(trades.length === 0){
-        document.getElementById('tradesEmpty').style.display = 'block';
-        document.getElementById('tradesWrap').style.display = 'none';
-        return;
-      }
-      document.getElementById('tradeCount').textContent = trades.length + ' trades';
-      var html = '';
-      for(var i = 0; i < trades.length; i++){
-        var t = trades[i];
-        var sideCls = t.side === 'Buy' ? 'side-buy' : 'side-sell';
-        var gainStr = '--';
-        var gainCls = 'gain-zero';
-        if(t.gain !== null && t.gain !== undefined){
-          gainCls = t.gain > 0 ? 'gain-pos' : (t.gain < 0 ? 'gain-neg' : 'gain-zero');
-          gainStr = (t.gain > 0 ? '+' : '') + t.gain.toFixed(1) + '%';
-        }
-        html += '<tr>'
-          + '<td>' + esc(t.date) + '</td>'
-          + '<td class="col-ticker">' + esc(t.ticker) + '</td>'
-          + '<td class="col-name">' + esc(t.name || '') + '</td>'
-          + '<td class="' + sideCls + '">' + esc(t.side) + '</td>'
-          + '<td class="col-right col-gain ' + gainCls + '">' + gainStr + '</td>'
-          + '</tr>';
-      }
-      document.getElementById('tradesBody').innerHTML = html;
+      _tradeData.open = d.open || [];
+      _tradeData.closed = d.closed || [];
+
+      // Update tab counts
+      document.getElementById('openCount').textContent = ' (' + _tradeData.open.length + ')';
+      document.getElementById('closedCount').textContent = ' (' + _tradeData.closed.length + ')';
+
+      var total = _tradeData.open.length + _tradeData.closed.length;
+      document.getElementById('tradeCount').textContent = total + ' trades';
+
+      renderTradeTab();
     }).catch(function(){});
+  }
+
+  function switchTradeTab(tab, btn){
+    _currentTradeTab = tab;
+    var tabs = document.querySelectorAll('.trades-tab');
+    for(var i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
+    btn.classList.add('active');
+    renderTradeTab();
+  }
+
+  function renderTradeTab(){
+    var trades = _currentTradeTab === 'open' ? _tradeData.open : _tradeData.closed;
+    if(trades.length === 0){
+      document.getElementById('tradesEmpty').textContent = 'No ' + _currentTradeTab + ' trades';
+      document.getElementById('tradesEmpty').style.display = 'block';
+      document.getElementById('tradesWrap').style.display = 'none';
+      return;
+    }
+    document.getElementById('tradesEmpty').style.display = 'none';
+    document.getElementById('tradesWrap').style.display = 'block';
+
+    var html = '';
+    for(var i = 0; i < trades.length; i++){
+      var t = trades[i];
+      var sideCls = t.side === 'Buy' ? 'side-buy' : 'side-sell';
+      var gainStr = '--';
+      var gainCls = 'gain-zero';
+      if(t.gain !== null && t.gain !== undefined){
+        gainCls = t.gain > 0 ? 'gain-pos' : (t.gain < 0 ? 'gain-neg' : 'gain-zero');
+        gainStr = (t.gain > 0 ? '+' : '') + t.gain.toFixed(1) + '%';
+      }
+      var fillsStr = t.fills > 1 ? '<span class="fills-badge">(' + t.fills + ' fills)</span>' : '';
+      html += '<tr>'
+        + '<td>' + esc(t.date) + '</td>'
+        + '<td class="col-ticker">' + esc(t.ticker) + '</td>'
+        + '<td class="col-name">' + esc(t.name || '') + fillsStr + '</td>'
+        + '<td class="' + sideCls + '">' + esc(t.side) + '</td>'
+        + '<td class="col-right col-gain ' + gainCls + '">' + gainStr + '</td>'
+        + '</tr>';
+    }
+    document.getElementById('tradesBody').innerHTML = html;
   }
 
   function esc(s){
@@ -454,6 +553,8 @@ input,select,textarea,button{color-scheme:dark;}
   }
 
   window.loadPortfolio = loadPortfolio;
+  window.switchRange = switchRange;
+  window.switchTradeTab = switchTradeTab;
   loadPortfolio(false);
 })();
 </script>

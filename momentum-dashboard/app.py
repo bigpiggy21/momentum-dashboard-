@@ -80,42 +80,104 @@ def _get_t212_headers():
         return {"Authorization": f"Basic {creds}"}
     return {"Authorization": TRADING212_API_KEY}
 
+_PORTFOLIO_BASELINE = 67522.0  # Estimated portfolio value on 2026-03-01 (derived from 8.4% gain = £5,691)
+
 def _init_portfolio_db():
-    """Create portfolio_snapshots table if not exists."""
+    """Create portfolio_snapshots table if not exists. Seeds March 1 baseline."""
     import sqlite3
     conn = sqlite3.connect(DB_PATH, timeout=5)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS portfolio_snapshots (
-            date TEXT PRIMARY KEY,
-            total_value REAL,
-            baseline REAL,
-            total_pct REAL,
-            note TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-def _record_portfolio_snapshot(total_value):
-    """Record today's portfolio total_value. Computes % change from baseline (earliest snapshot)."""
-    import sqlite3
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    conn = sqlite3.connect(DB_PATH, timeout=5)
-
-    # Get baseline = first snapshot's total_value
-    first = conn.execute("SELECT total_value FROM portfolio_snapshots ORDER BY date ASC LIMIT 1").fetchone()
-    baseline = first[0] if first else total_value
-    pct = round((total_value - baseline) / baseline * 100, 2) if baseline > 0 else 0.0
-
-    existing = conn.execute("SELECT 1 FROM portfolio_snapshots WHERE date = ?", (today,)).fetchone()
-    if existing:
-        conn.execute("UPDATE portfolio_snapshots SET total_value = ?, baseline = ?, total_pct = ? WHERE date = ?",
-                      (total_value, baseline, pct, today))
+    # Check if we have the old date-only PK schema and need migration
+    cur = conn.execute("PRAGMA table_info(portfolio_snapshots)")
+    cols = [r[1] for r in cur.fetchall()]
+    if cols and "ts" not in cols:
+        # Old schema — migrate data
+        old_rows = conn.execute("SELECT date, total_value, total_pct, note FROM portfolio_snapshots").fetchall()
+        conn.execute("DROP TABLE portfolio_snapshots")
+        conn.execute("""
+            CREATE TABLE portfolio_snapshots (
+                ts TEXT PRIMARY KEY,
+                date TEXT,
+                total_value REAL,
+                baseline REAL,
+                total_pct REAL,
+                is_close INTEGER DEFAULT 0,
+                note TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ps_date ON portfolio_snapshots(date)")
+        for row in old_rows:
+            pct = round((row[1] - _PORTFOLIO_BASELINE) / _PORTFOLIO_BASELINE * 100, 2) if row[1] else 0
+            conn.execute(
+                "INSERT OR IGNORE INTO portfolio_snapshots (ts, date, total_value, baseline, total_pct, is_close, note) "
+                "VALUES (?, ?, ?, ?, ?, 0, ?)",
+                (row[0] + "T12:00", row[0], row[1], _PORTFOLIO_BASELINE, pct, row[3]))
     else:
-        conn.execute("INSERT INTO portfolio_snapshots (date, total_value, baseline, total_pct, note) VALUES (?, ?, ?, ?, ?)",
-                      (today, total_value, baseline, pct, None))
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+                ts TEXT PRIMARY KEY,
+                date TEXT,
+                total_value REAL,
+                baseline REAL,
+                total_pct REAL,
+                is_close INTEGER DEFAULT 0,
+                note TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ps_date ON portfolio_snapshots(date)")
+    # Seed March 1 baseline if not present
+    has_baseline = conn.execute("SELECT 1 FROM portfolio_snapshots WHERE date = '2026-03-01'").fetchone()
+    if not has_baseline:
+        conn.execute(
+            "INSERT OR IGNORE INTO portfolio_snapshots (ts, date, total_value, baseline, total_pct, is_close, note) "
+            "VALUES ('2026-03-01T08:00', '2026-03-01', ?, ?, 0.0, 1, 'Estimated baseline')",
+            (_PORTFOLIO_BASELINE, _PORTFOLIO_BASELINE))
     conn.commit()
     conn.close()
+
+def _record_portfolio_snapshot(total_value, is_close=False):
+    """Record an hourly portfolio snapshot. % change computed from the fixed March 1 baseline."""
+    import sqlite3
+    now = datetime.utcnow()
+    ts = now.strftime("%Y-%m-%dT%H:%M")
+    date_str = now.strftime("%Y-%m-%d")
+    pct = round((total_value - _PORTFOLIO_BASELINE) / _PORTFOLIO_BASELINE * 100, 2) if _PORTFOLIO_BASELINE > 0 else 0.0
+
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    existing = conn.execute("SELECT 1 FROM portfolio_snapshots WHERE ts = ?", (ts,)).fetchone()
+    if existing:
+        conn.execute("UPDATE portfolio_snapshots SET total_value = ?, baseline = ?, total_pct = ?, is_close = ? WHERE ts = ?",
+                      (total_value, _PORTFOLIO_BASELINE, pct, int(is_close), ts))
+    else:
+        conn.execute("INSERT INTO portfolio_snapshots (ts, date, total_value, baseline, total_pct, is_close, note) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                      (ts, date_str, total_value, _PORTFOLIO_BASELINE, pct, int(is_close), None))
+    conn.commit()
+    conn.close()
+
+def _portfolio_snapshot_thread():
+    """Background thread: records a portfolio snapshot every hour."""
+    print("📊 Portfolio snapshot thread started (hourly)")
+    while True:
+        try:
+            time.sleep(3600)  # wait 1 hour
+            from config import TRADING212_API_KEY
+            if not TRADING212_API_KEY or TRADING212_API_KEY == "YOUR_T212_API_KEY_HERE":
+                continue
+            headers = _get_t212_headers()
+            base = "https://live.trading212.com/api/v0"
+            resp = requests.get(f"{base}/equity/account/cash", headers=headers, timeout=15)
+            resp.raise_for_status()
+            total = float(resp.json().get("total", 0))
+            if total <= 0:
+                continue
+            # Check if this is around LSE close (16:30 UK time)
+            # UK is UTC+0 before ~Mar 29, UTC+1 after (BST)
+            now_utc = datetime.utcnow()
+            uk_hour = now_utc.hour  # ~correct for early March (UTC+0)
+            is_close = (uk_hour == 16 and now_utc.minute >= 20) or (uk_hour == 17 and now_utc.minute <= 10)
+            _record_portfolio_snapshot(total, is_close=is_close)
+            print(f"📊 Portfolio snapshot: £{total:.0f} ({'close' if is_close else 'hourly'})", flush=True)
+        except Exception as e:
+            print(f"⚠️  Portfolio snapshot error: {e}", flush=True)
 
 # ── Daemon watchdog ──────────────────────────────────────────────────────
 _WATCHDOG_INTERVAL = 30         # seconds between health checks
@@ -546,7 +608,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         elif path == "/api/portfolio/data":
             self.serve_portfolio_data()
         elif path == "/api/portfolio/history":
-            self.serve_portfolio_history()
+            self.serve_portfolio_history(query)
         elif path == "/api/portfolio/trades":
             self.serve_portfolio_trades()
         elif path == "/api/analysis/river":
@@ -3380,25 +3442,45 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_json({"error": str(e)})
 
-    def serve_portfolio_history(self):
-        """GET /api/portfolio/history — return indexed % snapshots for chart."""
+    def serve_portfolio_history(self, query=None):
+        """GET /api/portfolio/history — return indexed % snapshots for chart.
+        Optional ?range=1w|1m|all (default all). For chart, return one point per day (latest snapshot)."""
         try:
             _init_portfolio_db()
             import sqlite3
             conn = sqlite3.connect(DB_PATH, timeout=5)
             conn.row_factory = sqlite3.Row
+
+            # Determine date range filter
+            range_param = (query or {}).get("range", ["all"])[0] if query else "all"
+            date_filter = "2026-03-01"
+            if range_param == "1w":
+                date_filter = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
+            elif range_param == "1m":
+                date_filter = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
+
+            # Get one point per day (the latest snapshot for each day)
             rows = conn.execute(
-                "SELECT date, total_pct FROM portfolio_snapshots ORDER BY date ASC"
+                "SELECT date, total_pct, ts FROM portfolio_snapshots "
+                "WHERE date >= ? "
+                "ORDER BY ts ASC",
+                (date_filter,)
             ).fetchall()
             conn.close()
-            self.send_json({
-                "snapshots": [{"date": r["date"], "pct": r["total_pct"]} for r in rows]
-            })
+
+            # Deduplicate to latest snapshot per day
+            day_map = {}
+            for r in rows:
+                day_map[r["date"]] = r["total_pct"]  # last one per day wins (ordered by ts ASC)
+
+            snapshots = [{"date": d, "pct": p} for d, p in sorted(day_map.items())]
+            self.send_json({"snapshots": snapshots})
         except Exception as e:
             self.send_json({"error": str(e)})
 
     def serve_portfolio_trades(self):
-        """GET /api/portfolio/trades — fetch T212 order history, return sanitised trades."""
+        """GET /api/portfolio/trades — fetch T212 order history, group by ticker+day,
+        separate open vs closed positions. Returns sanitised trades with % gain only."""
         global _portfolio_trades_cache
         try:
             # Return cache if fresh
@@ -3414,8 +3496,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             base = "https://live.trading212.com/api/v0"
             headers = _get_t212_headers()
 
-            # Get current positions for current prices (to compute unrealised gain)
+            # Get current positions for current prices + open ticker list
             cur_prices = {}
+            open_tickers_raw = set()
             try:
                 pos_resp = requests.get(f"{base}/equity/portfolio", headers=headers, timeout=15)
                 pos_resp.raise_for_status()
@@ -3423,6 +3506,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     raw = p.get("ticker", "")
                     clean = raw.split("_")[0] if "_" in raw else raw
                     clean = clean.rstrip("abcdefghijklmnopqrstuvwxyz") or clean
+                    open_tickers_raw.add(raw)
                     cur_prices[raw] = {
                         "currentPrice": float(p.get("currentPrice") or 0),
                         "averagePrice": float(p.get("averagePrice") or 0),
@@ -3450,8 +3534,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 except Exception:
                     break
 
-            # Build trades list — T212 returns nested {order: {...}, fill: {...}}
-            trades = []
+            # Parse individual fills — T212 returns nested {order: {...}, fill: {...}}
+            raw_fills = []
             for item in all_orders:
                 order = item.get("order", {})
                 fill = item.get("fill", {})
@@ -3460,8 +3544,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 if fill_price <= 0:
                     continue  # skip unfilled/cancelled
 
+                filled_qty = float(fill.get("quantity") or order.get("filledQuantity") or 0)
                 date_str = (fill.get("filledAt") or order.get("createdAt") or "")[:10]
-                # Only include trades from March 2026 onward
                 if date_str < "2026-03-01":
                     continue
 
@@ -3474,29 +3558,70 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 side_str = order.get("side", "").upper()
                 side = "Buy" if side_str == "BUY" else "Sell"
 
-                # Compute % gain
-                if side == "Buy" and raw_ticker in cur_prices:
-                    cur_p = cur_prices[raw_ticker]["currentPrice"]
-                    gain_pct = round((cur_p - fill_price) / fill_price * 100, 2) if fill_price > 0 else 0.0
-                elif side == "Sell":
-                    # For sells: use realisedProfitLoss from wallet impact
+                # For sells: capture realised P&L
+                rpnl = 0.0
+                net_val = 0.0
+                if side == "Sell":
                     wallet = fill.get("walletImpact", {})
                     rpnl = float(wallet.get("realisedProfitLoss") or 0)
                     net_val = float(wallet.get("netValue") or 0)
-                    cost = net_val - rpnl
-                    gain_pct = round(rpnl / cost * 100, 2) if cost > 0 else None
-                else:
-                    gain_pct = None
 
-                trades.append({
+                raw_fills.append({
                     "date": date_str,
+                    "raw_ticker": raw_ticker,
                     "ticker": clean_ticker,
                     "name": ticker_name,
                     "side": side,
-                    "gain": gain_pct,
+                    "fill_price": fill_price,
+                    "qty": filled_qty,
+                    "rpnl": rpnl,
+                    "net_val": net_val,
                 })
 
-            result = {"trades": trades}
+            # Group fills by ticker + day + side
+            from collections import defaultdict
+            groups = defaultdict(list)
+            for f in raw_fills:
+                key = (f["date"], f["ticker"], f["side"])
+                groups[key].append(f)
+
+            # Build grouped trades
+            open_trades = []
+            closed_trades = []
+            for (date, ticker, side), fills in sorted(groups.items(), reverse=True):
+                name = fills[0]["name"]
+                raw_t = fills[0]["raw_ticker"]
+                total_qty = sum(f["qty"] for f in fills)
+                num_fills = len(fills)
+
+                if side == "Buy":
+                    # Weighted avg fill price
+                    total_cost = sum(f["fill_price"] * f["qty"] for f in fills)
+                    avg_fill = total_cost / total_qty if total_qty > 0 else 0
+                    # Check if this ticker is still held (open) or closed
+                    is_open = raw_t in open_tickers_raw
+                    if is_open and raw_t in cur_prices:
+                        cur_p = cur_prices[raw_t]["currentPrice"]
+                        gain_pct = round((cur_p - avg_fill) / avg_fill * 100, 2) if avg_fill > 0 else 0.0
+                    else:
+                        gain_pct = None  # closed buy — gain realised on sell side
+                    trade = {"date": date, "ticker": ticker, "name": name, "side": side,
+                             "gain": gain_pct, "fills": num_fills}
+                    if is_open:
+                        open_trades.append(trade)
+                    else:
+                        closed_trades.append(trade)
+                else:
+                    # Sell — sum up realised P&L across fills
+                    total_rpnl = sum(f["rpnl"] for f in fills)
+                    total_net = sum(f["net_val"] for f in fills)
+                    total_cost = total_net - total_rpnl
+                    gain_pct = round(total_rpnl / total_cost * 100, 2) if total_cost > 0 else None
+                    trade = {"date": date, "ticker": ticker, "name": name, "side": side,
+                             "gain": gain_pct, "fills": num_fills}
+                    closed_trades.append(trade)
+
+            result = {"open": open_trades, "closed": closed_trades}
             _portfolio_trades_cache = {"data": result, "ts": time.time()}
             self.send_json(result)
 
@@ -4331,8 +4456,53 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         pass
 
 
-def start_server(port=8080):
-    """Start the dashboard HTTP server."""
+class PublicPortfolioHandler(DashboardHandler):
+    """Minimal handler that ONLY serves the portfolio page + its API endpoints.
+    Intended for public access on a separate port (8081)."""
+
+    def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path.rstrip("/") or "/"
+        query = urllib.parse.parse_qs(parsed.query) if parsed.query else None
+
+        # Only allow portfolio-related routes
+        if path == "/" or path == "/portfolio":
+            self.serve_page("portfolio.html")
+        elif path == "/api/portfolio/data":
+            self.serve_portfolio_data()
+        elif path == "/api/portfolio/history":
+            self.serve_portfolio_history(query)
+        elif path == "/api/portfolio/trades":
+            self.serve_portfolio_trades()
+        elif path.startswith("/static/"):
+            # Serve CSS/JS needed for header
+            self.serve_static(path[8:])
+        else:
+            self.send_response(404)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"Not found")
+
+    def do_POST(self):
+        self.send_response(404)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Not found")
+
+
+def start_server(port=8080, public_port=8081):
+    """Start the dashboard HTTP server + optional public portfolio server."""
+    # Start public portfolio server on separate port (background thread)
+    try:
+        pub_server = ThreadingHTTPServer(("0.0.0.0", public_port), PublicPortfolioHandler)
+        pub_thread = threading.Thread(target=pub_server.serve_forever, daemon=True,
+                                      name="public-portfolio")
+        pub_thread.start()
+        print(f"📊 Public portfolio server on port {public_port}")
+        print(f"   Public:    http://89.167.110.85:{public_port}")
+    except Exception as e:
+        print(f"⚠️  Public portfolio server failed: {e}")
+
     server = ThreadingHTTPServer(("0.0.0.0", port), DashboardHandler)
     print(f"\nDashboard running on port {port}")
     print(f"   Local:     http://localhost:{port}")
@@ -4363,6 +4533,7 @@ def main():
     parser.add_argument("--ticker", type=str, help="Scan a single ticker")
     parser.add_argument("--prototype", action="store_true", help="Use prototype ticker subset (Semis)")
     parser.add_argument("--port", type=int, default=8080, help="Dashboard port (default: 8080)")
+    parser.add_argument("--public-port", type=int, default=8081, help="Public portfolio port (default: 8081)")
     parser.add_argument("--no-schedule", action="store_true", help="Don't run scheduled scans")
     parser.add_argument("--watchlist", type=str, action="append", help="Scan only specific watchlist(s), can repeat")
     parser.add_argument("--clear-cache", action="store_true", help="Clear cached data and re-fetch everything")
@@ -4440,7 +4611,16 @@ def main():
                                name="daemon-watchdog")
         _wd.start()
 
-        start_server(args.port)
+        # Start portfolio snapshot thread (hourly T212 value recording)
+        try:
+            _init_portfolio_db()
+            _ps = threading.Thread(target=_portfolio_snapshot_thread, daemon=True,
+                                   name="portfolio-snapshots")
+            _ps.start()
+        except Exception as _e:
+            print(f"⚠️  Portfolio snapshot thread failed to start: {_e}")
+
+        start_server(args.port, args.public_port)
         return
     
     # Determine ticker list
@@ -4475,7 +4655,7 @@ def main():
         scheduler.start()
     
     # Start dashboard server
-    start_server(args.port)
+    start_server(args.port, args.public_port)
 
 
 if __name__ == "__main__":
