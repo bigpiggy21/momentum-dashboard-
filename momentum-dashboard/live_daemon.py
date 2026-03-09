@@ -89,8 +89,10 @@ def load_live_price_config():
         "enabled": False,
         "auto_start": False,
         "ws_url": DEFAULT_WS_URL,
+        "flush_enabled": True,
         "flush_interval_minutes": DEFAULT_FLUSH_INTERVAL,
         "flush_on_close": True,
+        "flush_watchlists": ["Leverage"],
     }
     try:
         with open(SCHEDULER_CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -416,8 +418,10 @@ class UnifiedLiveDaemon:
         self._ws_url = pcfg.get("ws_url") or scfg.get("ws_url") or DEFAULT_WS_URL
 
         # Price settings
+        self._flush_enabled = pcfg.get("flush_enabled", True)
         self._flush_interval = pcfg.get("flush_interval_minutes", DEFAULT_FLUSH_INTERVAL)
         self._flush_on_close = pcfg.get("flush_on_close", True)
+        self._flush_watchlists = pcfg.get("flush_watchlists", ["Leverage"])
         # Sweep settings
         self._min_notional = scfg.get("min_notional", MIN_SWEEP_NOTIONAL)
         self._detection_interval = scfg.get("detection_interval_minutes", DEFAULT_DETECTION_INTERVAL)
@@ -586,6 +590,9 @@ class UnifiedLiveDaemon:
         s["recent_sweeps"] = list(s.get("recent_sweeps", []))
         with self._sweep_buffer_lock:
             s["sweeps_buffered"] = len(self._sweep_buffer)
+        # Expose flush config for UI
+        s["flush_enabled"] = self._flush_enabled
+        s["flush_watchlists"] = list(self._flush_watchlists or [])
         return s
 
     def get_sweep_status(self):
@@ -642,6 +649,10 @@ class UnifiedLiveDaemon:
         """
         changed = []
         if price_cfg:
+            fe = price_cfg.get("flush_enabled")
+            if fe is not None and fe != self._flush_enabled:
+                self._flush_enabled = fe
+                changed.append(f"flush_enabled={fe}")
             new_flush = price_cfg.get("flush_interval_minutes")
             if new_flush and new_flush != self._flush_interval:
                 self._flush_interval = max(1, new_flush)
@@ -650,6 +661,12 @@ class UnifiedLiveDaemon:
             if fc is not None and fc != self._flush_on_close:
                 self._flush_on_close = fc
                 changed.append(f"flush_on_close={fc}")
+            fw = price_cfg.get("flush_watchlists")
+            if fw is not None and fw != self._flush_watchlists:
+                self._flush_watchlists = fw
+                self._flush_tickers = None  # force refresh on next flush
+                self._flush_tickers_ts = 0
+                changed.append(f"flush_watchlists={fw}")
         if sweep_cfg:
             new_mn = sweep_cfg.get("min_notional")
             if new_mn and new_mn != self._min_notional:
@@ -1013,6 +1030,8 @@ class UnifiedLiveDaemon:
             try:
                 self._stop_event.wait(timeout=interval_s)
                 if not self._stop_event.is_set():
+                    if not self._flush_enabled:
+                        continue  # flush disabled — skip but keep loop alive
                     try:
                         self._flush_price_csv()
                     except Exception as e:
@@ -1024,11 +1043,10 @@ class UnifiedLiveDaemon:
                 self._stop_event.wait(timeout=10)  # cooldown before retry
 
     def _refresh_flush_tickers(self):
-        """Build set of safe-name tickers from indicator compute watchlists."""
+        """Build set of safe-name tickers from flush_watchlists config."""
         try:
             from config import _load_watchlists
-            cfg = self._indicator_compute_config
-            wl_names = cfg.get("watchlists", ["Leverage"])
+            wl_names = self._flush_watchlists or ["Leverage"]
             all_wl = _load_watchlists()
             tickers = set()
             for wl_name in wl_names:

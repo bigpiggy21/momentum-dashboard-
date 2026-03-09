@@ -3456,8 +3456,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         """GET /api/daemon/status — combined price + sweep status from unified daemon."""
         global _live_daemon, _daemon_intentionally_stopped
         if _live_daemon is None:
+            from live_daemon import load_live_price_config as _llpc
+            _pcfg = _llpc()
             self.send_json({
                 "running": False, "connected": False,
+                "flush_enabled": _pcfg.get("flush_enabled", True),
+                "flush_watchlists": _pcfg.get("flush_watchlists", ["Leverage"]),
                 "price": {"messages_per_sec": 0, "tickers_active": 0,
                            "messages_received": 0, "last_flush_at": None},
                 "sweep": {"trades_per_sec": 0, "sweeps_today": 0,
@@ -3478,6 +3482,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             "reconnect_count": full["reconnect_count"],
             "error": full["error"],
             "watchdog_active": not _daemon_intentionally_stopped,
+            "flush_enabled": full.get("flush_enabled", True),
+            "flush_watchlists": full.get("flush_watchlists", ["Leverage"]),
             "price": {
                 "messages_per_sec": full["price_messages_per_sec"],
                 "tickers_active": full["price_tickers_active"],

@@ -14,5 +14,13 @@
     "rarity_days": 60,
     "rare_min_notional": 3000000,
     "monster_min_notional": 50000000
+  },
+  "live_scanner": {
+    "auto_start": false,
+    "detection_interval_minutes": 5,
+    "ws_url": "wss://delayed.polygon.io/stocks",
+    "min_notional": 500000,
+    "buffer_flush_seconds": 30,
+    "buffer_max_trades": 200
   }
 }

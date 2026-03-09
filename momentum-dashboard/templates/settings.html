@@ -193,8 +193,15 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
       <span>Last flush: <span class="val" id="prLastFlush">--</span></span>
     </div>
     <div class="daemon-sub-settings">
-      <label>Flush interval: <input type="number" id="prFlushInterval" min="1" max="60" value="2" style="width:44px;"> min</label>
-      <label><input type="checkbox" id="prFlushOnClose" checked> Flush on market close</label>
+      <label><input type="checkbox" id="prFlushEnabled" checked> CSV flush</label>
+      <label>Interval: <input type="number" id="prFlushInterval" min="1" max="60" value="2" style="width:44px;"> min</label>
+      <label><input type="checkbox" id="prFlushOnClose" checked> Flush on close</label>
+    </div>
+    <div id="flushWatchlistRow" style="margin-top:6px;">
+      <div style="font-size:10px;color:#666;margin-bottom:4px;">Flush watchlists:</div>
+      <div class="lp-compute-chips" id="flushWatchlistChips">
+        <span style="font-size:10px;color:#444;">Loading...</span>
+      </div>
     </div>
   </div>
 
@@ -720,7 +727,9 @@ function updateDaemonUI(s){
     document.getElementById('prMsgRate').textContent=pr.messages_per_sec||'0';
     document.getElementById('prTickers').textContent=(pr.tickers_active||0).toLocaleString();
     document.getElementById('prMsgTotal').textContent=(pr.messages_received||0).toLocaleString();
-    document.getElementById('prLastFlush').textContent=_timeAgo(pr.last_flush_at);
+    var flushLabel=_timeAgo(pr.last_flush_at);
+    if(s.flush_enabled===false) flushLabel='off';
+    document.getElementById('prLastFlush').textContent=flushLabel;
   }else{
     prStats.style.display='none';
   }
@@ -777,19 +786,37 @@ function stopDaemonPoll(){
 }
 
 function loadDaemonConfig(){
-  // Load both configs in parallel
+  // Load price config, sweep config, and watchlist names in parallel
   Promise.all([
     fetch('/api/scheduler/live-price/config').then(function(r){return r.json();}),
-    fetch('/api/sweeps/live/config').then(function(r){return r.json();})
+    fetch('/api/sweeps/live/config').then(function(r){return r.json();}),
+    fetch('/api/watchlists').then(function(r){return r.json();})
   ]).then(function(results){
-    var pcfg=results[0], scfg=results[1];
+    var pcfg=results[0], scfg=results[1], watchlists=results[2];
     document.getElementById('daemonAutoStart').checked=!!(pcfg.auto_start||scfg.auto_start);
+    document.getElementById('prFlushEnabled').checked=pcfg.flush_enabled!==false;
     document.getElementById('prFlushInterval').value=pcfg.flush_interval_minutes||2;
     document.getElementById('prFlushOnClose').checked=pcfg.flush_on_close!==false;
     document.getElementById('swDetectionInterval').value=scfg.detection_interval_minutes||5;
     // Format min notional
     var mn=scfg.min_notional||500000;
     document.getElementById('swMinNotional').value=mn>=1000000?(mn/1000000)+'M':(mn/1000)+'K';
+    // Populate flush watchlist chips
+    var activeFlush=pcfg.flush_watchlists||['Leverage'];
+    var container=document.getElementById('flushWatchlistChips');
+    container.innerHTML='';
+    watchlists.forEach(function(wl){
+      var chip=document.createElement('span');
+      chip.className='lp-compute-chip';
+      chip.textContent=wl.name;
+      chip.setAttribute('data-wl',wl.name);
+      var count=0;
+      wl.groups.forEach(function(g){count+=g.tickers.length;});
+      chip.title=count+' tickers';
+      if(activeFlush.indexOf(wl.name)>=0) chip.classList.add('active');
+      chip.onclick=function(){chip.classList.toggle('active');};
+      container.appendChild(chip);
+    });
   }).catch(function(){});
 }
 
@@ -801,11 +828,17 @@ function _parseNotional(str){
 }
 
 function saveDaemonConfig(){
+  var flushWl=[];
+  document.querySelectorAll('#flushWatchlistChips .lp-compute-chip.active').forEach(function(el){
+    flushWl.push(el.getAttribute('data-wl'));
+  });
   var body={
     auto_start:document.getElementById('daemonAutoStart').checked,
     price:{
+      flush_enabled:document.getElementById('prFlushEnabled').checked,
       flush_interval_minutes:parseInt(document.getElementById('prFlushInterval').value)||2,
-      flush_on_close:document.getElementById('prFlushOnClose').checked
+      flush_on_close:document.getElementById('prFlushOnClose').checked,
+      flush_watchlists:flushWl
     },
     sweep:{
       detection_interval_minutes:parseInt(document.getElementById('swDetectionInterval').value)||5,

@@ -113,6 +113,16 @@
       "compute_workers": 8,
       "market_hours_only": false,
       "after_close_delay_minutes": 30
+    },
+    "Favourites": {
+      "enabled": false,
+      "mode": "manual",
+      "interval_minutes": 15,
+      "priority": 99,
+      "collect_workers": 4,
+      "compute_workers": 8,
+      "market_hours_only": false,
+      "after_close_delay_minutes": 30
     }
   },
   "eod_compute": {
@@ -131,5 +141,14 @@
       ],
       "workers": 8
     }
+  },
+  "live_price_feed": {
+    "enabled": false,
+    "auto_start": false,
+    "ws_url": "wss://delayed.polygon.io/stocks",
+    "flush_enabled": true,
+    "flush_interval_minutes": 2,
+    "flush_on_close": true,
+    "flush_watchlists": ["Leverage"]
   }
 }
