@@ -2052,7 +2052,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             # Build the Pine Script
             lines = []
             lines.append("// @version=5")
-            lines.append(f'indicator("Darkpool Sweeps \u2014 {ticker}", overlay=true, max_labels_count=500)')
+            date_tag = datetime.now().strftime("%y%m%d")
+            lines.append(f'indicator("DPS-{date_tag}-{ticker}", overlay=true, max_labels_count=500)')
             lines.append("")
 
             # ── Inputs ──
@@ -2101,30 +2102,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     lines.append(f"  {chunk}{comma}")
                 lines.append("  )")
 
-            def _emit_float_array(name, items, max_per_line=8):
-                if not items:
-                    lines.append(f"var {name} = array.new_float(0)")
-                    return
-                lines.append(f"var {name} = array.from(")
-                for i in range(0, len(items), max_per_line):
-                    chunk = ", ".join(items[i:i+max_per_line])
-                    comma = "," if i + max_per_line < len(items) else ""
-                    lines.append(f"  {chunk}{comma}")
-                lines.append("  )")
 
             lines.append(f"// Clusterbombs: {len(cb_dates)} events")
             _emit_array("cbDates", cb_dates)
-            _emit_float_array("cbPrices", cb_prices)
             _emit_str_array("cbTips", cb_tips)
             lines.append("")
             lines.append(f"// Monsters: {len(monster_dates)} events")
             _emit_array("monsterDates", monster_dates)
-            _emit_float_array("monsterPrices", monster_prices)
             _emit_str_array("monsterTips", monster_tips)
             lines.append("")
             lines.append(f"// Rare Sweeps: {len(rare_dates)} events")
             _emit_array("rareDates", rare_dates)
-            _emit_float_array("rarePrices", rare_prices)
             _emit_str_array("rareTips", rare_tips)
             lines.append("")
 
@@ -2136,19 +2124,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             lines.append("isCB      = cbIdx >= 0")
             lines.append("isMonster = monsterIdx >= 0")
             lines.append("isRare    = rareIdx >= 0")
-            lines.append("cbPrice      = isCB      ? array.get(cbPrices, cbIdx)           : na")
-            lines.append("monsterPrice = isMonster  ? array.get(monsterPrices, monsterIdx) : na")
-            lines.append("rarePrice    = isRare     ? array.get(rarePrices, rareIdx)       : na")
+            lines.append("// Use close for plotting (split-adjusted by TradingView, avoids pre-split price drift)")
             lines.append("")
 
             # ── Plot circles — true data-point rendering, perfectly price-anchored ──
             lines.append("// \u2500\u2500 Price-anchored circles (plot = true chart data, no drift) \u2500\u2500")
-            for kind, flag, color_var, lw, price_var in [
-                ("Clusterbomb", "showCB and isCB", "cbColor", 12, "cbPrice"),
-                ("Monster", "showMonster and isMonster", "monsterColor", 14, "monsterPrice"),
-                ("Rare Sweep", "showRare and isRare", "rareColor", 11, "rarePrice"),
+            for kind, flag, color_var, lw in [
+                ("Clusterbomb", "showCB and isCB", "cbColor", 12),
+                ("Monster", "showMonster and isMonster", "monsterColor", 14),
+                ("Rare Sweep", "showRare and isRare", "rareColor", 11),
             ]:
-                lines.append(f'plot({flag} and newDay ? {price_var} : na, "{kind}", color={color_var},')
+                lines.append(f'plot({flag} and newDay ? close : na, "{kind}", color={color_var},')
                 lines.append(f'  style=plot.style_circles, linewidth={lw})')
             lines.append("")
 
@@ -2167,14 +2153,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             # ── Detail labels (floating bubbles with notional/direction) ──
             lines.append("// \u2500\u2500 Detail Labels (optional floating bubbles) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")
             lines.append("if showDetails and newDay")
-            for kind, flag, price_var, tips_var, idx_var, hex_color, lbl_sz in [
-                ("CB", "showCB and isCB", "cbPrice", "cbTips", "cbIdx", "#f59e0b", "size.small"),
-                ("M", "showMonster and isMonster", "monsterPrice", "monsterTips", "monsterIdx", "#f97316", "size.normal"),
-                ("R", "showRare and isRare", "rarePrice", "rareTips", "rareIdx", "#a78bfa", "size.small"),
+            for kind, flag, tips_var, idx_var, hex_color, lbl_sz in [
+                ("CB", "showCB and isCB", "cbTips", "cbIdx", "#f59e0b", "size.small"),
+                ("M", "showMonster and isMonster", "monsterTips", "monsterIdx", "#f97316", "size.normal"),
+                ("R", "showRare and isRare", "rareTips", "rareIdx", "#a78bfa", "size.small"),
             ]:
                 lines.append(f"    if {flag}")
                 lines.append(f"        tip = {idx_var} >= 0 ? array.get({tips_var}, {idx_var}) : \"\"")
-                lines.append(f'        label.new(bar_index, {price_var}, "{kind}\\n" + tip,')
+                lines.append(f'        label.new(bar_index, close, "{kind}\\n" + tip,')
                 lines.append(f"          color=color.new({hex_color}, math.max(opacity - 20, 0)),")
                 lines.append(f"          textcolor=color.white, style=label.style_label_down, size={lbl_sz})")
             lines.append("")
@@ -2323,7 +2309,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             # ── Build Pine Script ──
             L = []  # shorthand
             L.append("// @version=5")
-            L.append('indicator("Darkpool Sweeps", overlay=true, max_labels_count=500)')
+            date_tag = datetime.now().strftime("%y%m%d")
+            wl_tag = watchlist_param or "All"
+            L.append(f'indicator("DPS-{date_tag}-{wl_tag}", overlay=true, max_labels_count=500)')
             L.append("")
 
             L.append("// \u2500\u2500 Sweep Type Toggles \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")
@@ -2396,17 +2384,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
             L.append(f"// \u2500\u2500 Event Data ({stats['clusterbombs']} CB, {stats['monsters']} monster, {stats['rare']} rare) \u2500\u2500")
             _emit("cbKeys", cb_keys, 8)
-            _emit("cbPrices", cb_prices, 8, "float")
             if include_tips:
                 _emit("cbTips", cb_tips, 3, "string")
             L.append("")
             _emit("monsterKeys", monster_keys, 8)
-            _emit("monsterPrices", monster_prices, 8, "float")
             if include_tips:
                 _emit("monsterTips", monster_tips, 3, "string")
             L.append("")
             _emit("rareKeys", rare_keys, 8)
-            _emit("rarePrices", rare_prices, 8, "float")
             if include_tips:
                 _emit("rareTips", rare_tips, 3, "string")
             L.append("")
@@ -2419,19 +2404,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             L.append("isCB      = cbIdx >= 0")
             L.append("isMonster = monsterIdx >= 0")
             L.append("isRare    = rareIdx >= 0")
-            L.append("cbPrice      = isCB      ? array.get(cbPrices, cbIdx)           : na")
-            L.append("monsterPrice = isMonster  ? array.get(monsterPrices, monsterIdx) : na")
-            L.append("rarePrice    = isRare     ? array.get(rarePrices, rareIdx)       : na")
+            L.append("// Use close for plotting (split-adjusted by TradingView, avoids pre-split price drift)")
             L.append("")
 
             # Plot circles — true chart data points, perfectly price-anchored
             L.append("// ── Price-anchored circles (plot = true chart data, no drift) ──")
-            for kind, flag, color_var, lw, price_var in [
-                ("Clusterbomb", "showCB and isCB", "cbColor", 12, "cbPrice"),
-                ("Monster", "showMonster and isMonster", "monsterColor", 14, "monsterPrice"),
-                ("Rare Sweep", "showRare and isRare", "rareColor", 11, "rarePrice"),
+            for kind, flag, color_var, lw in [
+                ("Clusterbomb", "showCB and isCB", "cbColor", 12),
+                ("Monster", "showMonster and isMonster", "monsterColor", 14),
+                ("Rare Sweep", "showRare and isRare", "rareColor", 11),
             ]:
-                L.append(f'plot({flag} and newDay ? {price_var} : na, "{kind}", color={color_var},')
+                L.append(f'plot({flag} and newDay ? close : na, "{kind}", color={color_var},')
                 L.append(f'  style=plot.style_circles, linewidth={lw})')
             L.append("")
 
@@ -2451,15 +2434,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             if include_tips:
                 L.append("// ── Detail Labels ────────────────────────────────────")
                 L.append("if showDetails and newDay")
-                for short_label, flag, keys_var, tips_var, price_var, hex_color, lbl_sz in [
-                    ("CB", "showCB and isCB", "cbKeys", "cbTips", "cbPrice", "#f59e0b", "size.small"),
-                    ("M", "showMonster and isMonster", "monsterKeys", "monsterTips", "monsterPrice", "#f97316", "size.normal"),
-                    ("R", "showRare and isRare", "rareKeys", "rareTips", "rarePrice", "#a78bfa", "size.small"),
+                for short_label, flag, keys_var, tips_var, hex_color, lbl_sz in [
+                    ("CB", "showCB and isCB", "cbKeys", "cbTips", "#f59e0b", "size.small"),
+                    ("M", "showMonster and isMonster", "monsterKeys", "monsterTips", "#f97316", "size.normal"),
+                    ("R", "showRare and isRare", "rareKeys", "rareTips", "#a78bfa", "size.small"),
                 ]:
                     L.append(f"    if {flag}")
                     L.append(f"        idx = array.indexof({keys_var}, myKey)")
                     L.append(f"        tip = idx >= 0 ? array.get({tips_var}, idx) : \"\"")
-                    L.append(f'        label.new(bar_index, {price_var}, "{short_label}\\n" + tip,')
+                    L.append(f'        label.new(bar_index, close, "{short_label}\\n" + tip,')
                     L.append(f"          color=color.new({hex_color}, math.max(opacity - 20, 0)),")
                     L.append(f"          textcolor=color.white, style=label.style_label_down, size={lbl_sz})")
             L.append("")
