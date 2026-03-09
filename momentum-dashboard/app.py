@@ -528,8 +528,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_page("sweeps.html")
         elif path == "/etf-sweeps":
             self.serve_page("etf_sweeps.html")
-        elif path == "/portfolio":
-            self.serve_page("portfolio.html")
         elif path == "/analysis":
             self.serve_page("analysis.html")
         elif path == "/rs":
@@ -606,12 +604,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_etf_categories()
         elif path == "/api/ticker-names":
             self.serve_ticker_names()
-        elif path == "/api/portfolio/data":
-            self.serve_portfolio_data()
-        elif path == "/api/portfolio/history":
-            self.serve_portfolio_history(query)
-        elif path == "/api/portfolio/trades":
-            self.serve_portfolio_trades()
         elif path == "/api/analysis/river":
             self.serve_analysis_river(query)
         elif path == "/api/analysis/heatmap":

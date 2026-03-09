@@ -67,7 +67,6 @@
     + btn('/log', 'Event Log', '&#x26A1; Log', 'log')
     + btn('/search', 'Screener', '&#x1F50D; Screener', 'search')
     + btn('/backtest', 'Backtesting', '&#x1F9EA; Backtest', 'backtest')
-    + btn('/portfolio', 'Portfolio', '&#x1F4BC; Portfolio', 'portfolio')
     + '</div></div>'
 
     + '</div>'
