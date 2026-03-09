@@ -64,7 +64,7 @@ MIN_SWEEP_NOTIONAL = 500_000  # $500K
 DEFAULT_WS_URL = "wss://delayed.polygon.io/stocks"
 
 # Price defaults
-DEFAULT_FLUSH_INTERVAL = 5   # minutes
+DEFAULT_FLUSH_INTERVAL = 2   # minutes
 
 # Sweep defaults
 DEFAULT_DETECTION_INTERVAL = 5   # minutes
