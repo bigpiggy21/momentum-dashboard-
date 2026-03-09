@@ -2223,8 +2223,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         ticker_filter.add(display)
 
             # Load detection config thresholds for filtering
-            from sweep_engine import load_detection_config
-            det_cfg = load_detection_config().get("stock", {})
+            from sweep_engine import get_detection_config
+            det_cfg = get_detection_config().get("stock", {})
             cb_min_total = det_cfg.get("min_total", 38000000)
             cb_min_sweeps = det_cfg.get("min_sweeps", 3)
             rare_min_notional = det_cfg.get("rare_min_notional", 1000000)
