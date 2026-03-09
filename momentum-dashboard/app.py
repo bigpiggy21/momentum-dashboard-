@@ -839,6 +839,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_scheduler_status()
         elif path == "/api/scheduler/ticker-backfill-status":
             self.serve_ticker_backfill_status()
+        elif path == "/api/daemon/status":
+            self.serve_daemon_status()
         elif path == "/api/scheduler/live-price/status":
             self.serve_live_price_status()
         elif path == "/api/scheduler/live-price/config":
@@ -923,6 +925,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_live_sweep_stop()
         elif path == "/api/sweeps/live/config":
             self.serve_live_sweep_save_config()
+        elif path == "/api/daemon/config":
+            self.serve_daemon_save_config()
         elif path == "/api/scheduler/live-price/start":
             self.serve_live_price_start()
         elif path == "/api/scheduler/live-price/stop":
@@ -3445,7 +3449,92 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_json({"ok": False, "error": str(e)})
 
     # ------------------------------------------------------------------
-    # Live Price Feed endpoints
+    # Unified Daemon endpoints (consolidated price + sweep)
+    # ------------------------------------------------------------------
+
+    def serve_daemon_status(self):
+        """GET /api/daemon/status — combined price + sweep status from unified daemon."""
+        global _live_daemon, _daemon_intentionally_stopped
+        if _live_daemon is None:
+            self.send_json({
+                "running": False, "connected": False,
+                "price": {"messages_per_sec": 0, "tickers_active": 0,
+                           "messages_received": 0, "last_flush_at": None},
+                "sweep": {"trades_per_sec": 0, "sweeps_today": 0,
+                           "tickers_active": 0, "sweeps_written": 0,
+                           "events_detected": {"clusterbomb": 0, "rare_sweep": 0, "monster_sweep": 0},
+                           "last_detection_at": None},
+                "watchdog_active": not _daemon_intentionally_stopped,
+            })
+            return
+        full = _live_daemon.get_status()
+        self.send_json({
+            "running": full["running"],
+            "connected": full["connected"],
+            "authenticated": full["authenticated"],
+            "subscribed": full["subscribed"],
+            "started_at": full["started_at"],
+            "uptime_seconds": full.get("uptime_seconds", 0),
+            "reconnect_count": full["reconnect_count"],
+            "error": full["error"],
+            "watchdog_active": not _daemon_intentionally_stopped,
+            "price": {
+                "messages_per_sec": full["price_messages_per_sec"],
+                "tickers_active": full["price_tickers_active"],
+                "messages_received": full["price_messages_received"],
+                "last_flush_at": full["price_last_flush_at"],
+                "last_message_at": full["price_last_message_at"],
+            },
+            "sweep": {
+                "trades_per_sec": full["trades_per_sec"],
+                "sweeps_today": full["sweeps_today"],
+                "tickers_active": full["sweep_tickers_active"],
+                "sweeps_written": full["sweeps_written"],
+                "sweeps_buffered": full.get("sweeps_buffered", 0),
+                "events_detected": full["events_detected"],
+                "last_detection_at": full["last_detection_at"],
+                "last_sweep_flush_at": full["last_sweep_flush_at"],
+            },
+        })
+
+    def serve_daemon_save_config(self):
+        """POST /api/daemon/config — save both price + sweep config, hot-reload on running daemon."""
+        from live_daemon import (save_live_price_config, save_live_config,
+                                 load_live_price_config, load_live_config)
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+
+            price_cfg = body.get("price", {})
+            sweep_cfg = body.get("sweep", {})
+            auto_start = body.get("auto_start", False)
+
+            # Inject auto_start into both config sections
+            price_cfg["auto_start"] = auto_start
+            sweep_cfg["auto_start"] = auto_start
+
+            # Save to respective config files
+            # Merge with existing rather than overwrite
+            existing_price = load_live_price_config()
+            existing_price.update(price_cfg)
+            save_live_price_config(existing_price)
+
+            existing_sweep = load_live_config()
+            existing_sweep.update(sweep_cfg)
+            save_live_config(existing_sweep)
+
+            # Hot-reload on running daemon
+            changed = []
+            if _live_daemon is not None and _live_daemon.get_status().get("running"):
+                changed = _live_daemon.update_config(
+                    price_cfg=existing_price, sweep_cfg=existing_sweep)
+
+            self.send_json({"ok": True, "hot_reloaded": changed})
+        except Exception as e:
+            self.send_json({"ok": False, "error": str(e)})
+
+    # ------------------------------------------------------------------
+    # Live Price Feed endpoints (kept for backward compat)
     # ------------------------------------------------------------------
 
     def serve_live_price_status(self):

@@ -634,6 +634,35 @@ class UnifiedLiveDaemon:
             "error": full["error"],
         }
 
+    def update_config(self, price_cfg=None, sweep_cfg=None):
+        """Hot-reload config on a running daemon (no restart needed).
+
+        Updates runtime attributes that are read by loop threads.
+        Thread-safe for simple types under GIL.
+        """
+        changed = []
+        if price_cfg:
+            new_flush = price_cfg.get("flush_interval_minutes")
+            if new_flush and new_flush != self._flush_interval:
+                self._flush_interval = max(1, new_flush)
+                changed.append(f"flush_interval={self._flush_interval}m")
+            fc = price_cfg.get("flush_on_close")
+            if fc is not None and fc != self._flush_on_close:
+                self._flush_on_close = fc
+                changed.append(f"flush_on_close={fc}")
+        if sweep_cfg:
+            new_mn = sweep_cfg.get("min_notional")
+            if new_mn and new_mn != self._min_notional:
+                self._min_notional = new_mn
+                changed.append(f"min_notional={new_mn}")
+            new_di = sweep_cfg.get("detection_interval_minutes")
+            if new_di and new_di != self._detection_interval:
+                self._detection_interval = max(1, new_di)
+                changed.append(f"detection_interval={self._detection_interval}m")
+        if changed:
+            print(f"[LIVE] Config hot-reloaded: {', '.join(changed)}", flush=True)
+        return changed
+
     def get_latest_bars(self, ticker):
         ticker = ticker.upper()
         with self._bars_lock:

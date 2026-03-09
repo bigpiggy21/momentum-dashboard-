@@ -653,61 +653,13 @@ td .rare-flag,td .single-flag,td .daily-flag{font-size:9px;padding:1px 4px;borde
       </div>
     </div>
 
-    <!-- Section: Live Scanner -->
+    <!-- Section: Live Scanner (status only — config moved to Settings page) -->
     <div class="settings-section">
       <div class="settings-section-title">&#x26A1; Live Scanner</div>
-
-      <!-- Status + toggle -->
       <div class="settings-row" style="align-items:center;">
         <span id="liveStatusDot" style="font-size:14px;margin-right:6px;">&#x25CF;</span>
         <span id="liveStatusText" style="font-size:11px;color:#666;">Stopped</span>
-        <div style="margin-left:auto;">
-          <button class="settings-btn" id="btnLiveToggle" onclick="toggleLiveScanner()" style="font-size:10px;min-width:54px;">
-            Start
-          </button>
-        </div>
-      </div>
-
-      <!-- Live stats (shown when running) -->
-      <div id="liveStatsPanel" style="display:none;background:#14141e;border:1px solid #1e1e2e;border-radius:4px;padding:8px 10px;margin-top:6px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:10px;">
-          <div><span style="color:#555;">Trades/s</span> <span id="liveTradesPerSec" style="color:#ccc;float:right;">0</span></div>
-          <div><span style="color:#555;">Sweeps today</span> <span id="liveSweepsToday" style="color:#ccc;float:right;">0</span></div>
-          <div><span style="color:#555;">Active tickers</span> <span id="liveTickersActive" style="color:#ccc;float:right;">0</span></div>
-          <div><span style="color:#555;">Written to DB</span> <span id="liveSweepsWritten" style="color:#ccc;float:right;">0</span></div>
-        </div>
-        <div id="liveLastSweep" style="font-size:9px;color:#555;margin-top:6px;max-height:120px;overflow-y:auto;"></div>
-        <!-- Events detected -->
-        <div style="margin-top:6px;padding-top:6px;border-top:1px solid #1e1e2e;">
-          <div style="font-size:9px;color:#555;margin-bottom:3px;">Events detected today:</div>
-          <div style="display:flex;gap:10px;font-size:10px;">
-            <span><span style="color:#f59e0b;" id="liveDaily">0</span> Daily</span>
-            <span><span style="color:#a855f7;" id="liveRares">0</span> Rare</span>
-            <span><span style="color:#3b82f6;" id="liveSingle">0</span> Single</span>
-          </div>
-          <div id="liveLastDetection" style="font-size:9px;color:#444;margin-top:2px;"></div>
-        </div>
-      </div>
-
-      <!-- Settings -->
-      <div style="margin-top:8px;padding-top:8px;border-top:1px solid #1e1e2e;">
-        <div class="settings-row">
-          <div class="settings-label">Auto-start on launch</div>
-          <input type="checkbox" id="liveAutoStart">
-        </div>
-        <div class="settings-row">
-          <div class="settings-label">Detection interval</div>
-          <input type="number" class="settings-input" id="liveDetectionInterval" value="5" min="1" max="60" style="width:50px;"> <span style="font-size:10px;color:#555;">min</span>
-        </div>
-        <div class="settings-row">
-          <div class="settings-label">Min notional</div>
-          <input type="text" class="settings-input" id="liveMinNotional" value="500K" style="width:70px;">
-        </div>
-        <div style="margin-top:6px;">
-          <button class="settings-btn settings-btn-secondary" onclick="saveLiveConfig()" style="font-size:10px;">
-            &#x1F4BE; Save Settings
-          </button>
-        </div>
+        <span style="margin-left:auto;font-size:9px;color:#444;">Configure in Settings</span>
       </div>
     </div>
 
@@ -2825,7 +2777,6 @@ function toggleSettingsPanel(){
     overlay.classList.add('visible');
     loadDetectionConfig();
     loadSettingsDbInfo();
-    loadLiveConfig();
     pollLiveStatus();
   }
 }
@@ -2951,128 +2902,48 @@ function loadSettingsDbInfo(){
 }
 
 // ====================================================================
-// LIVE SCANNER
+// LIVE SCANNER (status only — config moved to Settings page)
 // ====================================================================
 var _liveStatusTimer = null;
-var _liveLastEventCounts = null;  // for auto-refresh detection
+var _liveLastEventCounts = null;
 var _liveAutoRefreshTimer = null;
-
-function toggleLiveScanner(){
-  var btn = document.getElementById('btnLiveToggle');
-  fetch('/api/sweeps/live/status').then(function(r){return r.json();}).then(function(s){
-    if(s.running){
-      // Stop
-      btn.textContent = '...';
-      btn.disabled = true;
-      fetch('/api/sweeps/live/stop',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
-        btn.disabled = false;
-        updateLiveUI({running:false,connected:false});
-        showToast(d.ok ? 'Live scanner stopped' : ('Error: ' + (d.error||'')));
-      });
-    } else {
-      // Start
-      btn.textContent = '...';
-      btn.disabled = true;
-      fetch('/api/sweeps/live/start',{method:'POST'}).then(function(r){return r.json();}).then(function(d){
-        btn.disabled = false;
-        if(d.ok){
-          showToast('Live scanner starting...');
-          pollLiveStatus();
-        } else {
-          showToast('Error: ' + (d.error||''));
-          updateLiveUI({running:false});
-        }
-      });
-    }
-  });
-}
 
 function pollLiveStatus(){
   if(_liveStatusTimer) clearTimeout(_liveStatusTimer);
   fetch('/api/sweeps/live/status').then(function(r){return r.json();}).then(function(s){
     updateLiveUI(s);
-    // Keep polling while settings panel is open or scanner is running
-    var panelOpen = document.getElementById('settingsPanel').classList.contains('visible');
-    if(panelOpen || s.running){
-      _liveStatusTimer = setTimeout(pollLiveStatus, 5000);
+    if(s.running){
+      _liveStatusTimer = setTimeout(pollLiveStatus, 10000);
     }
   }).catch(function(){
-    _liveStatusTimer = setTimeout(pollLiveStatus, 10000);
+    _liveStatusTimer = setTimeout(pollLiveStatus, 15000);
   });
 }
 
 function updateLiveUI(s){
   var dot = document.getElementById('liveStatusDot');
   var text = document.getElementById('liveStatusText');
-  var btn = document.getElementById('btnLiveToggle');
-  var stats = document.getElementById('liveStatsPanel');
+  if(!dot || !text) return;
 
   if(s.running && s.connected){
     dot.style.color = '#22c55e';
     text.textContent = 'Connected (15-min delayed)';
     text.style.color = '#22c55e';
-    btn.textContent = 'Stop';
-    stats.style.display = '';
   } else if(s.running && !s.connected){
     dot.style.color = '#f59e0b';
-    text.textContent = s.authenticated ? 'Subscribing...' : (s.error || 'Connecting...');
+    text.textContent = s.error || 'Connecting...';
     text.style.color = '#f59e0b';
-    btn.textContent = 'Stop';
-    stats.style.display = '';
+  } else if(s.watchdog_active && s.error){
+    dot.style.color = '#f59e0b';
+    text.textContent = 'Restarting...';
+    text.style.color = '#f59e0b';
   } else {
-    if(s.watchdog_active && s.error){
-      // Watchdog will restart — show "Restarting" state
-      dot.style.color = '#f59e0b';
-      text.textContent = 'Restarting... (' + (s.error || '').substring(0,30) + ')';
-      text.style.color = '#f59e0b';
-      btn.textContent = 'Stop';
-    } else {
-      dot.style.color = '#555';
-      text.textContent = s.error ? ('Error: ' + s.error.substring(0,40)) : 'Stopped';
-      text.style.color = s.error ? '#ef4444' : '#555';
-      btn.textContent = 'Start';
-      stats.style.display = 'none';
-    }
+    dot.style.color = '#555';
+    text.textContent = s.error ? ('Error: ' + s.error.substring(0,40)) : 'Stopped';
+    text.style.color = s.error ? '#ef4444' : '#555';
   }
 
-  // Stats
-  if(s.running){
-    document.getElementById('liveTradesPerSec').textContent = (s.trades_per_sec || 0).toFixed(1);
-    document.getElementById('liveSweepsToday').textContent = fmtN(s.sweeps_today || 0);
-    document.getElementById('liveTickersActive').textContent = fmtN(s.tickers_active || 0);
-    document.getElementById('liveSweepsWritten').textContent = fmtN(s.sweeps_written || 0);
-    var ev = s.events_detected || {};
-    document.getElementById('liveDaily').textContent = ev.daily || ev.clusterbomb || 0;
-    document.getElementById('liveRares').textContent = ev.rare_sweep || 0;
-    document.getElementById('liveSingle').textContent = ev.ranked_sweep || 0;
-
-    var sweepList = s.recent_sweeps || (s.last_sweep ? [s.last_sweep] : []);
-    if(sweepList.length){
-      var html = '<div style="color:#444;margin-bottom:2px;">Recent sweeps:</div>';
-      sweepList.forEach(function(sw){
-        html += '<div style="color:#888;line-height:1.6;"><span style="color:#f59e0b;font-weight:600;">' + sw.ticker + '</span> '
-          + fmt$(sw.notional) + ' <span style="color:#555;">@ ' + sw.time + '</span></div>';
-      });
-      document.getElementById('liveLastSweep').innerHTML = html;
-    }
-    if(s.last_detection_at){
-      var ago = _fmtAgo(s.last_detection_at);
-      document.getElementById('liveLastDetection').textContent = 'Last detection: ' + ago;
-    }
-  }
-
-  // Update header live indicator
   updateLiveHeaderIndicator(s);
-}
-
-function _fmtAgo(iso){
-  try{
-    var d=new Date(iso);var diff=Math.round((Date.now()-d.getTime())/1000);
-    if(diff<60)return diff+'s ago';
-    if(diff<3600)return Math.round(diff/60)+'m ago';
-    if(diff<86400)return Math.round(diff/3600)+'h ago';
-    return Math.round(diff/86400)+'d ago';
-  }catch(e){return '';}
 }
 
 function updateLiveHeaderIndicator(s){
@@ -3088,13 +2959,7 @@ function updateLiveHeaderIndicator(s){
         statsGrid.parentElement.insertBefore(ind, statsGrid.nextSibling);
       }
     }
-    if(existing && s.crash_count > 0){
-      existing.title = 'Live scanner active (' + s.crash_count + ' restart' + (s.crash_count > 1 ? 's' : '') + ')';
-    } else if(existing){
-      existing.title = 'Live scanner active';
-    }
   } else if(s.watchdog_active && s.error){
-    // Watchdog restarting — show amber indicator
     if(!existing){
       var statsGrid = document.querySelector('.stats-grid');
       if(statsGrid){
@@ -3107,39 +2972,11 @@ function updateLiveHeaderIndicator(s){
     } else {
       existing.style.color = '#f59e0b';
       existing.textContent = '\u26A1 RESTARTING';
-      existing.title = 'Watchdog restarting daemon...';
     }
   } else if(existing){
     existing.remove();
   }
 }
-
-function loadLiveConfig(){
-  fetch('/api/sweeps/live/config').then(function(r){return r.json();}).then(function(cfg){
-    document.getElementById('liveAutoStart').checked = !!cfg.auto_start;
-    document.getElementById('liveDetectionInterval').value = cfg.detection_interval_minutes || 5;
-    document.getElementById('liveMinNotional').value = fmtSettingVal(cfg.min_notional || 500000);
-  }).catch(function(e){ console.error('Load live config error:', e); });
-}
-
-function saveLiveConfig(){
-  var cfg = {
-    auto_start: document.getElementById('liveAutoStart').checked,
-    detection_interval_minutes: parseInt(document.getElementById('liveDetectionInterval').value) || 5,
-    min_notional: parseMinInput(document.getElementById('liveMinNotional').value),
-    ws_url: DEFAULT_WS_URL_VAL,
-    buffer_flush_seconds: 30,
-    buffer_max_trades: 200,
-  };
-  fetch('/api/sweeps/live/config',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(cfg)
-  }).then(function(r){return r.json();}).then(function(d){
-    showToast(d.ok ? 'Live scanner settings saved' : ('Error: '+(d.error||'')));
-  }).catch(function(e){showToast('Error saving: '+e);});
-}
-var DEFAULT_WS_URL_VAL = 'wss://delayed.polygon.io/stocks';
 
 // Auto-refresh: poll for new events when live scanner is running
 function startLiveAutoRefresh(){
@@ -3153,12 +2990,11 @@ function startLiveAutoRefresh(){
       var ev = s.events_detected || {};
       var total = (ev.clusterbomb||0) + (ev.rare_sweep||0) + (ev.monster_sweep||0) + (ev.ranked_sweep||0);
       if(_liveLastEventCounts !== null && total > _liveLastEventCounts){
-        // New events detected — refresh tracker
         loadAll();
       }
       _liveLastEventCounts = total;
     }).catch(function(){});
-  }, 45000);  // 45 seconds
+  }, 45000);
 }
 
 function stopLiveAutoRefresh(){
@@ -3172,9 +3008,10 @@ function stopLiveAutoRefresh(){
 // On page load: check if live scanner is running
 (function checkLiveOnLoad(){
   fetch('/api/sweeps/live/status').then(function(r){return r.json();}).then(function(s){
+    updateLiveUI(s);
     if(s.running){
-      updateLiveHeaderIndicator(s);
       startLiveAutoRefresh();
+      pollLiveStatus();
     }
   }).catch(function(){});
 })();

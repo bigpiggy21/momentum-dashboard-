@@ -81,6 +81,14 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 .live-price-save:hover{background:#334155;color:#fff;}
 .live-price-save-status{font-size:10px;color:#555;}
 
+/* Daemon subsections */
+.daemon-subsection{border-top:1px solid #1a1a24;padding-top:8px;margin-top:8px;}
+.daemon-sub-label{font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
+.daemon-sub-settings{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:6px;}
+.daemon-sub-settings label{font-size:11px;color:#666;display:flex;align-items:center;gap:4px;}
+.daemon-sub-settings input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;}
+.daemon-sub-settings input[type="checkbox"]{accent-color:#f59e0b;}
+
 /* Compute watchlist chips */
 .lp-compute-row{border-top:1px solid #1a1a24;padding-top:10px;margin-top:10px;}
 .lp-compute-row .lp-compute-label{font-size:11px;color:#666;margin-bottom:6px;}
@@ -164,25 +172,57 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
   <span class="backfill-status" id="backfillStatus"></span>
 </div>
 
-<!-- Live Price Feed -->
-<div class="live-price-section" id="livePriceSection">
+<!-- Live Daemon (unified price + sweep) -->
+<div class="live-price-section" id="liveDaemonSection">
   <div class="live-price-header">
-    <h3><span class="live-price-dot off" id="livePriceDot"></span> Live Price Feed</h3>
-    <span class="live-price-status-text" id="livePriceStatusText">Disconnected</span>
-    <button class="live-price-toggle" id="livePriceToggle" onclick="toggleLivePriceFeed()">Start</button>
+    <h3><span class="live-price-dot off" id="daemonDot"></span> Live Daemon</h3>
+    <span class="live-price-status-text" id="daemonStatusText">Disconnected</span>
+    <button class="live-price-toggle" id="daemonToggle" onclick="toggleDaemon()">Start</button>
   </div>
-  <div class="live-price-stats" id="livePriceStats" style="display:none;">
-    <span>Msgs/s: <span class="val" id="lpMsgRate">0</span></span>
-    <span>Tickers: <span class="val" id="lpTickers">0</span></span>
-    <span>Total msgs: <span class="val" id="lpMsgTotal">0</span></span>
-    <span>Last flush: <span class="val" id="lpLastFlush">--</span></span>
+  <div class="live-price-settings" style="border-top:none;padding-top:0;margin-top:0;">
+    <label><input type="checkbox" id="daemonAutoStart"> Auto-start on server launch</label>
   </div>
-  <div class="live-price-settings">
-    <label><input type="checkbox" id="lpAutoStart"> Auto-start on server launch</label>
-    <label>Flush interval: <input type="number" id="lpFlushInterval" min="1" max="60" value="5"> min</label>
-    <label><input type="checkbox" id="lpFlushOnClose" checked> Flush on market close</label>
-    <button class="live-price-save" onclick="saveLivePriceConfig()">Save</button>
-    <span class="live-price-save-status" id="lpSaveStatus"></span>
+
+  <!-- Price Feed subsection -->
+  <div class="daemon-subsection">
+    <div class="daemon-sub-label">Price Feed</div>
+    <div class="live-price-stats" id="priceStats" style="display:none;">
+      <span>Msgs/s: <span class="val" id="prMsgRate">0</span></span>
+      <span>Tickers: <span class="val" id="prTickers">0</span></span>
+      <span>Total msgs: <span class="val" id="prMsgTotal">0</span></span>
+      <span>Last flush: <span class="val" id="prLastFlush">--</span></span>
+    </div>
+    <div class="daemon-sub-settings">
+      <label>Flush interval: <input type="number" id="prFlushInterval" min="1" max="60" value="2" style="width:44px;"> min</label>
+      <label><input type="checkbox" id="prFlushOnClose" checked> Flush on market close</label>
+    </div>
+  </div>
+
+  <!-- Sweep Capture subsection -->
+  <div class="daemon-subsection">
+    <div class="daemon-sub-label">Sweep Capture</div>
+    <div class="live-price-stats" id="sweepStats" style="display:none;">
+      <span>Trades/s: <span class="val" id="swTradesPerSec">0</span></span>
+      <span>Sweeps today: <span class="val" id="swSweepsToday">0</span></span>
+      <span>Tickers: <span class="val" id="swTickers">0</span></span>
+      <span>Written: <span class="val" id="swWritten">0</span></span>
+    </div>
+    <div class="live-price-stats" id="sweepEventStats" style="display:none;">
+      <span>CBs: <span class="val" id="swCBs">0</span></span>
+      <span>Rare: <span class="val" id="swRare">0</span></span>
+      <span>Monster: <span class="val" id="swMonster">0</span></span>
+      <span>Last detection: <span class="val" id="swLastDetect">--</span></span>
+    </div>
+    <div class="daemon-sub-settings">
+      <label>Detection interval: <input type="number" id="swDetectionInterval" min="1" max="60" value="5" style="width:44px;"> min</label>
+      <label>Min notional: <input type="text" id="swMinNotional" value="500K" style="width:56px;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;"></label>
+    </div>
+  </div>
+
+  <!-- Save button -->
+  <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
+    <button class="live-price-save" onclick="saveDaemonConfig()">Save</button>
+    <span class="live-price-save-status" id="daemonSaveStatus"></span>
   </div>
 </div>
 
@@ -615,43 +655,43 @@ fetch('/api/scheduler/ticker-backfill-status').then(function(r){return r.json();
   }
 });
 
-// ---------- Live Price Feed ----------
-var _lpPollTimer=null;
-var _lpRunning=false;
+// ---------- Live Daemon (unified) ----------
+var _daemonPollTimer=null;
+var _daemonRunning=false;
 
-function toggleLivePriceFeed(){
-  var btn=document.getElementById('livePriceToggle');
-  if(_lpRunning){
-    btn.disabled=true;
-    fetch('/api/scheduler/live-price/stop',{method:'POST'}).then(function(r){return r.json();}).then(function(){
-      btn.disabled=false;
-      pollLivePriceStatus();
-    }).catch(function(){btn.disabled=false;});
-  }else{
-    btn.disabled=true;
-    fetch('/api/scheduler/live-price/start',{method:'POST'}).then(function(r){return r.json();}).then(function(){
-      btn.disabled=false;
-      pollLivePriceStatus();
-      startLivePricePoll();
-    }).catch(function(){btn.disabled=false;});
-  }
+function toggleDaemon(){
+  var btn=document.getElementById('daemonToggle');
+  btn.disabled=true;
+  var endpoint=_daemonRunning?'/api/sweeps/live/stop':'/api/sweeps/live/start';
+  fetch(endpoint,{method:'POST'}).then(function(r){return r.json();}).then(function(){
+    btn.disabled=false;
+    pollDaemonStatus();
+    if(!_daemonRunning) startDaemonPoll();
+  }).catch(function(){btn.disabled=false;});
 }
 
-function pollLivePriceStatus(){
-  fetch('/api/scheduler/live-price/status').then(function(r){return r.json();}).then(function(s){
-    updateLivePriceUI(s);
+function pollDaemonStatus(){
+  fetch('/api/daemon/status').then(function(r){return r.json();}).then(function(s){
+    updateDaemonUI(s);
   }).catch(function(){});
 }
 
-function updateLivePriceUI(s){
-  var dot=document.getElementById('livePriceDot');
-  var txt=document.getElementById('livePriceStatusText');
-  var btn=document.getElementById('livePriceToggle');
-  var stats=document.getElementById('livePriceStats');
+function _timeAgo(isoStr){
+  if(!isoStr) return '--';
+  try{
+    var diff=Math.round((Date.now()-new Date(isoStr).getTime())/1000);
+    if(diff<0) diff=0;
+    return diff<60?diff+'s ago':Math.round(diff/60)+'m ago';
+  }catch(e){return '--';}
+}
 
-  _lpRunning=!!s.running;
+function updateDaemonUI(s){
+  var dot=document.getElementById('daemonDot');
+  var txt=document.getElementById('daemonStatusText');
+  var btn=document.getElementById('daemonToggle');
+  _daemonRunning=!!s.running;
 
-  // Dot color
+  // Dot + status text
   dot.className='live-price-dot';
   if(s.connected){
     dot.classList.add('connected');
@@ -668,71 +708,105 @@ function updateLivePriceUI(s){
   }
 
   // Button
-  if(s.running){
-    btn.textContent='Stop';
-    btn.classList.add('active');
+  btn.textContent=s.running?'Stop':'Start';
+  if(s.running) btn.classList.add('active'); else btn.classList.remove('active');
+
+  // Price stats
+  var pr=s.price||{};
+  var prStats=document.getElementById('priceStats');
+  if(s.running||pr.messages_received>0){
+    prStats.style.display='flex';
+    document.getElementById('prMsgRate').textContent=pr.messages_per_sec||'0';
+    document.getElementById('prTickers').textContent=(pr.tickers_active||0).toLocaleString();
+    document.getElementById('prMsgTotal').textContent=(pr.messages_received||0).toLocaleString();
+    document.getElementById('prLastFlush').textContent=_timeAgo(pr.last_flush_at);
   }else{
-    btn.textContent='Start';
-    btn.classList.remove('active');
+    prStats.style.display='none';
   }
 
-  // Stats
-  if(s.running||s.messages_received>0){
-    stats.style.display='flex';
-    document.getElementById('lpMsgRate').textContent=s.messages_per_sec||'0';
-    document.getElementById('lpTickers').textContent=(s.tickers_active||0).toLocaleString();
-    document.getElementById('lpMsgTotal').textContent=(s.messages_received||0).toLocaleString();
-    if(s.last_flush_at){
-      try{
-        var d=new Date(s.last_flush_at);
-        var diff=Math.round((Date.now()-d.getTime())/1000);
-        document.getElementById('lpLastFlush').textContent=diff<60?diff+'s ago':Math.round(diff/60)+'m ago';
-      }catch(e){document.getElementById('lpLastFlush').textContent='--';}
-    }else{
-      document.getElementById('lpLastFlush').textContent='--';
-    }
+  // Sweep stats
+  var sw=s.sweep||{};
+  var swStats=document.getElementById('sweepStats');
+  var swEvents=document.getElementById('sweepEventStats');
+  if(s.running||sw.sweeps_today>0){
+    swStats.style.display='flex';
+    swEvents.style.display='flex';
+    document.getElementById('swTradesPerSec').textContent=sw.trades_per_sec||'0';
+    document.getElementById('swSweepsToday').textContent=(sw.sweeps_today||0).toLocaleString();
+    document.getElementById('swTickers').textContent=(sw.tickers_active||0).toLocaleString();
+    document.getElementById('swWritten').textContent=(sw.sweeps_written||0).toLocaleString();
+    var ev=sw.events_detected||{};
+    document.getElementById('swCBs').textContent=ev.clusterbomb||0;
+    document.getElementById('swRare').textContent=ev.rare_sweep||0;
+    document.getElementById('swMonster').textContent=ev.monster_sweep||0;
+    document.getElementById('swLastDetect').textContent=_timeAgo(sw.last_detection_at);
   }else{
-    stats.style.display='none';
+    swStats.style.display='none';
+    swEvents.style.display='none';
   }
 
-  // Keep polling if running
-  if(s.running&&!_lpPollTimer){
-    startLivePricePoll();
-  }else if(!s.running&&_lpPollTimer){
-    stopLivePricePoll();
-  }
+  // Polling
+  if(s.running&&!_daemonPollTimer) startDaemonPoll();
+  else if(!s.running&&_daemonPollTimer) stopDaemonPoll();
 }
 
-function startLivePricePoll(){
-  stopLivePricePoll();
-  _lpPollTimer=setInterval(pollLivePriceStatus,5000);
+function startDaemonPoll(){
+  stopDaemonPoll();
+  _daemonPollTimer=setInterval(pollDaemonStatus,5000);
 }
-function stopLivePricePoll(){
-  if(_lpPollTimer){clearInterval(_lpPollTimer);_lpPollTimer=null;}
+function stopDaemonPoll(){
+  if(_daemonPollTimer){clearInterval(_daemonPollTimer);_daemonPollTimer=null;}
 }
 
-function loadLivePriceConfig(){
-  fetch('/api/scheduler/live-price/config').then(function(r){return r.json();}).then(function(cfg){
-    document.getElementById('lpAutoStart').checked=!!cfg.auto_start;
-    document.getElementById('lpFlushInterval').value=cfg.flush_interval_minutes||5;
-    document.getElementById('lpFlushOnClose').checked=cfg.flush_on_close!==false;
+function loadDaemonConfig(){
+  // Load both configs in parallel
+  Promise.all([
+    fetch('/api/scheduler/live-price/config').then(function(r){return r.json();}),
+    fetch('/api/sweeps/live/config').then(function(r){return r.json();})
+  ]).then(function(results){
+    var pcfg=results[0], scfg=results[1];
+    document.getElementById('daemonAutoStart').checked=!!(pcfg.auto_start||scfg.auto_start);
+    document.getElementById('prFlushInterval').value=pcfg.flush_interval_minutes||2;
+    document.getElementById('prFlushOnClose').checked=pcfg.flush_on_close!==false;
+    document.getElementById('swDetectionInterval').value=scfg.detection_interval_minutes||5;
+    // Format min notional
+    var mn=scfg.min_notional||500000;
+    document.getElementById('swMinNotional').value=mn>=1000000?(mn/1000000)+'M':(mn/1000)+'K';
   }).catch(function(){});
 }
 
-function saveLivePriceConfig(){
-  var cfg={
-    enabled:true,
-    auto_start:document.getElementById('lpAutoStart').checked,
-    ws_url:'wss://delayed.polygon.io/stocks',
-    flush_interval_minutes:parseInt(document.getElementById('lpFlushInterval').value)||5,
-    flush_on_close:document.getElementById('lpFlushOnClose').checked
+function _parseNotional(str){
+  str=(str||'').trim().toUpperCase();
+  if(str.endsWith('M')) return parseFloat(str)*1000000;
+  if(str.endsWith('K')) return parseFloat(str)*1000;
+  return parseFloat(str)||500000;
+}
+
+function saveDaemonConfig(){
+  var body={
+    auto_start:document.getElementById('daemonAutoStart').checked,
+    price:{
+      flush_interval_minutes:parseInt(document.getElementById('prFlushInterval').value)||2,
+      flush_on_close:document.getElementById('prFlushOnClose').checked
+    },
+    sweep:{
+      detection_interval_minutes:parseInt(document.getElementById('swDetectionInterval').value)||5,
+      min_notional:_parseNotional(document.getElementById('swMinNotional').value)
+    }
   };
-  fetch('/api/scheduler/live-price/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)
+  fetch('/api/daemon/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
   }).then(function(r){return r.json();}).then(function(r){
-    var st=document.getElementById('lpSaveStatus');
-    st.textContent=r.ok?'Saved!':'Error';
-    st.style.color=r.ok?'#22c55e':'#ef4444';
-    setTimeout(function(){st.textContent='';},3000);
+    var st=document.getElementById('daemonSaveStatus');
+    if(r.ok){
+      var msg='Saved';
+      if(r.hot_reloaded&&r.hot_reloaded.length>0) msg+=' & applied';
+      st.textContent=msg;
+      st.style.color='#22c55e';
+    }else{
+      st.textContent='Error: '+(r.error||'unknown');
+      st.style.color='#ef4444';
+    }
+    setTimeout(function(){st.textContent='';},4000);
   });
 }
 
@@ -821,9 +895,9 @@ function triggerIndicatorCompute(){
   });
 }
 
-// Init: check live price status + load config + load indicator config
-pollLivePriceStatus();
-loadLivePriceConfig();
+// Init: check daemon status + load config + load indicator config
+pollDaemonStatus();
+loadDaemonConfig();
 loadIndicatorConfig();
 pollIndicatorStatus();
 setInterval(pollIndicatorStatus,30000);
