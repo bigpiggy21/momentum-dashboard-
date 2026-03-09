@@ -2230,6 +2230,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     "SELECT ticker, event_date, sweep_count, total_notional, avg_price, "
                     "direction, is_rare, COALESCE(is_monster, 0) as is_monster "
                     f"FROM clusterbomb_events WHERE event_date >= ? AND ticker IN ({placeholders}) "
+                    "AND event_type IN ('clusterbomb', 'rare_sweep', 'monster_sweep') "
                     "ORDER BY ticker, event_date",
                     (cutoff, *sorted(ticker_filter))
                 ).fetchall()
@@ -2237,7 +2238,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 rows = conn.execute(
                     "SELECT ticker, event_date, sweep_count, total_notional, avg_price, "
                     "direction, is_rare, COALESCE(is_monster, 0) as is_monster "
-                    "FROM clusterbomb_events WHERE event_date >= ? ORDER BY ticker, event_date",
+                    "FROM clusterbomb_events WHERE event_date >= ? "
+                    "AND event_type IN ('clusterbomb', 'rare_sweep', 'monster_sweep') "
+                    "ORDER BY ticker, event_date",
                     (cutoff,)
                 ).fetchall()
             conn.close()
