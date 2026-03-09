@@ -9,7 +9,7 @@
       "mode": "manual",
       "interval_minutes": 30,
       "priority": 1,
-      "collect_workers": 4,
+      "collect_workers": 8,
       "compute_workers": 8,
       "market_hours_only": false,
       "after_close_delay_minutes": 30
@@ -19,7 +19,7 @@
       "mode": "manual",
       "interval_minutes": 15,
       "priority": 99,
-      "collect_workers": 4,
+      "collect_workers": 8,
       "compute_workers": 8,
       "market_hours_only": false,
       "after_close_delay_minutes": 30
@@ -29,7 +29,7 @@
       "mode": "manual",
       "interval_minutes": 15,
       "priority": 99,
-      "collect_workers": 4,
+      "collect_workers": 8,
       "compute_workers": 8,
       "market_hours_only": false,
       "after_close_delay_minutes": 30
@@ -39,7 +39,7 @@
       "mode": "manual",
       "interval_minutes": 15,
       "priority": 99,
-      "collect_workers": 4,
+      "collect_workers": 8,
       "compute_workers": 8,
       "market_hours_only": false,
       "after_close_delay_minutes": 30
@@ -49,7 +49,7 @@
       "mode": "after_close",
       "interval_minutes": 15,
       "priority": 99,
-      "collect_workers": 4,
+      "collect_workers": 8,
       "compute_workers": 8,
       "market_hours_only": false,
       "after_close_delay_minutes": 1455
@@ -59,7 +59,7 @@
       "mode": "after_close",
       "interval_minutes": 15,
       "priority": 99,
-      "collect_workers": 4,
+      "collect_workers": 8,
       "compute_workers": 8,
       "market_hours_only": false,
       "after_close_delay_minutes": 1500
@@ -69,7 +69,7 @@
       "mode": "interval",
       "interval_minutes": 60,
       "priority": 99,
-      "collect_workers": 4,
+      "collect_workers": 8,
       "compute_workers": 8,
       "market_hours_only": false,
       "after_close_delay_minutes": 30
@@ -79,7 +79,7 @@
       "mode": "manual",
       "interval_minutes": 15,
       "priority": 99,
-      "collect_workers": 4,
+      "collect_workers": 8,
       "compute_workers": 8,
       "market_hours_only": false,
       "after_close_delay_minutes": 30
@@ -89,7 +89,7 @@
       "mode": "manual",
       "interval_minutes": 15,
       "priority": 99,
-      "collect_workers": 4,
+      "collect_workers": 8,
       "compute_workers": 8,
       "market_hours_only": false,
       "after_close_delay_minutes": 30
@@ -99,7 +99,7 @@
       "mode": "manual",
       "interval_minutes": 15,
       "priority": 99,
-      "collect_workers": 4,
+      "collect_workers": 8,
       "compute_workers": 8,
       "market_hours_only": false,
       "after_close_delay_minutes": 30
@@ -109,7 +109,7 @@
       "mode": "manual",
       "interval_minutes": 15,
       "priority": 99,
-      "collect_workers": 4,
+      "collect_workers": 8,
       "compute_workers": 8,
       "market_hours_only": false,
       "after_close_delay_minutes": 30
@@ -119,7 +119,7 @@
       "mode": "manual",
       "interval_minutes": 15,
       "priority": 99,
-      "collect_workers": 4,
+      "collect_workers": 8,
       "compute_workers": 8,
       "market_hours_only": false,
       "after_close_delay_minutes": 30

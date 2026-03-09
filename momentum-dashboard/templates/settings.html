@@ -127,29 +127,7 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 
 <h2>&#x2699; Settings</h2>
 
-<!-- Global Toggle -->
-<div class="sched-global s-section">
-  <span class="sched-label">Scheduler</span>
-  <button id="schedulerToggle" class="sched-toggle" onclick="toggleSchedulerEnabled()">ENABLED</button>
-  <span class="sched-max-label">Max concurrent:</span>
-  <input type="number" id="schedMaxConcurrent" class="sched-max-input" min="1" max="8" value="2">
-  <span style="width:1px;height:20px;background:#2a2a3a;margin:0 8px;"></span>
-  <span class="sched-max-label">OHLC history:</span>
-  <input type="number" id="schedBackfillYears" class="sched-max-input" min="1" max="22" value="10" style="width:60px;" title="How many years of daily OHLC data to keep in cache">
-  <span class="sched-max-label" style="color:#444;">years</span>
-  <span id="schedulerStatusBadge" class="sched-status-badge"></span>
-</div>
-
-<!-- Ticker Backfill -->
-<div class="ticker-backfill s-section">
-  <label>Tickers:</label>
-  <input type="text" id="backfillTicker" placeholder="e.g. NVDA, AAPL, SPY" maxlength="500"
-         style="width:200px;" onkeydown="if(event.key==='Enter')triggerTickerBackfill()">
-  <button class="s-btn" id="backfillBtn" onclick="triggerTickerBackfill()">Backfill</button>
-  <span class="backfill-status" id="backfillStatus"></span>
-</div>
-
-<!-- Live Daemon (unified price + sweep) -->
+<!-- 1. Live Daemon (unified price + sweep) -->
 <div class="s-section" id="liveDaemonSection">
   <div class="live-price-header">
     <h3><span class="live-price-dot off" id="daemonDot"></span> Live Daemon</h3>
@@ -211,8 +189,71 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
   </div>
 </div>
 
-<!-- Indicator Computation (subprocess) -->
-<div class="s-section" id="indicatorSection" style="margin-top:10px;">
+<!-- 2. Scheduler -->
+<div class="sched-global s-section">
+  <span class="sched-label">Scheduler</span>
+  <button id="schedulerToggle" class="sched-toggle" onclick="toggleSchedulerEnabled()">ENABLED</button>
+  <span class="sched-max-label">Max concurrent:</span>
+  <input type="number" id="schedMaxConcurrent" class="sched-max-input" min="1" max="8" value="2">
+  <span style="width:1px;height:20px;background:#2a2a3a;margin:0 8px;"></span>
+  <span class="sched-max-label">OHLC history:</span>
+  <input type="number" id="schedBackfillYears" class="sched-max-input" min="1" max="22" value="10" style="width:60px;" title="How many years of daily OHLC data to keep in cache">
+  <span class="sched-max-label" style="color:#444;">years</span>
+  <span id="schedulerStatusBadge" class="sched-status-badge"></span>
+</div>
+
+<!-- Watchlist Schedule Table -->
+<table class="sched-table" id="schedulerTable">
+  <thead>
+    <tr>
+      <th>Watchlist</th>
+      <th>On</th>
+      <th>Mode</th>
+      <th>Interval</th>
+      <th>Pri</th>
+      <th>Fetch</th>
+      <th>Comp</th>
+      <th title="Run indicator compute after collection">Calc</th>
+      <th>Status</th>
+      <th>Last Run</th>
+      <th>Next</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody id="schedulerTableBody">
+  </tbody>
+</table>
+
+<!-- Save + Refresh Bar -->
+<div class="sched-save-bar">
+  <button id="schedulerSaveBtn" class="s-btn-primary" onclick="saveSchedulerConfig()">Save Configuration</button>
+  <button class="s-btn" onclick="refreshWatchlists()" style="font-size:11px;">&#x1F504; Refresh Watchlists</button>
+  <span id="schedulerSaveStatus" class="sched-save-status"></span>
+  <span id="wlRefreshStatus" style="font-size:11px;color:#555;font-family:'Consolas',monospace;"></span>
+</div>
+
+<!-- Custom Backfill -->
+<div class="s-section" style="margin-top:16px;">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+    <div class="daemon-sub-label" style="margin:0;">Custom Backfill</div>
+  </div>
+  <div class="ticker-backfill" style="margin-bottom:8px;">
+    <label>Tickers:</label>
+    <input type="text" id="backfillTicker" placeholder="e.g. NVDA, AAPL, SPY" maxlength="500"
+           style="width:200px;" onkeydown="if(event.key==='Enter')triggerTickerBackfill()">
+    <button class="s-btn" id="backfillBtn" onclick="triggerTickerBackfill()">Backfill</button>
+    <span class="backfill-status" id="backfillStatus"></span>
+  </div>
+  <div class="s-subsection" style="display:flex;align-items:center;gap:10px;">
+    <label style="font-size:12px;color:#888;white-space:nowrap;">All tickers:</label>
+    <span style="font-size:11px;color:#555;" id="allTickerCount">Loading...</span>
+    <button class="s-btn" id="allBackfillBtn" onclick="triggerAllTickersBackfill()">Backfill All</button>
+    <span class="backfill-status" id="allBackfillStatus"></span>
+  </div>
+</div>
+
+<!-- 3. Indicator Computation (subprocess) -->
+<div class="s-section" id="indicatorSection">
   <div class="eod-header">
     <h3>&#x1F9EE; Indicator Computation</h3>
     <span style="font-size:10px;color:#666;" id="indStatusText">Idle</span>
@@ -240,7 +281,7 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
   </div>
 </div>
 
-<!-- End of Day Compute -->
+<!-- 4. End of Day Compute -->
 <div class="s-section" id="eodSection">
   <div class="eod-header">
     <h3>&#x1F552; End of Day Compute</h3>
@@ -301,37 +342,7 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
   </div>
 </div>
 
-<!-- Watchlist Schedule Table -->
-<table class="sched-table" id="schedulerTable">
-  <thead>
-    <tr>
-      <th>Watchlist</th>
-      <th>On</th>
-      <th>Mode</th>
-      <th>Interval</th>
-      <th>Pri</th>
-      <th>Fetch</th>
-      <th>Comp</th>
-      <th title="Run indicator compute after collection">Calc</th>
-      <th>Status</th>
-      <th>Last Run</th>
-      <th>Next</th>
-      <th></th>
-    </tr>
-  </thead>
-  <tbody id="schedulerTableBody">
-  </tbody>
-</table>
-
-<!-- Save + Refresh Bar -->
-<div class="sched-save-bar">
-  <button id="schedulerSaveBtn" class="s-btn-primary" onclick="saveSchedulerConfig()">Save Configuration</button>
-  <button class="s-btn" onclick="refreshWatchlists()" style="font-size:11px;">&#x1F504; Refresh Watchlists</button>
-  <span id="schedulerSaveStatus" class="sched-save-status"></span>
-  <span id="wlRefreshStatus" style="font-size:11px;color:#555;font-family:'Consolas',monospace;"></span>
-</div>
-
-<!-- Architecture Details (collapsible) -->
+<!-- 5. Architecture Details (collapsible) -->
 <details class="arch-details">
   <summary>Architecture Details</summary>
   <div class="arch-body">
@@ -637,6 +648,74 @@ fetch('/api/scheduler/ticker-backfill-status').then(function(r){return r.json();
     pollTickerBackfill();
   }
 });
+
+// ---------- All Tickers Backfill ----------
+var _allTickersList=[];
+
+function loadAllTickerCount(){
+  fetch('/api/scheduler/all-tickers').then(function(r){return r.json();}).then(function(d){
+    _allTickersList=d.tickers||[];
+    document.getElementById('allTickerCount').textContent=d.count+' unique tickers across all watchlists';
+  }).catch(function(){
+    document.getElementById('allTickerCount').textContent='Failed to load';
+  });
+}
+
+function triggerAllTickersBackfill(){
+  if(!_allTickersList.length){
+    document.getElementById('allBackfillStatus').textContent='No tickers loaded';
+    document.getElementById('allBackfillStatus').style.color='#ef4444';
+    return;
+  }
+  var btn=document.getElementById('allBackfillBtn');
+  var st=document.getElementById('allBackfillStatus');
+  btn.disabled=true;
+  st.textContent='Starting '+_allTickersList.length+' tickers...';st.style.color='#f59e0b';
+  fetch('/api/scheduler/trigger-ticker',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ticker:_allTickersList.join(',')})
+  }).then(function(r){return r.json();}).then(function(r){
+    if(!r.ok){
+      st.textContent=r.error||'Failed';st.style.color='#ef4444';
+      btn.disabled=false;
+      return;
+    }
+    // Also populate the custom backfill ticker field + poll from there
+    document.getElementById('backfillTicker').value='ALL ('+_allTickersList.length+')';
+    document.getElementById('backfillBtn').disabled=true;
+    pollAllTickersBackfill();
+  }).catch(function(e){
+    st.textContent='Error: '+e;st.style.color='#ef4444';
+    btn.disabled=false;
+  });
+}
+
+function pollAllTickersBackfill(){
+  var _allPollTimer=setInterval(function(){
+    fetch('/api/scheduler/ticker-backfill-status').then(function(r){return r.json();}).then(function(s){
+      var st=document.getElementById('allBackfillStatus');
+      var st2=document.getElementById('backfillStatus');
+      var btn=document.getElementById('allBackfillBtn');
+      var btn2=document.getElementById('backfillBtn');
+      var prog=s.total>1?(' ('+s.completed+'/'+s.total+')'):'';
+      if(s.phase==='collecting'){
+        st.textContent='Collecting '+s.ticker+'...'+prog;st.style.color='#f59e0b';
+        st2.textContent=st.textContent;st2.style.color='#f59e0b';
+      }else if(s.phase==='computing'){
+        st.textContent='Computing '+s.ticker+'...'+prog;st.style.color='#f59e0b';
+        st2.textContent=st.textContent;st2.style.color='#f59e0b';
+      }else if(s.phase==='done'||s.phase==='done_with_errors'||s.phase==='error'){
+        st.textContent=s.message;
+        st.style.color=s.phase==='done'?'#22c55e':s.phase==='error'?'#ef4444':'#f59e0b';
+        st2.textContent=s.message;st2.style.color=st.style.color;
+        btn.disabled=false;btn2.disabled=false;
+        clearInterval(_allPollTimer);
+      }
+      if(!s.running){btn.disabled=false;btn2.disabled=false;}
+    });
+  },2000);
+}
+
+loadAllTickerCount();
 
 // ---------- Live Daemon (unified) ----------
 var _daemonPollTimer=null;

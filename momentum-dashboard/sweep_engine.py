@@ -1662,8 +1662,8 @@ def detect_clusterbombs(
     conn.commit()
     conn.close()
 
-    print(f"Clusterbomb detection: {len(events)} events found "
-          f"({sum(1 for e in events if e['is_rare'])} rare)")
+    print(f"[SWEEP] Clusterbombs: {len(events)} events "
+          f"({sum(1 for e in events if e['is_rare'])} rare)", flush=True)
     return events
 
 
@@ -1907,7 +1907,7 @@ def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None,
     conn.commit()
     conn.close()
 
-    print(f"Rare sweep detection: {len(events)} rare sweep days found")
+    print(f"[SWEEP] Rare sweeps: {len(events)} days found", flush=True)
     return events
 
 
@@ -2027,9 +2027,8 @@ def detect_monster_sweeps(monster_min_notional=DEFAULT_MONSTER_MIN_NOTIONAL, tic
     conn.commit()
     conn.close()
 
-    print(f"Monster sweep detection: {updated} existing events flagged, "
-          f"{inserted} new monster-only events inserted "
-          f"(threshold: ${monster_min_notional:,.0f})")
+    print(f"[SWEEP] Monsters: {updated} flagged, {inserted} new "
+          f"(threshold: ${monster_min_notional:,.0f})", flush=True)
     return events
 
 
@@ -2077,7 +2076,7 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
     outer_where_sql = (" AND " + " AND ".join(outer_where)) if outer_where else ""
 
     # Compute per-ticker rankings using window function, then aggregate to day level
-    print(f"Ranked sweep detection: ranking trades (limit top {rank_limit})...", flush=True)
+    print(f"[SWEEP] Ranked sweeps: ranking trades (top {rank_limit})...", flush=True)
     import time as _time
     _t0 = _time.time()
     rows = c.execute(f"""
@@ -2101,7 +2100,7 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
         ORDER BY best_rank
     """, cte_params + [rank_limit] + outer_params).fetchall()
     _tickers_in_result = len(set(r["ticker"] for r in rows))
-    print(f"Ranked sweep detection: query done in {_time.time()-_t0:.1f}s — "
+    print(f"  [SWEEP] query {_time.time()-_t0:.1f}s — "
           f"{len(rows)} day-events across {_tickers_in_result} tickers", flush=True)
 
     # Filter ETF tickers
@@ -2120,7 +2119,7 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
     _total_rows = len(rows)
     for _i, row in enumerate(rows):
         if _i > 0 and _i % 500 == 0:
-            print(f"  Ranked sweep detection: processing {_i}/{_total_rows} "
+            print(f"  [SWEEP] processing {_i}/{_total_rows} "
                   f"({updated} updated, {inserted} inserted)...", flush=True)
         ticker = row["ticker"]
         event_date = row["trade_date"]
@@ -2213,15 +2212,14 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
                     nulled += 1
 
         if nulled or deleted:
-            print(f"  Ranked sweep cleanup: {nulled} stale ranks nulled, "
-                  f"{deleted} orphan ranked_sweep events deleted", flush=True)
+            print(f"  [SWEEP] cleanup: {nulled} stale ranks nulled, "
+                  f"{deleted} orphan events deleted", flush=True)
 
     conn.commit()
     conn.close()
 
-    print(f"Ranked sweep detection: {updated} existing events ranked, "
-          f"{inserted} new ranked-only events inserted "
-          f"(rank limit: top {rank_limit})")
+    print(f"[SWEEP] Ranked sweeps: {updated} ranked, {inserted} new "
+          f"(top {rank_limit})", flush=True)
     return {"updated": updated, "inserted": inserted}
 
 
@@ -2266,7 +2264,7 @@ def detect_ranked_daily(rank_limit=100, min_sweeps=2, tickers=None,
         outer_params.append(date_to)
     outer_where_sql = " AND ".join(outer_where)
 
-    print(f"Ranked daily detection: ranking days (limit top {rank_limit}, "
+    print(f"[SWEEP] Ranked daily: ranking days (top {rank_limit}, "
           f"min_sweeps={min_sweeps})...", flush=True)
     import time as _time
     _t0 = _time.time()
@@ -2296,7 +2294,7 @@ def detect_ranked_daily(rank_limit=100, min_sweeps=2, tickers=None,
             rows = [r for r in rows if r["ticker"] not in etf_tickers]
 
     _tickers_in_result = len(set(r["ticker"] for r in rows))
-    print(f"Ranked daily detection: query done in {_time.time()-_t0:.1f}s — "
+    print(f"  [SWEEP] query {_time.time()-_t0:.1f}s — "
           f"{len(rows)} day-events across {_tickers_in_result} tickers", flush=True)
 
     updated = 0
@@ -2306,7 +2304,7 @@ def detect_ranked_daily(rank_limit=100, min_sweeps=2, tickers=None,
 
     for _i, row in enumerate(rows):
         if _i > 0 and _i % 500 == 0:
-            print(f"  Ranked daily detection: processing {_i}/{_total_rows} "
+            print(f"  [SWEEP] processing {_i}/{_total_rows} "
                   f"({updated} updated, {inserted} inserted)...", flush=True)
         ticker = row["ticker"]
         event_date = row["trade_date"]
@@ -2388,15 +2386,14 @@ def detect_ranked_daily(rank_limit=100, min_sweeps=2, tickers=None,
                     nulled += 1
 
         if nulled or deleted:
-            print(f"  Ranked daily cleanup: {nulled} stale ranks nulled, "
-                  f"{deleted} orphan ranked_daily events deleted", flush=True)
+            print(f"  [SWEEP] cleanup: {nulled} stale ranks nulled, "
+                  f"{deleted} orphan events deleted", flush=True)
 
     conn.commit()
     conn.close()
 
-    print(f"Ranked daily detection: {updated} existing events ranked, "
-          f"{inserted} new daily-only events inserted "
-          f"(rank limit: top {rank_limit}, min_sweeps: {min_sweeps})")
+    print(f"[SWEEP] Ranked daily: {updated} ranked, {inserted} new "
+          f"(top {rank_limit}, min_sweeps: {min_sweeps})", flush=True)
     return {"updated": updated, "inserted": inserted}
 
 
@@ -2446,6 +2443,7 @@ def detect_today():
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # --- Stock detection (exclude ETFs) ---
+    print("[SWEEP] ── Stock detection ──", flush=True)
     cfg = full_cfg.get("stock", {})
     cbs = detect_clusterbombs(
         min_sweeps=cfg.get("min_sweeps", DEFAULT_CB_MIN_SWEEPS),
@@ -2469,6 +2467,8 @@ def detect_today():
     )
 
     # --- ETF detection (ETFs only — daily ranking + single ranking + rare) ---
+    print("", flush=True)
+    print("[SWEEP] ── ETF detection ──", flush=True)
     ecfg = full_cfg.get("etf", {})
     etf_daily = detect_ranked_daily(
         rank_limit=100,

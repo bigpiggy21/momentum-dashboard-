@@ -836,6 +836,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_scheduler_status()
         elif path == "/api/scheduler/ticker-backfill-status":
             self.serve_ticker_backfill_status()
+        elif path == "/api/scheduler/all-tickers":
+            self.serve_all_tickers()
         elif path == "/api/daemon/status":
             self.serve_daemon_status()
         elif path == "/api/scheduler/live-price/status":
@@ -1994,6 +1996,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "message": _ticker_backfill["message"],
                 "errors": _ticker_backfill.get("errors", []),
             })
+
+    def serve_all_tickers(self):
+        """GET /api/scheduler/all-tickers — unique tickers across all watchlists."""
+        reload_watchlists()
+        seen = set()
+        tickers = []
+        for _name, groups in WATCHLISTS.items():
+            for _group_name, group_tickers in groups:
+                for display, api_ticker, asset_type in group_tickers:
+                    if display not in seen:
+                        seen.add(display)
+                        tickers.append(display)
+        tickers.sort()
+        self.send_json({"tickers": tickers, "count": len(tickers)})
 
     # ── TradingView UDF Datafeed ──────────────────────────────────────
 
