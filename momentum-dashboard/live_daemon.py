@@ -92,7 +92,7 @@ def load_live_price_config():
         "flush_enabled": True,
         "flush_interval_minutes": DEFAULT_FLUSH_INTERVAL,
         "flush_on_close": True,
-        "flush_watchlists": ["Leverage"],
+        "flush_watchlists": ["Priority"],
     }
     try:
         with open(SCHEDULER_CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -135,7 +135,7 @@ def load_eod_compute_config():
         "hvc": {
             "enabled": True,
             "delay_minutes": 30,
-            "watchlists": ["Leverage"],
+            "watchlists": ["Priority"],
             "workers": 8,
         },
     }
@@ -180,7 +180,7 @@ def load_indicator_compute_config():
     defaults = {
         "enabled": True,
         "interval_minutes": 30,
-        "watchlists": ["Leverage"],
+        "watchlists": ["Priority"],
         "workers": 8,
     }
     try:
@@ -421,7 +421,7 @@ class UnifiedLiveDaemon:
         self._flush_enabled = pcfg.get("flush_enabled", True)
         self._flush_interval = pcfg.get("flush_interval_minutes", DEFAULT_FLUSH_INTERVAL)
         self._flush_on_close = pcfg.get("flush_on_close", True)
-        self._flush_watchlists = pcfg.get("flush_watchlists", ["Leverage"])
+        self._flush_watchlists = pcfg.get("flush_watchlists", ["Priority"])
         # Sweep settings
         self._min_notional = scfg.get("min_notional", MIN_SWEEP_NOTIONAL)
         self._detection_interval = scfg.get("detection_interval_minutes", DEFAULT_DETECTION_INTERVAL)
@@ -1046,7 +1046,7 @@ class UnifiedLiveDaemon:
         """Build set of safe-name tickers from flush_watchlists config."""
         try:
             from config import _load_watchlists
-            wl_names = self._flush_watchlists or ["Leverage"]
+            wl_names = self._flush_watchlists or ["Priority"]
             all_wl = _load_watchlists()
             tickers = set()
             for wl_name in wl_names:
@@ -1416,7 +1416,7 @@ class UnifiedLiveDaemon:
     def _run_indicator_compute_subprocess(self):
         """Run engine.py as a subprocess for indicator computation."""
         cfg = self._indicator_compute_config
-        watchlists = cfg.get("watchlists", ["Leverage"])
+        watchlists = cfg.get("watchlists", ["Priority"])
         workers = cfg.get("workers", 8)
 
         engine_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -1582,7 +1582,7 @@ class UnifiedLiveDaemon:
 
     def _run_eod_hvc(self, hvc_cfg):
         """Run HVC/indicator computation as subprocess (matches RS pattern)."""
-        watchlists = hvc_cfg.get("watchlists", ["Leverage"])
+        watchlists = hvc_cfg.get("watchlists", ["Priority"])
         workers = hvc_cfg.get("workers", 8)
         today_str = datetime.now(timezone.utc).date().isoformat()
 

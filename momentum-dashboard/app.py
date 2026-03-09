@@ -310,7 +310,7 @@ def _refresh_portfolio_prices():
             }
         _portfolio_prices_cache = {"prices": prices, "open_raw": open_raw, "ts": time.time()}
     except Exception as e:
-        print(f"⚠️  Portfolio price refresh error: {e}", flush=True)
+        print(f"[PORTFOLIO] Price refresh error: {e}", flush=True)
 
     return _portfolio_prices_cache
 
@@ -342,7 +342,7 @@ def _get_portfolio_ticker_names():
 
 def _portfolio_snapshot_thread():
     """Background thread: records a portfolio snapshot every 5 min + keeps prices warm."""
-    print("📊 Portfolio snapshot thread started (5-min interval)")
+    print("[PORTFOLIO] Snapshot thread started (5-min interval)", flush=True)
     while True:
         try:
             time.sleep(300)  # 5 minutes
@@ -363,14 +363,14 @@ def _portfolio_snapshot_thread():
             is_close = (uk_hour == 16 and now_utc.minute >= 20) or (uk_hour == 17 and now_utc.minute <= 10)
             _record_portfolio_snapshot(total, is_close=is_close)
             if is_close:
-                print(f"📊 Portfolio snapshot: £{total:.0f} (close)", flush=True)
+                print(f"[PORTFOLIO] Snapshot: £{total:.0f} (close)", flush=True)
             # Keep prices warm so next page load has fresh gains
             try:
                 _refresh_portfolio_prices()
             except Exception:
                 pass
         except Exception as e:
-            print(f"⚠️  Portfolio snapshot error: {e}", flush=True)
+            print(f"[PORTFOLIO] Snapshot error: {e}", flush=True)
 
 
 def _portfolio_trade_sync_thread():
@@ -390,10 +390,10 @@ def _portfolio_trade_sync_thread():
         conn.close()
         full = (count == 0)
         new, total = _sync_portfolio_trades(full=full)
-        print(f"📊 Trade sync ({'backfill' if full else 'incremental'}): "
+        print(f"[PORTFOLIO] Trade sync ({'backfill' if full else 'incremental'}): "
               f"+{new} new ({total} total)", flush=True)
     except Exception as e:
-        print(f"⚠️  Initial trade sync failed: {e}", flush=True)
+        print(f"[PORTFOLIO] Initial trade sync failed: {e}", flush=True)
 
     # Periodic incremental sync
     while True:
@@ -401,9 +401,9 @@ def _portfolio_trade_sync_thread():
             time.sleep(1800)  # 30 minutes
             new, total = _sync_portfolio_trades(full=False)
             if new > 0:
-                print(f"📊 Trade sync: +{new} new trades ({total} total)", flush=True)
+                print(f"[PORTFOLIO] Trade sync: +{new} new trades ({total} total)", flush=True)
         except Exception as e:
-            print(f"⚠️  Trade sync error: {e}", flush=True)
+            print(f"[PORTFOLIO] Trade sync error: {e}", flush=True)
 
 # ── Daemon watchdog ──────────────────────────────────────────────────────
 _WATCHDOG_INTERVAL = 30         # seconds between health checks
@@ -476,7 +476,7 @@ def _save_fetch_job(tickers, start_date, end_date):
             json.dump({"tickers": tickers, "start_date": start_date,
                         "end_date": end_date}, f)
     except Exception as e:
-        print(f"Warning: could not save fetch job: {e}")
+        print(f"[SWEEP] Could not save fetch job: {e}", flush=True)
 
 
 def _clear_fetch_job():
@@ -562,7 +562,7 @@ def reload_watchlists():
         WATCHLISTS.clear()
         WATCHLISTS.update(_load_watchlists())
     except Exception as e:
-        print(f"⚠ Watchlist reload failed: {e}")
+        print(f"[SERVER] Watchlist reload failed: {e}", flush=True)
 
 
 def get_group_for_ticker(ticker):
@@ -604,7 +604,7 @@ def scan_ticker(display_ticker):
     raw_data = fetch_ticker_data(display_ticker, api_ticker, asset_type)
     
     if raw_data["daily"].empty:
-        print(f"  ⏭ {display_ticker}: No data, skipping")
+        print(f"  [SCAN] {display_ticker}: No data, skipping", flush=True)
         return None
     
     # Re-check fingerprint after fetch (data may have changed from API)
@@ -616,10 +616,10 @@ def scan_ticker(display_ticker):
         adj_cached = check_scan_cache(display_ticker, 1, data_hash, INDICATOR_VERSION)
         
         if unadj_cached and adj_cached:
-            print(f"  ⏭ {display_ticker}: Data unchanged after fetch, skipping")
+            print(f"  [SCAN] {display_ticker}: Data unchanged, skipping", flush=True)
             return "skipped"
     
-    print(f"  🔄 {display_ticker}: Computing indicators...")
+    print(f"  [SCAN] {display_ticker}: Computing indicators...", flush=True)
     
     # 3. Build timeframe data (unadjusted)
     tf_data = build_timeframe_data(raw_data)
@@ -631,8 +631,8 @@ def scan_ticker(display_ticker):
     # 5. Detect changes against previous snapshot (unadjusted)
     events = detect_changes(display_ticker, results, div_adj=0)
     if events:
-        print(f"  ⚡ {len(events)} changes: ", end="")
-        print(", ".join(f"[{e['timeframe']}] {e['description']}" for e in events[:3]))
+        print(f"  [SCAN] {len(events)} changes: ", end="")
+        print(", ".join(f"[{e['timeframe']}] {e['description']}" for e in events[:3]), flush=True)
         if len(events) > 3:
             print(f"     ... and {len(events)-3} more")
     
@@ -654,14 +654,14 @@ def scan_ticker(display_ticker):
                 save_snapshot(display_ticker, results, div_adj=1)
         except Exception as e:
             save_snapshot(display_ticker, results, div_adj=1)
-            print(f"  ⚠ Dividend adjustment failed: {e}")
+            print(f"  [SCAN] Dividend adjustment failed: {e}", flush=True)
     else:
         save_snapshot(display_ticker, results, div_adj=1)
     
     if data_hash:
         update_scan_cache(display_ticker, 1, data_hash, INDICATOR_VERSION)
     
-    print(f"  ✓ {display_ticker}: ${price}")
+    print(f"  [SCAN] {display_ticker}: ${price}", flush=True)
     return results
 
 
@@ -678,10 +678,8 @@ def scan_all(tickers=None):
                         seen.add(display)
                         tickers.append(display)
     
-    print(f"\n{'#'*60}")
-    print(f"MOMENTUM DASHBOARD SCAN — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"Scanning {len(tickers)} tickers")
-    print(f"{'#'*60}")
+    print(f"\n[SCAN] === MOMENTUM DASHBOARD SCAN — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===", flush=True)
+    print(f"[SCAN] Scanning {len(tickers)} tickers", flush=True)
     
     all_results = {}
     skipped = 0
@@ -693,22 +691,21 @@ def scan_all(tickers=None):
             elif result:
                 all_results[ticker] = result
         except Exception as e:
-            print(f"  ❌ ERROR scanning {ticker}: {e}")
+            print(f"  [SCAN] ERROR {ticker}: {e}", flush=True)
             import traceback
             traceback.print_exc()
     
-    print(f"\n{'='*60}")
     if skipped:
-        print(f"Scan complete. {len(all_results)} computed, {skipped} skipped (unchanged), {len(tickers)} total.")
+        print(f"[SCAN] Complete: {len(all_results)} computed, {skipped} skipped, {len(tickers)} total.", flush=True)
     else:
-        print(f"Scan complete. {len(all_results)}/{len(tickers)} tickers processed.")
-    
+        print(f"[SCAN] Complete: {len(all_results)}/{len(tickers)} tickers processed.", flush=True)
+
     # Summary of recent events
     events = get_recent_events(limit=50, since=(datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat())
     if events:
-        print(f"\n⚡ Recent changes ({len(events)}):")
+        print(f"[SCAN] Recent changes ({len(events)}):", flush=True)
         for e in events:
-            print(f"  {e['timestamp'][:19]} | {e['ticker']:6s} | {e['timeframe']:4s} | {e['description']}")
+            print(f"  {e['timestamp'][:19]} | {e['ticker']:6s} | {e['timeframe']:4s} | {e['description']}", flush=True)
     
     return all_results
 
@@ -1019,7 +1016,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             state = get_latest_full_state(div_adj=div_adj, tickers=tickers)
             self.send_json(state)
         except Exception as e:
-            print(f"  ❌ serve_state error: {e}")
+            print(f"[SERVER] serve_state error: {e}", flush=True)
             import traceback
             traceback.print_exc()
             self.send_json({})
@@ -1195,7 +1192,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 wl_names.append(name)
                 for _, tickers in groups:
                     total_tickers += len(tickers)
-            print(f"🔄 Watchlists refreshed: {len(wl_names)} watchlists, {total_tickers} tickers", flush=True)
+            print(f"[SERVER] Watchlists refreshed: {len(wl_names)} watchlists, {total_tickers} tickers", flush=True)
             self.send_json({"ok": True, "watchlists": len(wl_names), "tickers": total_tickers,
                             "names": wl_names})
         except Exception as e:
@@ -3461,7 +3458,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_json({
                 "running": False, "connected": False,
                 "flush_enabled": _pcfg.get("flush_enabled", True),
-                "flush_watchlists": _pcfg.get("flush_watchlists", ["Leverage"]),
+                "flush_watchlists": _pcfg.get("flush_watchlists", ["Priority"]),
                 "price": {"messages_per_sec": 0, "tickers_active": 0,
                            "messages_received": 0, "last_flush_at": None},
                 "sweep": {"trades_per_sec": 0, "sweeps_today": 0,
@@ -3483,7 +3480,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             "error": full["error"],
             "watchdog_active": not _daemon_intentionally_stopped,
             "flush_enabled": full.get("flush_enabled", True),
-            "flush_watchlists": full.get("flush_watchlists", ["Leverage"]),
+            "flush_watchlists": full.get("flush_watchlists", ["Priority"]),
             "price": {
                 "messages_per_sec": full["price_messages_per_sec"],
                 "tickers_active": full["price_tickers_active"],
@@ -3683,7 +3680,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         if compute_type in ("hvc", "both"):
             hvc_cfg = cfg.get("hvc", {})
-            watchlists = hvc_cfg.get("watchlists", ["Leverage"])
+            watchlists = hvc_cfg.get("watchlists", ["Priority"])
             workers = hvc_cfg.get("workers", 8)
             print(f"[EOD] Direct: Starting HVC computation for {watchlists}...", flush=True)
             try:
@@ -3763,7 +3760,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
-            watchlists = body.get("watchlists", ["Leverage"])
+            watchlists = body.get("watchlists", ["Priority"])
             workers = body.get("workers", 8)
 
             def _run():
@@ -4092,7 +4089,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 try:
                     _sync_portfolio_trades(full=True)
                 except Exception as e:
-                    print(f"⚠️  Initial trade sync failed: {e}", flush=True)
+                    print(f"[PORTFOLIO] Initial trade sync failed: {e}", flush=True)
 
             # Get current prices (cached, 2-min TTL, single API call)
             pc = _refresh_portfolio_prices()
@@ -4382,7 +4379,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         """POST /api/sweeps/rebuild-cache — rebuild materialised stats + daily summary."""
         try:
             init_sweep_db()
-            print("Rebuilding stats cache + daily summary...", flush=True)
+            print("[SWEEP] Rebuilding stats cache + daily summary...", flush=True)
             rebuild_stats_cache()
             rebuild_daily_summary()
             self.send_json({"ok": True, "message": "Stats cache and daily summary rebuilt."})
@@ -4524,12 +4521,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             saved_filenames = set()
 
             for wl in wl_data:
-                # Derive filename: "Leverage" -> "leverage_watchlist.py"
+                # Derive filename: "Priority" -> "priority_watchlist.py"
                 raw_name = _re.sub(r'[^a-z0-9_]', '', wl['name'].lower().replace(' ', '_').replace('-', '_'))
                 fname = f"{raw_name}_watchlist.py"
                 saved_filenames.add(fname)
 
-                # Derive variable name: "leverage" -> "LEVERAGE_GROUPS"
+                # Derive variable name: "priority" -> "PRIORITY_GROUPS"
                 var_name = raw_name.upper() + "_GROUPS"
 
                 lines = []
@@ -5016,16 +5013,16 @@ def start_server(port=8080, public_port=8081):
         pub_thread = threading.Thread(target=pub_server.serve_forever, daemon=True,
                                       name="public-portfolio")
         pub_thread.start()
-        print(f"📊 Public portfolio server on port {public_port}")
-        print(f"   Public:    http://89.167.110.85:{public_port}")
+        print(f"[SERVER] Public portfolio on port {public_port}", flush=True)
+        print(f"[SERVER]   http://89.167.110.85:{public_port}", flush=True)
     except Exception as e:
-        print(f"⚠️  Public portfolio server failed: {e}")
+        print(f"[SERVER] Public portfolio failed: {e}", flush=True)
 
     server = ThreadingHTTPServer(("0.0.0.0", port), DashboardHandler)
-    print(f"\nDashboard running on port {port}")
-    print(f"   Local:     http://localhost:{port}")
-    print(f"   Tailscale: http://100.97.33.3:{port}")
-    print(f"   Press Ctrl+C to stop\n")
+    print(f"\n[SERVER] Dashboard running on port {port}", flush=True)
+    print(f"[SERVER]   Local:     http://localhost:{port}", flush=True)
+    print(f"[SERVER]   Tailscale: http://100.97.33.3:{port}", flush=True)
+    print(f"[SERVER]   Press Ctrl+C to stop\n", flush=True)
     server.serve_forever()
 
 
@@ -5033,11 +5030,11 @@ def scheduled_scan(tickers, interval):
     """Legacy scan loop — kept for --ticker / --prototype single-ticker scanning."""
     while True:
         time.sleep(interval)
-        print(f"\n🔄 Scheduled scan at {datetime.now().strftime('%H:%M:%S')}")
+        print(f"\n[SCAN] Scheduled scan at {datetime.now().strftime('%H:%M:%S')}", flush=True)
         try:
             scan_all(tickers)
         except Exception as e:
-            print(f"❌ Scheduled scan error: {e}")
+            print(f"[SCAN] Scheduled scan error: {e}", flush=True)
 
 
 # ============================================================
@@ -5060,7 +5057,7 @@ def main():
     
     # Check API key
     if MASSIVE_API_KEY == "YOUR_API_KEY_HERE" and not args.serve_only:
-        print("❌ Please set your Massive.com API key in config.py")
+        print("[SERVER] Please set your Massive.com API key in config.py", flush=True)
         sys.exit(1)
     
     # Initialize database
@@ -5072,13 +5069,13 @@ def main():
     try:
         refresh_etf_cache()
     except Exception as _e:
-        print(f"⚠️  ETF cache refresh failed: {_e}")
+        print(f"[SERVER] ETF cache refresh failed: {_e}", flush=True)
 
     # Refresh ticker name cache (skips if < 7 days old)
     try:
         refresh_ticker_names()
     except Exception as _e:
-        print(f"⚠️  Ticker names refresh failed: {_e}")
+        print(f"[SERVER] Ticker names refresh failed: {_e}", flush=True)
 
     # Clear cache if requested
     if args.clear_cache:
@@ -5101,12 +5098,12 @@ def main():
             _has = _c.execute("SELECT 1 FROM sweep_daily_summary LIMIT 1").fetchone()
             _c.close()
             if not _has:
-                print("📊 Building materialised caches (first run)...")
+                print("[SERVER] Building materialised caches (first run)...", flush=True)
                 rebuild_stats_cache()
                 rebuild_daily_summary()
-                print("📊 Done.")
+                print("[SERVER] Done.", flush=True)
         except Exception as _e:
-            print(f"⚠️  Cache rebuild skipped: {_e}")
+            print(f"[SERVER] Cache rebuild skipped: {_e}", flush=True)
 
         # Auto-start unified live daemon if either price or sweep auto_start is set
         try:
@@ -5120,9 +5117,9 @@ def main():
                     price_config=_price_cfg, sweep_config=_sweep_cfg)
                 _live_daemon.start()
                 _daemon_intentionally_stopped = False  # watchdog should protect it
-                print("⚡ Unified live daemon auto-started (price + sweeps)")
+                print("[SERVER] Live daemon auto-started (price + sweeps)", flush=True)
         except Exception as _e:
-            print(f"⚠️  Live daemon auto-start skipped: {_e}")
+            print(f"[SERVER] Live daemon auto-start skipped: {_e}", flush=True)
 
         # Start daemon watchdog — auto-restarts the daemon if it crashes
         _wd = threading.Thread(target=_daemon_watchdog, daemon=True,
@@ -5139,7 +5136,7 @@ def main():
                                     name="portfolio-trade-sync")
             _pts.start()
         except Exception as _e:
-            print(f"⚠️  Portfolio threads failed to start: {_e}")
+            print(f"[SERVER] Portfolio threads failed to start: {_e}", flush=True)
 
         start_server(args.port, args.public_port)
         return
@@ -5163,7 +5160,7 @@ def main():
                         seen.add(display)
                         tickers.append(display)
         wl_label = ", ".join(args.watchlist) if args.watchlist else f"{len(WATCHLISTS)} watchlists"
-        print(f"📋 Scanning {len(tickers)} unique tickers from {wl_label}")
+        print(f"[SCAN] Scanning {len(tickers)} unique tickers from {wl_label}", flush=True)
     
     # Run initial scan
     scan_all(tickers)

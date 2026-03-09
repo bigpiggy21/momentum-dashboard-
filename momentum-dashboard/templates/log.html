@@ -127,7 +127,7 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 <!-- Row 2: Ticker + Watchlist + Groups + Refresh -->
 <div class="header-row2">
 <input type="text" id="tickerFilter" class="ticker-input" placeholder="Ticker..." maxlength="10" spellcheck="false" oninput="onTickerInput()">
-<div class="dd-wrap"><div class="dd-btn" onclick="toggleDD('wlMenu')">Watchlist : <span class="active-name" id="wlName">Leverage</span> &#x25BE;</div><div class="dd-menu" id="wlMenu"></div></div>
+<div class="dd-wrap"><div class="dd-btn" onclick="toggleDD('wlMenu')">Watchlist : <span class="active-name" id="wlName">Priority</span> &#x25BE;</div><div class="dd-menu" id="wlMenu"></div></div>
 <div class="dd-wrap"><div class="dd-btn" onclick="toggleDD('grpMenu')">Groups &#x25BE;</div><div class="dd-menu" id="grpMenu"></div></div>
 <button id="refreshBtn" onclick="fetchEvents()" class="row2-btn"><span id="refreshIcon">&#x21BB;</span> Refresh</button>
 </div>
@@ -244,7 +244,7 @@ var activeTFs=new Set(ALL_TFS);
 var tickerFilter='';
 var savedFilters={};
 var currentFilterName='';
-var activeWatchlist='Leverage';
+var activeWatchlist='Priority';
 var watchlists=[];
 var groups=[];
 var visibleGroups=new Set();

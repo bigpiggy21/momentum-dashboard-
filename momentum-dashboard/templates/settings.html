@@ -14,13 +14,35 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 ::-webkit-scrollbar-thumb:hover{background:#3a3a4a;}
 *{scrollbar-width:thin;scrollbar-color:#2a2a3a #0a0a10;}
 
+/* === Shared utility classes === */
+.s-section{margin-bottom:20px;padding:16px;background:#0e0e16;border:1px solid #1e1e2e;border-radius:8px;}
+.s-btn{background:#1e293b;color:#aaa;border:1px solid #334155;padding:4px 14px;border-radius:4px;font-size:11px;cursor:pointer;font-weight:600;}
+.s-btn:hover{background:#334155;color:#fff;}
+.s-btn:disabled{opacity:0.4;cursor:default;}
+.s-btn-primary{background:#f59e0b;color:#000;border:none;padding:8px 24px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;}
+.s-btn-primary:hover{background:#d97706;}
+.s-toggle{padding:4px 14px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid #334155;background:#1e293b;color:#aaa;}
+.s-toggle:hover{background:#334155;color:#fff;}
+.s-toggle.active{background:#22c55e;color:#000;border-color:#22c55e;}
+.s-toggle.active:hover{background:#16a34a;}
+.s-chip{padding:3px 10px;border-radius:12px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid #2a2a3a;background:#14141e;color:#666;transition:all 0.15s;user-select:none;}
+.s-chip:hover{border-color:#444;color:#aaa;}
+.s-chip.active{background:#f59e0b22;border-color:#f59e0b;color:#f59e0b;}
+.s-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.s-subsection{border-top:1px solid #1a1a24;padding-top:8px;margin-top:8px;}
+.s-form-row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
+.s-form-row label{font-size:11px;color:#666;display:flex;align-items:center;gap:4px;}
+.s-form-row input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;}
+.s-form-row input[type="checkbox"]{accent-color:#f59e0b;}
+.s-stats{display:flex;gap:16px;font-size:11px;color:#666;margin-bottom:10px;}
+.s-stats .val{color:#ccc;font-weight:600;}
 
 /* Settings content area */
 .settings-container{max-width:900px;margin:30px auto;padding:0 24px;}
 .settings-container h2{font-size:20px;color:#fff;margin-bottom:20px;display:flex;align-items:center;gap:8px;}
 
 /* Scheduler section */
-.sched-global{display:flex;align-items:center;gap:12px;margin-bottom:20px;padding:16px;background:#0e0e16;border:1px solid #1e1e2e;border-radius:8px;}
+.sched-global{display:flex;align-items:center;gap:12px;}
 .sched-toggle{padding:6px 20px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid #334155;background:#1e293b;color:#888;letter-spacing:0.5px;}
 .sched-label{font-size:13px;color:#888;}
 .sched-max-label{font-size:11px;color:#555;}
@@ -37,27 +59,19 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 .sched-table input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;}
 .sched-table input[type="checkbox"]{accent-color:#f59e0b;}
 .sched-table select{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 6px;border-radius:4px;font-size:11px;}
-.sched-table .run-btn{background:#1e293b;color:#aaa;border:1px solid #334155;padding:4px 12px;border-radius:4px;font-size:10px;cursor:pointer;font-weight:600;}
-.sched-table .run-btn:hover{background:#334155;color:#fff;}
 
-/* Save bar */
+/* Save bars */
 .sched-save-bar{margin-top:16px;display:flex;gap:10px;align-items:center;}
-.sched-save-btn{background:#f59e0b;color:#000;border:none;padding:8px 24px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;}
-.sched-save-btn:hover{background:#d97706;}
 .sched-save-status{font-size:11px;color:#555;}
 
 /* Single-ticker backfill */
-.ticker-backfill{display:flex;align-items:center;gap:10px;margin-bottom:20px;padding:14px 16px;background:#0e0e16;border:1px solid #1e1e2e;border-radius:8px;}
+.ticker-backfill{display:flex;align-items:center;gap:10px;}
 .ticker-backfill label{font-size:12px;color:#888;white-space:nowrap;}
 .ticker-backfill input[type="text"]{width:90px;background:#14141e;border:1px solid #2a2a3a;color:#f0f0f0;padding:5px 8px;border-radius:4px;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;}
 .ticker-backfill input[type="text"]::placeholder{color:#444;text-transform:none;letter-spacing:0;}
-.backfill-btn{background:#1e293b;color:#aaa;border:1px solid #334155;padding:5px 16px;border-radius:4px;font-size:11px;cursor:pointer;font-weight:600;}
-.backfill-btn:hover{background:#334155;color:#fff;}
-.backfill-btn:disabled{opacity:0.4;cursor:default;}
 .backfill-status{font-size:11px;color:#555;}
 
-/* Live Price Feed section */
-.live-price-section{margin-bottom:20px;padding:16px;background:#0e0e16;border:1px solid #1e1e2e;border-radius:8px;}
+/* Live Daemon */
 .live-price-header{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
 .live-price-header h3{font-size:13px;color:#ccc;margin:0;display:flex;align-items:center;gap:6px;}
 .live-price-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
@@ -67,49 +81,16 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 .live-price-dot.error{background:#ef4444;}
 @keyframes lpPulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
 .live-price-status-text{font-size:11px;color:#666;margin-left:auto;}
-.live-price-toggle{padding:4px 14px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid #334155;background:#1e293b;color:#aaa;}
-.live-price-toggle:hover{background:#334155;color:#fff;}
-.live-price-toggle.active{background:#22c55e;color:#000;border-color:#22c55e;}
-.live-price-toggle.active:hover{background:#16a34a;}
-.live-price-stats{display:flex;gap:16px;font-size:11px;color:#666;margin-bottom:10px;}
-.live-price-stats .val{color:#ccc;font-weight:600;}
-.live-price-settings{border-top:1px solid #1a1a24;padding-top:10px;margin-top:10px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
-.live-price-settings label{font-size:11px;color:#666;display:flex;align-items:center;gap:4px;}
-.live-price-settings input[type="number"]{width:44px;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;}
-.live-price-settings input[type="checkbox"]{accent-color:#f59e0b;}
-.live-price-save{padding:4px 14px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid #334155;background:#1e293b;color:#aaa;margin-left:auto;}
-.live-price-save:hover{background:#334155;color:#fff;}
-.live-price-save-status{font-size:10px;color:#555;}
 
-/* Daemon subsections */
-.daemon-subsection{border-top:1px solid #1a1a24;padding-top:8px;margin-top:8px;}
 .daemon-sub-label{font-size:10px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
-.daemon-sub-settings{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:6px;}
-.daemon-sub-settings label{font-size:11px;color:#666;display:flex;align-items:center;gap:4px;}
-.daemon-sub-settings input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;}
-.daemon-sub-settings input[type="checkbox"]{accent-color:#f59e0b;}
 
-/* Compute watchlist chips */
-.lp-compute-row{border-top:1px solid #1a1a24;padding-top:10px;margin-top:10px;}
-.lp-compute-row .lp-compute-label{font-size:11px;color:#666;margin-bottom:6px;}
-.lp-compute-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
-.lp-compute-chip{padding:3px 10px;border-radius:12px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid #2a2a3a;background:#14141e;color:#666;transition:all 0.15s;user-select:none;}
-.lp-compute-chip:hover{border-color:#444;color:#aaa;}
-.lp-compute-chip.active{background:#f59e0b22;border-color:#f59e0b;color:#f59e0b;}
-.lp-compute-stats{display:flex;gap:14px;font-size:10px;color:#555;}
-.lp-compute-stats .val{color:#999;font-weight:600;}
-
-/* EOD Compute section */
-.eod-section{margin-bottom:20px;padding:16px;background:#0e0e16;border:1px solid #1e1e2e;border-radius:8px;}
+/* EOD Compute */
 .eod-header{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
 .eod-header h3{font-size:13px;color:#ccc;margin:0;display:flex;align-items:center;gap:6px;}
 .eod-table{width:100%;border-collapse:collapse;font-size:12px;}
 .eod-table th{text-align:left;padding:6px 8px;color:#555;font-size:10px;font-weight:700;text-transform:uppercase;border-bottom:1px solid #1a1a24;}
 .eod-table td{padding:8px 8px;border-bottom:1px solid #1a1a24;vertical-align:middle;}
 .eod-table td:first-child{color:#ccc;font-weight:600;width:110px;}
-.eod-toggle{padding:3px 12px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid #334155;background:#1e293b;color:#aaa;}
-.eod-toggle:hover{background:#334155;color:#fff;}
-.eod-toggle.active{background:#22c55e;color:#000;border-color:#22c55e;}
 .eod-table input[type="number"]{width:50px;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;}
 .eod-table select{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 6px;border-radius:4px;font-size:11px;}
 .eod-status{font-size:10px;padding:2px 8px;border-radius:3px;display:inline-block;}
@@ -118,10 +99,6 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 .eod-status.pending{background:#1e293b;color:#555;}
 .eod-status.skipped{background:#f59e0b22;color:#f59e0b;}
 .eod-save-bar{display:flex;gap:8px;align-items:center;margin-top:10px;}
-.eod-chips{display:flex;flex-wrap:wrap;gap:4px;}
-.eod-chip{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid #2a2a3a;background:#14141e;color:#666;user-select:none;transition:all 0.15s;}
-.eod-chip:hover{border-color:#444;color:#aaa;}
-.eod-chip.active{background:#f59e0b22;border-color:#f59e0b;color:#f59e0b;}
 
 /* Architecture details */
 .arch-details{margin-top:24px;border-top:1px solid #2a2a3a;padding-top:16px;}
@@ -151,7 +128,7 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 <h2>&#x2699; Settings</h2>
 
 <!-- Global Toggle -->
-<div class="sched-global">
+<div class="sched-global s-section">
   <span class="sched-label">Scheduler</span>
   <button id="schedulerToggle" class="sched-toggle" onclick="toggleSchedulerEnabled()">ENABLED</button>
   <span class="sched-max-label">Max concurrent:</span>
@@ -164,64 +141,64 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 </div>
 
 <!-- Ticker Backfill -->
-<div class="ticker-backfill">
+<div class="ticker-backfill s-section">
   <label>Tickers:</label>
   <input type="text" id="backfillTicker" placeholder="e.g. NVDA, AAPL, SPY" maxlength="500"
          style="width:200px;" onkeydown="if(event.key==='Enter')triggerTickerBackfill()">
-  <button class="backfill-btn" id="backfillBtn" onclick="triggerTickerBackfill()">Backfill</button>
+  <button class="s-btn" id="backfillBtn" onclick="triggerTickerBackfill()">Backfill</button>
   <span class="backfill-status" id="backfillStatus"></span>
 </div>
 
 <!-- Live Daemon (unified price + sweep) -->
-<div class="live-price-section" id="liveDaemonSection">
+<div class="s-section" id="liveDaemonSection">
   <div class="live-price-header">
     <h3><span class="live-price-dot off" id="daemonDot"></span> Live Daemon</h3>
     <span class="live-price-status-text" id="daemonStatusText">Disconnected</span>
-    <button class="live-price-toggle" id="daemonToggle" onclick="toggleDaemon()">Start</button>
+    <button class="s-toggle" id="daemonToggle" onclick="toggleDaemon()">Start</button>
   </div>
-  <div class="live-price-settings" style="border-top:none;padding-top:0;margin-top:0;">
+  <div class="s-form-row" style="border-top:none;padding-top:0;margin-top:0;">
     <label><input type="checkbox" id="daemonAutoStart"> Auto-start on server launch</label>
   </div>
 
   <!-- Price Feed subsection -->
-  <div class="daemon-subsection">
+  <div class="s-subsection">
     <div class="daemon-sub-label">Price Feed</div>
-    <div class="live-price-stats" id="priceStats" style="display:none;">
+    <div class="s-stats" id="priceStats" style="display:none;">
       <span>Msgs/s: <span class="val" id="prMsgRate">0</span></span>
       <span>Tickers: <span class="val" id="prTickers">0</span></span>
       <span>Total msgs: <span class="val" id="prMsgTotal">0</span></span>
       <span>Last flush: <span class="val" id="prLastFlush">--</span></span>
     </div>
-    <div class="daemon-sub-settings">
+    <div class="s-form-row" style="margin-top:6px;">
       <label><input type="checkbox" id="prFlushEnabled" checked> CSV flush</label>
       <label>Interval: <input type="number" id="prFlushInterval" min="1" max="60" value="2" style="width:44px;"> min</label>
       <label><input type="checkbox" id="prFlushOnClose" checked> Flush on close</label>
     </div>
     <div id="flushWatchlistRow" style="margin-top:6px;">
       <div style="font-size:10px;color:#666;margin-bottom:4px;">Flush watchlists:</div>
-      <div class="lp-compute-chips" id="flushWatchlistChips">
+      <div class="s-chips" id="flushWatchlistChips">
         <span style="font-size:10px;color:#444;">Loading...</span>
       </div>
     </div>
   </div>
 
   <!-- Sweep Capture subsection -->
-  <div class="daemon-subsection">
+  <div class="s-subsection">
     <div class="daemon-sub-label">Sweep Capture</div>
-    <div class="live-price-stats" id="sweepStats" style="display:none;">
+    <div class="s-stats" id="sweepStats" style="display:none;">
       <span>Trades/s: <span class="val" id="swTradesPerSec">0</span></span>
       <span>Sweeps today: <span class="val" id="swSweepsToday">0</span></span>
       <span>Tickers: <span class="val" id="swTickers">0</span></span>
       <span>Written: <span class="val" id="swWritten">0</span></span>
     </div>
-    <div class="live-price-stats" id="sweepEventStats" style="display:none;">
+    <div class="s-stats" id="sweepEventStats" style="display:none;">
       <span>CBs: <span class="val" id="swCBs">0</span></span>
       <span>Rare: <span class="val" id="swRare">0</span></span>
       <span>Monster: <span class="val" id="swMonster">0</span></span>
       <span>Last detection: <span class="val" id="swLastDetect">--</span></span>
     </div>
     <div id="swRecentSweeps" style="display:none;background:#14141e;border:1px solid #1e1e2e;border-radius:4px;padding:6px 8px;margin-top:6px;max-height:160px;overflow-y:auto;font-size:10px;"></div>
-    <div class="daemon-sub-settings">
+    <div class="s-form-row" style="margin-top:6px;">
       <label>Detection interval: <input type="number" id="swDetectionInterval" min="1" max="60" value="5" style="width:44px;"> min</label>
       <label>Min notional: <input type="text" id="swMinNotional" value="500K" style="width:56px;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;"></label>
     </div>
@@ -229,45 +206,45 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 
   <!-- Save button -->
   <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
-    <button class="live-price-save" onclick="saveDaemonConfig()">Save</button>
-    <span class="live-price-save-status" id="daemonSaveStatus"></span>
+    <button class="s-btn" onclick="saveDaemonConfig()">Save</button>
+    <span class="sched-save-status" id="daemonSaveStatus"></span>
   </div>
 </div>
 
 <!-- Indicator Computation (subprocess) -->
-<div class="eod-section" id="indicatorSection" style="margin-top:10px;">
+<div class="s-section" id="indicatorSection" style="margin-top:10px;">
   <div class="eod-header">
     <h3>&#x1F9EE; Indicator Computation</h3>
     <span style="font-size:10px;color:#666;" id="indStatusText">Idle</span>
   </div>
-  <div class="live-price-settings" style="margin-top:6px;">
+  <div class="s-form-row" style="margin-top:6px;">
     <label><input type="checkbox" id="indEnabled" checked> Periodic (subprocess)</label>
     <label>Interval: <input type="number" id="indInterval" min="5" max="120" value="30" style="width:50px;"> min</label>
     <label>Workers: <input type="number" id="indWorkers" min="1" max="16" value="8" style="width:40px;"></label>
   </div>
   <div style="margin-top:6px;">
     <div style="font-size:10px;color:#666;margin-bottom:4px;">Target watchlists:</div>
-    <div class="lp-compute-chips" id="indComputeChips">
+    <div class="s-chips" id="indComputeChips">
       <span style="font-size:10px;color:#444;">Loading...</span>
     </div>
   </div>
-  <div class="lp-compute-stats" id="indStats" style="display:none;margin-top:6px;">
+  <div class="s-stats" id="indStats" style="display:none;margin-top:6px;">
     <span>Last run: <span class="val" id="indLastAt">--</span></span>
     <span>Result: <span class="val" id="indLastResult">--</span></span>
     <span>Duration: <span class="val" id="indLastDuration">--</span></span>
   </div>
   <div style="margin-top:6px;">
-    <button class="backfill-btn" onclick="triggerIndicatorCompute()">Run Now</button>
-    <button class="live-price-save" onclick="saveIndicatorConfig()">Save</button>
-    <span class="live-price-save-status" id="indSaveStatus"></span>
+    <button class="s-btn" onclick="triggerIndicatorCompute()">Run Now</button>
+    <button class="s-btn" onclick="saveIndicatorConfig()">Save</button>
+    <span class="sched-save-status" id="indSaveStatus"></span>
   </div>
 </div>
 
 <!-- End of Day Compute -->
-<div class="eod-section" id="eodSection">
+<div class="s-section" id="eodSection">
   <div class="eod-header">
     <h3>&#x1F552; End of Day Compute</h3>
-    <button class="eod-toggle" id="eodGlobalToggle" onclick="toggleEodEnabled()">ON</button>
+    <button class="s-toggle" id="eodGlobalToggle" onclick="toggleEodEnabled()">ON</button>
     <span style="font-size:10px;color:#555;margin-left:auto;" id="eodNextRun"></span>
   </div>
   <table class="eod-table">
@@ -286,7 +263,7 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
     <tbody>
       <tr>
         <td>RS Ratings</td>
-        <td><button class="eod-toggle" id="eodRsToggle" onclick="toggleEodRow('rs')">ON</button></td>
+        <td><button class="s-toggle" id="eodRsToggle" onclick="toggleEodRow('rs')">ON</button></td>
         <td><input type="number" id="eodRsDelay" min="0" max="240" value="30"> <span style="font-size:10px;color:#555;">min</span></td>
         <td>
           <select id="eodRsUniverse">
@@ -303,10 +280,10 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
       </tr>
       <tr>
         <td>HVC / Indicators</td>
-        <td><button class="eod-toggle" id="eodHvcToggle" onclick="toggleEodRow('hvc')">ON</button></td>
+        <td><button class="s-toggle" id="eodHvcToggle" onclick="toggleEodRow('hvc')">ON</button></td>
         <td><input type="number" id="eodHvcDelay" min="0" max="240" value="30"> <span style="font-size:10px;color:#555;">min</span></td>
         <td>
-          <div class="eod-chips" id="eodHvcChips"><span style="font-size:10px;color:#444;">Loading...</span></div>
+          <div class="s-chips" id="eodHvcChips"><span style="font-size:10px;color:#444;">Loading...</span></div>
         </td>
         <td><input type="number" id="eodHvcWorkers" min="1" max="16" value="8"></td>
         <td id="eodHvcLastAt" style="font-size:10px;color:#555;">--</td>
@@ -316,18 +293,12 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
     </tbody>
   </table>
   <div class="eod-save-bar">
-    <button class="sched-save-btn" onclick="saveEodConfig()" style="padding:5px 14px;font-size:11px;">Save</button>
-    <button class="backfill-btn" onclick="triggerEodCompute('both')" style="font-size:10px;">Run Now</button>
-    <button class="backfill-btn" onclick="triggerEodCompute('rs')" style="font-size:10px;">Run RS Only</button>
-    <button class="backfill-btn" onclick="triggerEodCompute('hvc')" style="font-size:10px;">Run HVC Only</button>
+    <button class="s-btn-primary" onclick="saveEodConfig()" style="padding:5px 14px;font-size:11px;">Save</button>
+    <button class="s-btn" onclick="triggerEodCompute('both')" style="font-size:10px;">Run Now</button>
+    <button class="s-btn" onclick="triggerEodCompute('rs')" style="font-size:10px;">Run RS Only</button>
+    <button class="s-btn" onclick="triggerEodCompute('hvc')" style="font-size:10px;">Run HVC Only</button>
     <span class="sched-save-status" id="eodSaveStatus"></span>
   </div>
-</div>
-
-<!-- Watchlist Refresh -->
-<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-  <button class="sched-save-btn" onclick="refreshWatchlists()" style="padding:6px 16px;font-size:12px;">&#x1F504; Refresh Watchlists</button>
-  <span id="wlRefreshStatus" style="font-size:11px;color:#555;font-family:'Consolas',monospace;"></span>
 </div>
 
 <!-- Watchlist Schedule Table -->
@@ -352,10 +323,12 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
   </tbody>
 </table>
 
-<!-- Save Button -->
+<!-- Save + Refresh Bar -->
 <div class="sched-save-bar">
-  <button id="schedulerSaveBtn" class="sched-save-btn" onclick="saveSchedulerConfig()">Save Configuration</button>
+  <button id="schedulerSaveBtn" class="s-btn-primary" onclick="saveSchedulerConfig()">Save Configuration</button>
+  <button class="s-btn" onclick="refreshWatchlists()" style="font-size:11px;">&#x1F504; Refresh Watchlists</button>
   <span id="schedulerSaveStatus" class="sched-save-status"></span>
+  <span id="wlRefreshStatus" style="font-size:11px;color:#555;font-family:'Consolas',monospace;"></span>
 </div>
 
 <!-- Architecture Details (collapsible) -->
@@ -381,7 +354,7 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 <span class="lbl">Data Source</span><span class="val">yfinance (Yahoo Finance)</span>
 <span class="lbl">Price Adjustment</span><span class="val">Split-adjusted always, dividend toggle (ADJ)</span>
 <span class="lbl">Trading Hours</span><span class="val">Extended (pre + post market included)</span>
-<span class="lbl">Watchlists</span><span class="val">SP500 (473 tickers), Leverage, custom</span>
+<span class="lbl">Watchlists</span><span class="val">SP500 (473 tickers), Priority, custom</span>
 <span class="lbl">Cache</span><span class="val">Local CSV files per ticker (incremental updates)</span>
 </div>
 </div>
@@ -478,7 +451,7 @@ function renderSchedulerTable(){
     var lastDur=st.last_duration_seconds?(' ('+Math.round(st.last_duration_seconds)+'s)'):'';
     var nextRun=st.next_scheduled_utc?_fmtTime(st.next_scheduled_utc):'--';
     var isRunning=st.status==='collecting'||st.status==='computing';
-    var runBtn='<button class="run-btn" onclick="triggerWatchlist(\''+name+'\')" '+(isRunning?'style="opacity:0.3;pointer-events:none;"':'')+'>Run</button>';
+    var runBtn='<button class="s-btn" onclick="triggerWatchlist(\''+name+'\')" '+(isRunning?'style="opacity:0.3;pointer-events:none;"':'')+'>Run</button>';
     return '<tr>'
       +'<td>'+name+'</td>'
       +'<td><input type="checkbox" data-wl="'+name+'" data-field="enabled" '+(cfg.enabled?'checked':'')+'></td>'
@@ -804,12 +777,12 @@ function loadDaemonConfig(){
     var mn=scfg.min_notional||500000;
     document.getElementById('swMinNotional').value=mn>=1000000?(mn/1000000)+'M':(mn/1000)+'K';
     // Populate flush watchlist chips
-    var activeFlush=pcfg.flush_watchlists||['Leverage'];
+    var activeFlush=pcfg.flush_watchlists||['Priority'];
     var container=document.getElementById('flushWatchlistChips');
     container.innerHTML='';
     watchlists.forEach(function(wl){
       var chip=document.createElement('span');
-      chip.className='lp-compute-chip';
+      chip.className='s-chip';
       chip.textContent=wl.name;
       chip.setAttribute('data-wl',wl.name);
       var count=0;
@@ -831,7 +804,7 @@ function _parseNotional(str){
 
 function saveDaemonConfig(){
   var flushWl=[];
-  document.querySelectorAll('#flushWatchlistChips .lp-compute-chip.active').forEach(function(el){
+  document.querySelectorAll('#flushWatchlistChips .s-chip.active').forEach(function(el){
     flushWl.push(el.getAttribute('data-wl'));
   });
   var body={
@@ -874,12 +847,12 @@ function loadIndicatorConfig(){
     document.getElementById('indEnabled').checked=cfg.enabled!==false;
     document.getElementById('indInterval').value=cfg.interval_minutes||30;
     document.getElementById('indWorkers').value=cfg.workers||8;
-    var activeWl=(cfg.watchlists||['Leverage']);
+    var activeWl=(cfg.watchlists||['Priority']);
     var container=document.getElementById('indComputeChips');
     container.innerHTML='';
     watchlists.forEach(function(wl){
       var chip=document.createElement('span');
-      chip.className='lp-compute-chip';
+      chip.className='s-chip';
       chip.textContent=wl.name;
       chip.setAttribute('data-wl',wl.name);
       var count=0;
@@ -914,13 +887,13 @@ function pollIndicatorStatus(){
 
 function saveIndicatorConfig(){
   var selected=[];
-  document.querySelectorAll('#indComputeChips .lp-compute-chip.active').forEach(function(el){
+  document.querySelectorAll('#indComputeChips .s-chip.active').forEach(function(el){
     selected.push(el.getAttribute('data-wl'));
   });
   var cfg={
     enabled:document.getElementById('indEnabled').checked,
     interval_minutes:parseInt(document.getElementById('indInterval').value)||30,
-    watchlists:selected.length?selected:['Leverage'],
+    watchlists:selected.length?selected:['Priority'],
     workers:parseInt(document.getElementById('indWorkers').value)||8
   };
   fetch('/api/scheduler/indicator-compute/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)
@@ -934,11 +907,11 @@ function saveIndicatorConfig(){
 
 function triggerIndicatorCompute(){
   var selected=[];
-  document.querySelectorAll('#indComputeChips .lp-compute-chip.active').forEach(function(el){
+  document.querySelectorAll('#indComputeChips .s-chip.active').forEach(function(el){
     selected.push(el.getAttribute('data-wl'));
   });
   fetch('/api/scheduler/indicator-compute/trigger',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({watchlists:selected.length?selected:['Leverage'],
+    body:JSON.stringify({watchlists:selected.length?selected:['Priority'],
       workers:parseInt(document.getElementById('indWorkers').value)||8})
   }).then(function(r){return r.json();}).then(function(r){
     var st=document.getElementById('indSaveStatus');
@@ -980,7 +953,7 @@ function loadEodConfig(){
     hvcT.classList.toggle('active', hvc.enabled !== false);
     document.getElementById('eodHvcDelay').value = hvc.delay_minutes || 30;
     document.getElementById('eodHvcWorkers').value = hvc.workers || 8;
-    loadEodHvcChips(hvc.watchlists || ['Leverage']);
+    loadEodHvcChips(hvc.watchlists || ['Priority']);
   }).catch(function(e){ console.error('EOD config load error:', e); });
 }
 
@@ -990,7 +963,7 @@ function loadEodHvcChips(activeWatchlists){
     container.innerHTML = '';
     watchlists.forEach(function(wl){
       var chip = document.createElement('span');
-      chip.className = 'eod-chip';
+      chip.className = 's-chip';
       chip.textContent = wl.name;
       chip.setAttribute('data-wl', wl.name);
       if(activeWatchlists.indexOf(wl.name) >= 0) chip.classList.add('active');
@@ -1020,7 +993,7 @@ function toggleEodRow(type){
 
 function saveEodConfig(){
   var hvcWatchlists = [];
-  document.querySelectorAll('#eodHvcChips .eod-chip.active').forEach(function(el){
+  document.querySelectorAll('#eodHvcChips .s-chip.active').forEach(function(el){
     hvcWatchlists.push(el.getAttribute('data-wl'));
   });
   var cfg = {

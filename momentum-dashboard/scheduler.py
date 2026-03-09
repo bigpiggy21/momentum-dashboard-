@@ -317,11 +317,9 @@ class WatchlistScheduler:
         wl_count = sum(1 for w in self._config.get("watchlists", {}).values() if w.get("enabled"))
         enabled = self._config.get("enabled", True)
         status = "ENABLED" if enabled else "DISABLED"
-        print(f"\n{'='*60}")
-        print(f"SCHEDULER — {status}")
-        print(f"  Watchlists: {wl_count} enabled, max_concurrent={max_c}")
-        print(f"  Tick interval: {TICK_INTERVAL}s")
-        print(f"{'='*60}\n")
+        print(f"\n[SCHEDULER] === {status} ===", flush=True)
+        print(f"[SCHEDULER] Watchlists: {wl_count} enabled, max_concurrent={max_c}", flush=True)
+        print(f"[SCHEDULER] Tick interval: {TICK_INTERVAL}s\n", flush=True)
 
     def stop(self):
         """Signal the tick loop to stop and shut down the executor."""
@@ -445,7 +443,7 @@ class WatchlistScheduler:
                 if self._config.get("enabled", True):
                     self._process_tick()
             except Exception as e:
-                print(f"[SCHEDULER] Tick error: {e}")
+                print(f"[SCHEDULER] Tick error: {e}", flush=True)
                 traceback.print_exc()
 
             self._stop_event.wait(timeout=TICK_INTERVAL)
@@ -575,7 +573,7 @@ class WatchlistScheduler:
         try:
             self._run_watchlist(name)
         except Exception as e:
-            print(f"[SCHEDULER] Error running {name}: {e}")
+            print(f"[SCHEDULER] Error running {name}: {e}", flush=True)
             traceback.print_exc()
             state = self._states.get(name)
             if state:
@@ -599,7 +597,7 @@ class WatchlistScheduler:
         tickers = self._build_ticker_list(name)
 
         if not tickers:
-            print(f"[SCHEDULER] {name}: 0 tickers — skipping")
+            print(f"[SCHEDULER] {name}: 0 tickers — skipping", flush=True)
             state.mark_completed(0.0, {"ok": 0}, {"ok": 0})
             return
 
@@ -608,7 +606,7 @@ class WatchlistScheduler:
         compute_workers = cfg.get("compute_workers", 8)
 
         print(f"\n[SCHEDULER] Starting {name}: {len(tickers)} tickers "
-              f"(collect={collect_workers}w, compute={compute_workers}w)")
+              f"(collect={collect_workers}w, compute={compute_workers}w)", flush=True)
 
         # Phase 1: Collect (I/O-bound)
         state.mark_started("collecting", len(tickers))
@@ -634,7 +632,7 @@ class WatchlistScheduler:
         compute_summary = {"ok": 0, "skipped": len(tickers), "error": 0, "events": 0}
 
         if not do_compute:
-            print(f"[SCHEDULER] Skipping compute for {name} (compute=false)")
+            print(f"[SCHEDULER] Skipping compute for {name} (compute=false)", flush=True)
         else:
             # Spawn engine.py as a subprocess so ProcessPoolExecutor runs from
             # the main thread of its own process — avoids Windows deadlock when
@@ -657,7 +655,7 @@ class WatchlistScheduler:
                 # Parse summary from stdout
                 stdout = result.stdout or ""
                 if stdout:
-                    print(stdout[-2000:] if len(stdout) > 2000 else stdout)
+                    print(stdout[-2000:] if len(stdout) > 2000 else stdout, flush=True)
             except subprocess.TimeoutExpired:
                 state.mark_error("Compute subprocess timed out (30min)")
                 raise
@@ -692,7 +690,7 @@ class WatchlistScheduler:
                               "--universe", name,
                               "--workers", str(compute_workers),
                               "--once"]
-                    print(f"[SCHEDULER] Phase 3: RS Rating for {name}...")
+                    print(f"[SCHEDULER] Phase 3: RS Rating for {name}...", flush=True)
                     rs_result = _sp3.run(rs_cmd, capture_output=True, timeout=600,
                                          cwd=os.path.dirname(rs_path),
                                          encoding='utf-8', errors='replace')
@@ -700,19 +698,19 @@ class WatchlistScheduler:
                     if rs_out:
                         # Print last bit of RS output
                         for line in rs_out.strip().splitlines()[-10:]:
-                            print(f"  [RS] {line}")
+                            print(f"  [RS] {line}", flush=True)
                     if rs_result.returncode != 0:
                         rs_err = rs_result.stderr or ""
-                        print(f"  [RS] Warning: RS engine exited {rs_result.returncode}: {rs_err[-200:]}")
+                        print(f"  [RS] Warning: RS engine exited {rs_result.returncode}: {rs_err[-200:]}", flush=True)
             except Exception as rs_e:
-                print(f"  [RS] RS engine failed (non-fatal): {rs_e}")
+                print(f"  [RS] RS engine failed (non-fatal): {rs_e}", flush=True)
 
             # Phase 3b: Save report snapshot after RS compute
             try:
                 from change_detector import save_rs_report_snapshot, _get_db
                 import json as _snap_json
                 today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-                print(f"[SCHEDULER] Phase 3b: Saving report snapshot for {name}...")
+                print(f"[SCHEDULER] Phase 3b: Saving report snapshot for {name}...", flush=True)
 
                 # Generate report data inline (same logic as serve_rs_report)
                 conn = _get_db()
@@ -778,9 +776,9 @@ class WatchlistScheduler:
                     "hvc_activity": hvc_activity, "universe": name,
                 }
                 save_rs_report_snapshot(name, today_str, report)
-                print(f"  [RS] Report snapshot saved for {today_str}")
+                print(f"  [RS] Report snapshot saved for {today_str}", flush=True)
             except Exception as snap_e:
-                print(f"  [RS] Report snapshot failed (non-fatal): {snap_e}")
+                print(f"  [RS] Report snapshot failed (non-fatal): {snap_e}", flush=True)
 
         duration = time.time() - t0
         state.mark_completed(duration, collect_summary, compute_summary)
@@ -793,7 +791,7 @@ class WatchlistScheduler:
               f"collect={collect_ok}/{len(tickers)}, "
               f"compute={n_ok}/{len(tickers)}, "
               f"events={n_events}, "
-              f"duration={duration:.1f}s")
+              f"duration={duration:.1f}s", flush=True)
 
     def _build_ticker_list(self, watchlist_name: str) -> List[str]:
         """Extract deduplicated ticker list for a watchlist."""

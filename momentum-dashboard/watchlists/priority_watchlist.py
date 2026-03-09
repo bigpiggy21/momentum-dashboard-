@@ -1,9 +1,9 @@
 """
-Leverage watchlist.
+Priority watchlist.
 Edited via TBD Technologies watchlist manager.
 """
 
-LEVERAGE_GROUPS = [
+PRIORITY_GROUPS = [
     ("S&P 500", [
         ("SPY", "SPY", "stock"),
     ]),

@@ -4,7 +4,7 @@
   "backfill": false,
   "backfill_years": 10,
   "watchlists": {
-    "Leverage": {
+    "Priority": {
       "enabled": true,
       "mode": "manual",
       "interval_minutes": 30,
@@ -137,7 +137,7 @@
       "enabled": true,
       "delay_minutes": 30,
       "watchlists": [
-        "Leverage"
+        "Priority"
       ],
       "workers": 8
     }
@@ -149,6 +149,6 @@
     "flush_enabled": true,
     "flush_interval_minutes": 2,
     "flush_on_close": true,
-    "flush_watchlists": ["Leverage"]
+    "flush_watchlists": ["Priority"]
   }
 }
