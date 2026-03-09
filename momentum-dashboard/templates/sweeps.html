@@ -381,8 +381,14 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
 <div class="filter-divider"></div>
 <div style="position:relative;display:inline-block;">
 <button class="btn-pine" id="btnPineScript" onclick="togglePineMenu()" title="Generate Pine Script indicator for TradingView">&#x1F4CB; Pine Script</button>
-<div id="pineMenu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#1e1e30;border:1px solid #333;border-radius:6px;padding:12px 14px;z-index:999;min-width:220px;box-shadow:0 4px 12px rgba(0,0,0,.5);">
+<div id="pineMenu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#1e1e30;border:1px solid #333;border-radius:6px;padding:12px 14px;z-index:999;min-width:240px;box-shadow:0 4px 12px rgba(0,0,0,.5);">
   <div style="font-size:11px;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Pine Script Config</div>
+  <div style="margin-bottom:8px;">
+    <label style="font-size:12px;color:#ccc;">Watchlist</label>
+    <select id="pineWatchlist" style="width:100%;margin-top:3px;padding:4px 6px;background:#161625;color:#d0d0d8;border:1px solid #444;border-radius:4px;font-size:12px;">
+      <option value="">All tickers</option>
+    </select>
+  </div>
   <div style="margin-bottom:8px;">
     <label style="font-size:12px;color:#ccc;">Date range</label>
     <select id="pineMonths" style="width:100%;margin-top:3px;padding:4px 6px;background:#161625;color:#d0d0d8;border:1px solid #444;border-radius:4px;font-size:12px;">
@@ -390,7 +396,7 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
       <option value="6" selected>Last 6 months</option>
       <option value="12">Last 12 months</option>
       <option value="24">Last 2 years</option>
-      <option value="36">All time (max 3yr)</option>
+      <option value="120">All time</option>
     </select>
   </div>
   <div style="margin-bottom:10px;">
@@ -2413,7 +2419,21 @@ function _downloadChartBlob(canvas){
 
 function togglePineMenu(){
   var m = document.getElementById('pineMenu');
-  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+  if(m.style.display === 'none'){
+    // Populate watchlist dropdown from already-loaded watchlistData
+    var sel = document.getElementById('pineWatchlist');
+    if(sel.options.length <= 1){
+      Object.keys(watchlistData).sort().forEach(function(name){
+        var opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name + ' (' + watchlistData[name].length + ')';
+        sel.appendChild(opt);
+      });
+    }
+    m.style.display = 'block';
+  } else {
+    m.style.display = 'none';
+  }
 }
 // Close pine menu on outside click
 document.addEventListener('click', function(e){
@@ -2425,6 +2445,7 @@ document.addEventListener('click', function(e){
 
 function copyPineScript(){
   var months = document.getElementById('pineMonths').value;
+  var watchlist = document.getElementById('pineWatchlist').value;
   var types = [];
   if(document.getElementById('pineCB').checked) types.push('cb');
   if(document.getElementById('pineMonster').checked) types.push('monster');
@@ -2432,9 +2453,12 @@ function copyPineScript(){
   if(!types.length){ showToast('Select at least one event type'); return; }
 
   document.getElementById('pineMenu').style.display = 'none';
-  showToast('Generating Pine Script (' + months + 'mo, ' + types.join('+') + ')...');
+  var label = watchlist ? watchlist : 'all tickers';
+  showToast('Generating Pine Script (' + label + ', ' + months + 'mo)...');
 
-  fetch('/api/sweeps/pinescript-all?months=' + months + '&types=' + types.join(','))
+  var url = '/api/sweeps/pinescript-all?months=' + months + '&types=' + types.join(',');
+  if(watchlist) url += '&watchlist=' + encodeURIComponent(watchlist);
+  fetch(url)
     .then(function(r){ return r.json(); })
     .then(function(d){
       if(!d.ok){ showToast('Error: ' + (d.error || 'unknown')); return; }

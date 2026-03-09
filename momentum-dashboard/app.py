@@ -2200,9 +2200,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         """
         q = query or {}
         include_tips = q.get("details", ["0"])[0] == "1"
-        months = min(int(q.get("months", ["6"])[0] or 6), 36)
+        months = min(int(q.get("months", ["6"])[0] or 6), 120)
         types_param = q.get("types", ["cb,monster,rare"])[0]
         include_types = set(t.strip().lower() for t in types_param.split(","))
+        tickers_param = q.get("tickers", [None])[0]  # comma-separated ticker list
+        watchlist_param = q.get("watchlist", [None])[0]  # watchlist name
         try:
             import sqlite3
             from sweep_engine import get_ticker_day_ranks
@@ -2210,14 +2212,34 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
             cutoff = (datetime.now() - timedelta(days=months * 30)).strftime("%Y-%m-%d")
 
+            # Build ticker filter set if watchlist or tickers specified
+            ticker_filter = None
+            if tickers_param:
+                ticker_filter = set(t.strip().upper() for t in tickers_param.split(",") if t.strip())
+            elif watchlist_param and watchlist_param in WATCHLISTS:
+                ticker_filter = set()
+                for _, tickers in WATCHLISTS[watchlist_param]:
+                    for display, api, atype in tickers:
+                        ticker_filter.add(display)
+
             conn = sqlite3.connect(DB_PATH, timeout=10)
             conn.row_factory = sqlite3.Row
-            rows = conn.execute(
-                "SELECT ticker, event_date, sweep_count, total_notional, avg_price, "
-                "direction, is_rare, COALESCE(is_monster, 0) as is_monster "
-                "FROM clusterbomb_events WHERE event_date >= ? ORDER BY ticker, event_date",
-                (cutoff,)
-            ).fetchall()
+            if ticker_filter:
+                placeholders = ",".join("?" for _ in ticker_filter)
+                rows = conn.execute(
+                    "SELECT ticker, event_date, sweep_count, total_notional, avg_price, "
+                    "direction, is_rare, COALESCE(is_monster, 0) as is_monster "
+                    f"FROM clusterbomb_events WHERE event_date >= ? AND ticker IN ({placeholders}) "
+                    "ORDER BY ticker, event_date",
+                    (cutoff, *sorted(ticker_filter))
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT ticker, event_date, sweep_count, total_notional, avg_price, "
+                    "direction, is_rare, COALESCE(is_monster, 0) as is_monster "
+                    "FROM clusterbomb_events WHERE event_date >= ? ORDER BY ticker, event_date",
+                    (cutoff,)
+                ).fetchall()
             conn.close()
 
             # Get all unique tickers, sorted, and build index map
