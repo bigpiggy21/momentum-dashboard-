@@ -341,11 +341,11 @@ def _get_portfolio_ticker_names():
 
 
 def _portfolio_snapshot_thread():
-    """Background thread: records a portfolio snapshot every hour + keeps prices warm."""
-    print("📊 Portfolio snapshot thread started (hourly)")
+    """Background thread: records a portfolio snapshot every 5 min + keeps prices warm."""
+    print("📊 Portfolio snapshot thread started (5-min interval)")
     while True:
         try:
-            time.sleep(3600)  # wait 1 hour
+            time.sleep(300)  # 5 minutes
             from config import TRADING212_API_KEY
             if not TRADING212_API_KEY or TRADING212_API_KEY == "YOUR_T212_API_KEY_HERE":
                 continue
@@ -362,7 +362,8 @@ def _portfolio_snapshot_thread():
             uk_hour = now_utc.hour  # ~correct for early March (UTC+0)
             is_close = (uk_hour == 16 and now_utc.minute >= 20) or (uk_hour == 17 and now_utc.minute <= 10)
             _record_portfolio_snapshot(total, is_close=is_close)
-            print(f"📊 Portfolio snapshot: £{total:.0f} ({'close' if is_close else 'hourly'})", flush=True)
+            if is_close:
+                print(f"📊 Portfolio snapshot: £{total:.0f} (close)", flush=True)
             # Keep prices warm so next page load has fresh gains
             try:
                 _refresh_portfolio_prices()
