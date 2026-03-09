@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-serif;font-size:13px;color-scheme:dark;}
+body{background:#0e0e16;color:#dcdce4;font-family:'Segoe UI',-apple-system,sans-serif;font-size:13px;color-scheme:dark;}
 input,select,textarea,button{color-scheme:dark;}
 
 /* ── Page container ── */
@@ -25,17 +25,17 @@ input,select,textarea,button{color-scheme:dark;}
 .btn-refresh:disabled{opacity:0.4;cursor:not-allowed;}
 
 /* ── Trading hours info bar ── */
-.hours-bar{display:flex;gap:20px;align-items:center;margin-bottom:20px;padding:6px 12px;background:#0c0c14;border:1px solid #1e1e2e;border-radius:6px;font-size:11px;color:#555;}
+.hours-bar{display:flex;gap:20px;align-items:center;margin-bottom:20px;padding:6px 12px;background:#12121c;border:1px solid #252538;border-radius:6px;font-size:11px;color:#667;}
 .hours-bar .hours-item{display:flex;align-items:center;gap:5px;}
 .hours-bar .flag{font-size:13px;}
-.hours-bar .exchange{color:#888;font-weight:600;}
-.hours-bar .times{color:#555;font-family:'Consolas',monospace;}
-.hours-bar .hours-sep{color:#1e1e2e;font-size:14px;}
+.hours-bar .exchange{color:#999;font-weight:600;}
+.hours-bar .times{color:#667;font-family:'Consolas',monospace;}
+.hours-bar .hours-sep{color:#252538;font-size:14px;}
 
 /* ── Summary bar (Cash vs Invested) ── */
 .summary-section{margin-bottom:28px;}
-.summary-label{font-size:10px;color:#555;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
-.summary-bar-wrap{background:#14141e;border:1px solid #1e1e2e;border-radius:6px;overflow:hidden;height:32px;display:flex;}
+.summary-label{font-size:10px;color:#778;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
+.summary-bar-wrap{background:#181824;border:1px solid #252538;border-radius:6px;overflow:hidden;height:32px;display:flex;}
 .bar-invested{background:linear-gradient(90deg,#f59e0b,#d97706);height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000;transition:width 0.4s ease;min-width:0;}
 .bar-cash{background:#1e293b;height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#94a3b8;transition:width 0.4s ease;min-width:0;}
 .summary-stats{display:flex;gap:24px;margin-top:8px;}
@@ -43,35 +43,35 @@ input,select,textarea,button{color-scheme:dark;}
 .summary-dot{width:10px;height:10px;border-radius:2px;}
 .summary-dot.invested{background:#f59e0b;}
 .summary-dot.cash{background:#1e293b;border:1px solid #334155;}
-.summary-stat-label{font-size:11px;color:#888;}
+.summary-stat-label{font-size:11px;color:#999;}
 .summary-stat-val{font-size:12px;font-weight:700;color:#fff;font-family:'Consolas',monospace;}
 
 /* ── Content grid: pie + table ── */
 .content-grid{display:grid;grid-template-columns:340px 1fr;gap:28px;align-items:start;margin-bottom:28px;}
 
 /* ── Card shared ── */
-.card{background:#0c0c14;border:1px solid #1e1e2e;border-radius:8px;padding:20px;}
-.card-title{font-size:13px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
-.card-subtitle{font-size:11px;color:#555;font-weight:400;font-family:'Consolas',monospace;}
+.card{background:#12121c;border:1px solid #252538;border-radius:8px;padding:20px;}
+.card-title{font-size:13px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
+.card-subtitle{font-size:11px;color:#778;font-weight:400;font-family:'Consolas',monospace;}
 
 /* ── Pie chart card ── */
 .chart-wrap{position:relative;width:280px;height:280px;margin:0 auto;}
 
 /* ── Positions table ── */
 .positions-table,.trades-table{width:100%;border-collapse:collapse;}
-.positions-table thead th,.trades-table thead th{text-align:left;font-size:10px;color:#555;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;padding:6px 10px;border-bottom:1px solid #1e1e2e;white-space:nowrap;}
+.positions-table thead th,.trades-table thead th{text-align:left;font-size:10px;color:#778;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;padding:6px 10px;border-bottom:1px solid #252538;white-space:nowrap;}
 .positions-table thead th.col-right,.trades-table thead th.col-right{text-align:right;}
-.positions-table tbody tr,.trades-table tbody tr{border-bottom:1px solid #111118;transition:background 0.1s;}
-.positions-table tbody tr:hover,.trades-table tbody tr:hover{background:#111118;}
+.positions-table tbody tr,.trades-table tbody tr{border-bottom:1px solid #1a1a28;transition:background 0.1s;}
+.positions-table tbody tr:hover,.trades-table tbody tr:hover{background:#1a1a24;}
 .positions-table tbody td,.trades-table tbody td{padding:8px 10px;font-size:12px;white-space:nowrap;}
 .col-ticker{font-weight:700;color:#f59e0b;font-family:'Consolas',monospace;font-size:12px;}
-.col-name{color:#aaa;max-width:200px;overflow:hidden;text-overflow:ellipsis;}
+.col-name{color:#bbb;max-width:200px;overflow:hidden;text-overflow:ellipsis;}
 .col-right{text-align:right;font-family:'Consolas',monospace;}
 .col-weight{font-weight:600;color:#fff;}
 .col-gain{font-weight:600;}
 .gain-pos{color:#22c55e;}
 .gain-neg{color:#ef4444;}
-.gain-zero{color:#555;}
+.gain-zero{color:#778;}
 
 /* Side badge */
 .side-buy{color:#22c55e;font-weight:600;font-size:11px;}
@@ -79,7 +79,7 @@ input,select,textarea,button{color-scheme:dark;}
 
 /* Weight bar within table */
 .weight-bar-cell{display:flex;align-items:center;gap:8px;justify-content:flex-end;}
-.weight-bar-bg{width:80px;height:6px;background:#14141e;border-radius:3px;overflow:hidden;flex-shrink:0;}
+.weight-bar-bg{width:80px;height:6px;background:#1a1a28;border-radius:3px;overflow:hidden;flex-shrink:0;}
 .weight-bar-fill{height:100%;background:#f59e0b;border-radius:3px;transition:width 0.3s ease;}
 .weight-val{min-width:48px;text-align:right;}
 
@@ -88,26 +88,26 @@ input,select,textarea,button{color-scheme:dark;}
 
 /* ── Chart range buttons ── */
 .chart-range-btns{display:flex;gap:4px;}
-.range-btn{background:#14141e;color:#888;border:1px solid #1e1e2e;padding:3px 12px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;text-transform:uppercase;letter-spacing:0.5px;}
-.range-btn:hover{background:#1e293b;color:#ccc;}
+.range-btn{background:#181824;color:#999;border:1px solid #252538;padding:3px 12px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;text-transform:uppercase;letter-spacing:0.5px;}
+.range-btn:hover{background:#1e293b;color:#ddd;}
 .range-btn.active{background:#f59e0b;color:#000;border-color:#f59e0b;}
 
 /* ── Trades section tabs ── */
 .trades-tabs{display:flex;gap:4px;margin-bottom:12px;}
-.trades-tab{background:#14141e;color:#888;border:1px solid #1e1e2e;padding:4px 14px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;}
-.trades-tab:hover{background:#1e293b;color:#ccc;}
+.trades-tab{background:#181824;color:#999;border:1px solid #252538;padding:4px 14px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;}
+.trades-tab:hover{background:#1e293b;color:#ddd;}
 .trades-tab.active{background:#f59e0b;color:#000;border-color:#f59e0b;}
 .trades-tab .tab-count{font-size:10px;opacity:0.7;margin-left:4px;}
 
 /* Fills badge */
-.fills-badge{font-size:9px;color:#555;font-weight:400;margin-left:3px;}
+.fills-badge{font-size:9px;color:#778;font-weight:400;margin-left:3px;}
 
 /* ── Loading / Error ── */
-.loading-wrap{text-align:center;padding:80px 20px;color:#555;}
-.loading-wrap .spinner{display:inline-block;width:28px;height:28px;border:3px solid #1e1e2e;border-top-color:#f59e0b;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:12px;}
+.loading-wrap{text-align:center;padding:80px 20px;color:#778;}
+.loading-wrap .spinner{display:inline-block;width:28px;height:28px;border:3px solid #252538;border-top-color:#f59e0b;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:12px;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .error-msg{text-align:center;padding:40px 20px;color:#ef4444;font-size:13px;}
-.empty-msg{text-align:center;padding:30px 20px;color:#555;font-size:12px;}
+.empty-msg{text-align:center;padding:30px 20px;color:#778;font-size:12px;}
 
 /* ── Responsive ── */
 @media(max-width:900px){
@@ -217,9 +217,8 @@ input,select,textarea,button{color-scheme:dark;}
       <div class="card">
         <div class="card-title">
           Portfolio Performance
-          <span id="dayChangePct" style="font-size:14px;font-weight:600;margin-left:12px;"></span>
           <div style="display:flex;align-items:center;gap:12px;">
-            <span class="card-subtitle" id="perfLabel">Since 01 Mar 2026</span>
+            <span class="card-subtitle" id="perfLabel"></span>
             <div class="chart-range-btns">
               <button class="range-btn active" onclick="switchRange('1d',this)">1D</button>
               <button class="range-btn" onclick="switchRange('1w',this)">1W</button>
@@ -267,6 +266,7 @@ input,select,textarea,button{color-scheme:dark;}
   var _pieChart = null;
   var _valueChart = null;
   var _currentRange = '1d';
+  var _prevCloseDate = null;
   var _tradeData = {open:[], closed:[]};
   var _currentTradeTab = 'open';
 
@@ -331,16 +331,6 @@ input,select,textarea,button{color-scheme:dark;}
     document.getElementById('barCash').textContent = cash >= 8 ? cash.toFixed(1) + '% Cash' : '';
     document.getElementById('investedPct').textContent = inv.toFixed(1) + '%';
     document.getElementById('cashPct').textContent = cash.toFixed(1) + '%';
-    // 1D change — shown next to chart title
-    var dayEl = document.getElementById('dayChangePct');
-    if (d.dayChangePct != null) {
-      var dc = d.dayChangePct;
-      var label = '1D: ';
-      dayEl.textContent = label + (dc >= 0 ? '+' : '') + dc.toFixed(2) + '%';
-      dayEl.style.color = dc >= 0 ? '#4caf50' : '#ef5350';
-    } else {
-      dayEl.textContent = '';
-    }
   }
 
   function renderPieChart(positions){
@@ -362,13 +352,13 @@ input,select,textarea,button{color-scheme:dark;}
       type: 'doughnut',
       data: {
         labels: labels,
-        datasets: [{data:data, backgroundColor:colors, borderColor:'#08080d', borderWidth:2, hoverBorderColor:'#fff', hoverBorderWidth:2}]
+        datasets: [{data:data, backgroundColor:colors, borderColor:'#0e0e16', borderWidth:2, hoverBorderColor:'#fff', hoverBorderWidth:2}]
       },
       options: {
         responsive:true, maintainAspectRatio:true, cutout:'55%',
         plugins: {
-          legend:{display:true,position:'bottom',labels:{color:'#888',font:{size:10,family:"'Segoe UI',sans-serif"},boxWidth:10,boxHeight:10,padding:8,usePointStyle:true,pointStyle:'rectRounded'}},
-          tooltip:{backgroundColor:'#14141e',titleColor:'#fff',bodyColor:'#ccc',borderColor:'#2a2a3a',borderWidth:1,cornerRadius:6,padding:10,
+          legend:{display:true,position:'bottom',labels:{color:'#999',font:{size:10,family:"'Segoe UI',sans-serif"},boxWidth:10,boxHeight:10,padding:8,usePointStyle:true,pointStyle:'rectRounded'}},
+          tooltip:{backgroundColor:'#181824',titleColor:'#fff',bodyColor:'#ddd',borderColor:'#353548',borderWidth:1,cornerRadius:6,padding:10,
             callbacks:{label:function(ctx){return ctx.label+': '+ctx.parsed.toFixed(1)+'%';}}}
         }
       }
@@ -404,12 +394,7 @@ input,select,textarea,button{color-scheme:dark;}
         document.getElementById('perfLabel').textContent = range === '1d' ? 'No intraday data yet' : 'No data yet';
         return;
       }
-      // Update subtitle label
-      var label = 'Since 01 Mar 2026';
-      if(range === '1d') label = 'Since prev close' + (d.prevClose ? ' (' + d.prevClose + ')' : '');
-      else if(range === '1w') label = 'Last 7 days';
-      else if(range === '1m') label = 'Last 30 days';
-      document.getElementById('perfLabel').textContent = label;
+      if(d.prevClose) _prevCloseDate = d.prevClose;
       renderValueChart(d.snapshots);
     }).catch(function(){});
   }
@@ -443,7 +428,7 @@ input,select,textarea,button{color-scheme:dark;}
           borderWidth: 2,
           pointRadius: data.length > 30 ? 0 : 3,
           pointBackgroundColor: lineColor,
-          pointBorderColor: '#08080d',
+          pointBorderColor: '#0e0e16',
           pointBorderWidth: 1,
           pointHoverRadius: 5
         }]
@@ -455,8 +440,8 @@ input,select,textarea,button{color-scheme:dark;}
         plugins: {
           legend: {display: false},
           tooltip: {
-            backgroundColor:'#14141e',titleColor:'#fff',bodyColor:'#ccc',
-            borderColor:'#2a2a3a',borderWidth:1,cornerRadius:6,padding:10,
+            backgroundColor:'#181824',titleColor:'#fff',bodyColor:'#ddd',
+            borderColor:'#353548',borderWidth:1,cornerRadius:6,padding:10,
             callbacks: {
               label: function(ctx){
                 var v = ctx.parsed.y;
@@ -467,13 +452,13 @@ input,select,textarea,button{color-scheme:dark;}
         },
         scales: {
           x: {
-            grid: {color:'#111118',drawBorder:false},
-            ticks: {color:'#555',font:{size:10},maxTicksLimit:10}
+            grid: {color:'#1a1a28',drawBorder:false},
+            ticks: {color:'#778',font:{size:10},maxTicksLimit:10}
           },
           y: {
-            grid: {color:'#111118',drawBorder:false},
+            grid: {color:'#1a1a28',drawBorder:false},
             ticks: {
-              color:'#555',font:{size:10},
+              color:'#778',font:{size:10},
               callback: function(v){ return (v >= 0 ? '+' : '') + v.toFixed(1) + '%'; }
             },
             beginAtZero: false
@@ -482,8 +467,10 @@ input,select,textarea,button{color-scheme:dark;}
       }
     });
 
-    var rangeLabels = {'1w':'Last 7 days','1m':'Last 30 days','all':'Since 01 Mar 2026'};
-    var label = rangeLabels[_currentRange] || 'Since 01 Mar 2026';
+    var label = 'Since 01 Mar 2026';
+    if(_currentRange === '1d') label = 'Since prev close' + (_prevCloseDate ? ' (' + _prevCloseDate + ')' : '');
+    else if(_currentRange === '1w') label = 'Last 7 days';
+    else if(_currentRange === '1m') label = 'Last 30 days';
     var curPct = lastVal >= 0 ? '+' + lastVal.toFixed(2) + '%' : lastVal.toFixed(2) + '%';
     document.getElementById('perfLabel').textContent = label + '  ·  ' + curPct;
   }
