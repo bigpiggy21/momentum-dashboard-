@@ -1990,6 +1990,30 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     # ── Pine Script Generator ──────────────────────────────────────
 
+    @staticmethod
+    def _load_daily_closes(tickers):
+        """Load {ticker: {date_str: close}} from cache/{TICKER}_day.csv.
+
+        Used to compute split-safe price ratios for Pine Script.
+        Both avg_price and CSV close are unadjusted, so their ratio
+        is invariant to splits.  Pine then does ratio * close (adjusted).
+        """
+        import csv as _csv
+        cache_dir = os.path.join(os.path.dirname(__file__), "cache")
+        result = {}
+        for t in tickers:
+            path = os.path.join(cache_dir, f"{t}_day.csv")
+            closes = {}
+            if os.path.exists(path):
+                try:
+                    with open(path, "r") as f:
+                        for row in _csv.DictReader(f):
+                            closes[row["timestamp"][:10]] = float(row["close"])
+                except Exception:
+                    pass
+            result[t] = closes
+        return result
+
     def serve_sweep_pinescript(self, query):
         """GET /api/sweeps/pinescript?ticker=NVDA — generate Pine Script indicator."""
         ticker = (query or {}).get("ticker", [""])[0].upper()
@@ -2014,9 +2038,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             # Fetch rank data for this ticker
             rank_data = get_ticker_day_ranks(tickers=[ticker])
 
-            cb_dates, cb_tips, cb_prices = [], [], []
-            monster_dates, monster_tips, monster_prices = [], [], []
-            rare_dates, rare_tips, rare_prices = [], [], []
+            # Load daily closes for split-safe price ratios
+            daily_closes = self._load_daily_closes([ticker])
+            closes = daily_closes.get(ticker, {})
+
+            cb_dates, cb_tips, cb_ratios = [], [], []
+            monster_dates, monster_tips, monster_ratios = [], [], []
+            rare_dates, rare_tips, rare_ratios = [], [], []
 
             for r in rows:
                 parts = r["event_date"].split("-")
@@ -2025,7 +2053,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 notional = r["total_notional"] or 0
                 n_str = f"${notional/1e6:.1f}M" if notional >= 1e6 else f"${notional/1e3:.0f}K"
                 price = r["avg_price"] or 0
-                price_str = f"{price:.2f}"
+                day_close = closes.get(r["event_date"], 0)
+                ratio = price / day_close if day_close > 0 and price > 0 else 1.0
+                ratio_str = f"{ratio:.4f}"
 
                 # Rank lookup
                 rk = rank_data.get((ticker, r["event_date"]), {})
@@ -2039,15 +2069,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 if r["is_monster"]:
                     monster_dates.append(str(date_key))
                     monster_tips.append(f'"{tip}"')
-                    monster_prices.append(price_str)
+                    monster_ratios.append(ratio_str)
                 elif r["is_rare"]:
                     rare_dates.append(str(date_key))
                     rare_tips.append(f'"{tip}"')
-                    rare_prices.append(price_str)
+                    rare_ratios.append(ratio_str)
                 else:
                     cb_dates.append(str(date_key))
                     cb_tips.append(f'"{tip}"')
-                    cb_prices.append(price_str)
+                    cb_ratios.append(ratio_str)
 
             # Build the Pine Script
             lines = []
@@ -2103,16 +2133,30 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 lines.append("  )")
 
 
+            def _emit_float_array(name, items, max_per_line=8):
+                if not items:
+                    lines.append(f"var {name} = array.new_float(0)")
+                    return
+                lines.append(f"var {name} = array.from(")
+                for i in range(0, len(items), max_per_line):
+                    chunk = ", ".join(items[i:i+max_per_line])
+                    comma = "," if i + max_per_line < len(items) else ""
+                    lines.append(f"  {chunk}{comma}")
+                lines.append("  )")
+
             lines.append(f"// Clusterbombs: {len(cb_dates)} events")
             _emit_array("cbDates", cb_dates)
+            _emit_float_array("cbRatios", cb_ratios)
             _emit_str_array("cbTips", cb_tips)
             lines.append("")
             lines.append(f"// Monsters: {len(monster_dates)} events")
             _emit_array("monsterDates", monster_dates)
+            _emit_float_array("monsterRatios", monster_ratios)
             _emit_str_array("monsterTips", monster_tips)
             lines.append("")
             lines.append(f"// Rare Sweeps: {len(rare_dates)} events")
             _emit_array("rareDates", rare_dates)
+            _emit_float_array("rareRatios", rare_ratios)
             _emit_str_array("rareTips", rare_tips)
             lines.append("")
 
@@ -2124,17 +2168,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             lines.append("isCB      = cbIdx >= 0")
             lines.append("isMonster = monsterIdx >= 0")
             lines.append("isRare    = rareIdx >= 0")
-            lines.append("// Use close for plotting (split-adjusted by TradingView, avoids pre-split price drift)")
+            lines.append("// ratio * close = split-adjusted true sweep price")
+            lines.append("cbPrice      = isCB      ? array.get(cbRatios, cbIdx) * close           : na")
+            lines.append("monsterPrice = isMonster  ? array.get(monsterRatios, monsterIdx) * close : na")
+            lines.append("rarePrice    = isRare     ? array.get(rareRatios, rareIdx) * close       : na")
             lines.append("")
 
-            # ── Plot circles — true data-point rendering, perfectly price-anchored ──
+            # ── Plot circles — true sweep price, split-safe ──
             lines.append("// \u2500\u2500 Price-anchored circles (plot = true chart data, no drift) \u2500\u2500")
-            for kind, flag, color_var, lw in [
-                ("Clusterbomb", "showCB and isCB", "cbColor", 12),
-                ("Monster", "showMonster and isMonster", "monsterColor", 14),
-                ("Rare Sweep", "showRare and isRare", "rareColor", 11),
+            for kind, flag, color_var, lw, price_var in [
+                ("Clusterbomb", "showCB and isCB", "cbColor", 12, "cbPrice"),
+                ("Monster", "showMonster and isMonster", "monsterColor", 14, "monsterPrice"),
+                ("Rare Sweep", "showRare and isRare", "rareColor", 11, "rarePrice"),
             ]:
-                lines.append(f'plot({flag} and newDay ? close : na, "{kind}", color={color_var},')
+                lines.append(f'plot({flag} and newDay ? {price_var} : na, "{kind}", color={color_var},')
                 lines.append(f'  style=plot.style_circles, linewidth={lw})')
             lines.append("")
 
@@ -2153,14 +2200,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             # ── Detail labels (floating bubbles with notional/direction) ──
             lines.append("// \u2500\u2500 Detail Labels (optional floating bubbles) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")
             lines.append("if showDetails and newDay")
-            for kind, flag, tips_var, idx_var, hex_color, lbl_sz in [
-                ("CB", "showCB and isCB", "cbTips", "cbIdx", "#f59e0b", "size.small"),
-                ("M", "showMonster and isMonster", "monsterTips", "monsterIdx", "#f97316", "size.normal"),
-                ("R", "showRare and isRare", "rareTips", "rareIdx", "#a78bfa", "size.small"),
+            for kind, flag, price_var, tips_var, idx_var, hex_color, lbl_sz in [
+                ("CB", "showCB and isCB", "cbPrice", "cbTips", "cbIdx", "#f59e0b", "size.small"),
+                ("M", "showMonster and isMonster", "monsterPrice", "monsterTips", "monsterIdx", "#f97316", "size.normal"),
+                ("R", "showRare and isRare", "rarePrice", "rareTips", "rareIdx", "#a78bfa", "size.small"),
             ]:
                 lines.append(f"    if {flag}")
                 lines.append(f"        tip = {idx_var} >= 0 ? array.get({tips_var}, {idx_var}) : \"\"")
-                lines.append(f'        label.new(bar_index, close, "{kind}\\n" + tip,')
+                lines.append(f'        label.new(bar_index, {price_var}, "{kind}\\n" + tip,')
                 lines.append(f"          color=color.new({hex_color}, math.max(opacity - 20, 0)),")
                 lines.append(f"          textcolor=color.white, style=label.style_label_down, size={lbl_sz})")
             lines.append("")
@@ -2258,10 +2305,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             # Fetch rank data for all tickers in one batch
             rank_data = get_ticker_day_ranks(tickers=all_tickers) if all_tickers else {}
 
+            # Load daily closes for split-safe price ratios
+            daily_closes = self._load_daily_closes(all_tickers)
+
             # Build combined-key arrays:  key = tickerIndex * 100_000_000 + YYYYMMDD
-            cb_keys, cb_tips, cb_prices = [], [], []
-            monster_keys, monster_tips, monster_prices = [], [], []
-            rare_keys, rare_tips, rare_prices = [], [], []
+            cb_keys, cb_tips, cb_ratios = [], [], []
+            monster_keys, monster_tips, monster_ratios = [], [], []
+            rare_keys, rare_tips, rare_ratios = [], [], []
             stats = {"clusterbombs": 0, "monsters": 0, "rare": 0, "tickers": len(all_tickers)}
 
             for r in rows:
@@ -2285,25 +2335,27 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                        f"{n_str} | {r['sweep_count']}sw | {direction_str}")
 
                 price = r["avg_price"] or 0
-                price_str = f"{price:.2f}"
+                day_close = daily_closes.get(r["ticker"], {}).get(r["event_date"], 0)
+                ratio = price / day_close if day_close > 0 and price > 0 else 1.0
+                ratio_str = f"{ratio:.4f}"
 
                 if r["is_monster"]:
                     if "monster" in include_types:
                         monster_keys.append(str(combined_key))
                         monster_tips.append(f'"{tip}"')
-                        monster_prices.append(price_str)
+                        monster_ratios.append(ratio_str)
                     stats["monsters"] += 1
                 elif r["is_rare"]:
                     if "rare" in include_types:
                         rare_keys.append(str(combined_key))
                         rare_tips.append(f'"{tip}"')
-                        rare_prices.append(price_str)
+                        rare_ratios.append(ratio_str)
                     stats["rare"] += 1
                 else:
                     if "cb" in include_types:
                         cb_keys.append(str(combined_key))
                         cb_tips.append(f'"{tip}"')
-                        cb_prices.append(price_str)
+                        cb_ratios.append(ratio_str)
                     stats["clusterbombs"] += 1
 
             # ── Build Pine Script ──
@@ -2384,14 +2436,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
             L.append(f"// \u2500\u2500 Event Data ({stats['clusterbombs']} CB, {stats['monsters']} monster, {stats['rare']} rare) \u2500\u2500")
             _emit("cbKeys", cb_keys, 8)
+            _emit("cbRatios", cb_ratios, 8, "float")
             if include_tips:
                 _emit("cbTips", cb_tips, 3, "string")
             L.append("")
             _emit("monsterKeys", monster_keys, 8)
+            _emit("monsterRatios", monster_ratios, 8, "float")
             if include_tips:
                 _emit("monsterTips", monster_tips, 3, "string")
             L.append("")
             _emit("rareKeys", rare_keys, 8)
+            _emit("rareRatios", rare_ratios, 8, "float")
             if include_tips:
                 _emit("rareTips", rare_tips, 3, "string")
             L.append("")
@@ -2404,17 +2459,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             L.append("isCB      = cbIdx >= 0")
             L.append("isMonster = monsterIdx >= 0")
             L.append("isRare    = rareIdx >= 0")
-            L.append("// Use close for plotting (split-adjusted by TradingView, avoids pre-split price drift)")
+            L.append("// ratio * close = split-adjusted true sweep price")
+            L.append("cbPrice      = isCB      ? array.get(cbRatios, cbIdx) * close           : na")
+            L.append("monsterPrice = isMonster  ? array.get(monsterRatios, monsterIdx) * close : na")
+            L.append("rarePrice    = isRare     ? array.get(rareRatios, rareIdx) * close       : na")
             L.append("")
 
-            # Plot circles — true chart data points, perfectly price-anchored
-            L.append("// ── Price-anchored circles (plot = true chart data, no drift) ──")
-            for kind, flag, color_var, lw in [
-                ("Clusterbomb", "showCB and isCB", "cbColor", 12),
-                ("Monster", "showMonster and isMonster", "monsterColor", 14),
-                ("Rare Sweep", "showRare and isRare", "rareColor", 11),
+            # Plot circles — true sweep price, split-safe
+            L.append("// ── Price-anchored circles (ratio * close = true sweep price) ──")
+            for kind, flag, color_var, lw, price_var in [
+                ("Clusterbomb", "showCB and isCB", "cbColor", 12, "cbPrice"),
+                ("Monster", "showMonster and isMonster", "monsterColor", 14, "monsterPrice"),
+                ("Rare Sweep", "showRare and isRare", "rareColor", 11, "rarePrice"),
             ]:
-                L.append(f'plot({flag} and newDay ? close : na, "{kind}", color={color_var},')
+                L.append(f'plot({flag} and newDay ? {price_var} : na, "{kind}", color={color_var},')
                 L.append(f'  style=plot.style_circles, linewidth={lw})')
             L.append("")
 
@@ -2434,15 +2492,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             if include_tips:
                 L.append("// ── Detail Labels ────────────────────────────────────")
                 L.append("if showDetails and newDay")
-                for short_label, flag, keys_var, tips_var, hex_color, lbl_sz in [
-                    ("CB", "showCB and isCB", "cbKeys", "cbTips", "#f59e0b", "size.small"),
-                    ("M", "showMonster and isMonster", "monsterKeys", "monsterTips", "#f97316", "size.normal"),
-                    ("R", "showRare and isRare", "rareKeys", "rareTips", "#a78bfa", "size.small"),
+                for short_label, flag, keys_var, tips_var, price_var, hex_color, lbl_sz in [
+                    ("CB", "showCB and isCB", "cbKeys", "cbTips", "cbPrice", "#f59e0b", "size.small"),
+                    ("M", "showMonster and isMonster", "monsterKeys", "monsterTips", "monsterPrice", "#f97316", "size.normal"),
+                    ("R", "showRare and isRare", "rareKeys", "rareTips", "rarePrice", "#a78bfa", "size.small"),
                 ]:
                     L.append(f"    if {flag}")
                     L.append(f"        idx = array.indexof({keys_var}, myKey)")
                     L.append(f"        tip = idx >= 0 ? array.get({tips_var}, idx) : \"\"")
-                    L.append(f'        label.new(bar_index, close, "{short_label}\\n" + tip,')
+                    L.append(f'        label.new(bar_index, {price_var}, "{short_label}\\n" + tip,')
                     L.append(f"          color=color.new({hex_color}, math.max(opacity - 20, 0)),")
                     L.append(f"          textcolor=color.white, style=label.style_label_down, size={lbl_sz})")
             L.append("")
