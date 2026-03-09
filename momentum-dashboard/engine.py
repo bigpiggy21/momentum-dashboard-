@@ -303,7 +303,11 @@ def build_ticker_list(args):
     """Build ticker list from command line args."""
     if args.ticker:
         return [args.ticker]
-    
+
+    if args.tickers_file:
+        with open(args.tickers_file, encoding="utf-8") as f:
+            return [line.strip() for line in f if line.strip()]
+
     seen = set()
     tickers = []
     wl_filter = set(args.watchlist) if args.watchlist else None
@@ -393,6 +397,7 @@ def main():
     parser = argparse.ArgumentParser(description="Couloir Indicator Engine")
     parser.add_argument("--ticker", type=str, help="Compute single ticker")
     parser.add_argument("--watchlist", type=str, action="append", help="Compute specific watchlist(s)")
+    parser.add_argument("--tickers-file", type=str, help="File with one ticker per line (used by scheduler for AllTickers)")
     parser.add_argument("--workers", type=int, default=4, help="Parallel workers (default: 4)")
     parser.add_argument("--once", action="store_true", help="Single pass, no scheduling")
     parser.add_argument("--interval", type=int, default=REFRESH_INTERVAL_SECONDS,

@@ -244,12 +244,6 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
     <button class="s-btn" id="backfillBtn" onclick="triggerTickerBackfill()">Backfill</button>
     <span class="backfill-status" id="backfillStatus"></span>
   </div>
-  <div class="s-subsection" style="display:flex;align-items:center;gap:10px;">
-    <label style="font-size:12px;color:#888;white-space:nowrap;">All tickers:</label>
-    <span style="font-size:11px;color:#555;" id="allTickerCount">Loading...</span>
-    <button class="s-btn" id="allBackfillBtn" onclick="triggerAllTickersBackfill()">Backfill All</button>
-    <span class="backfill-status" id="allBackfillStatus"></span>
-  </div>
 </div>
 
 <!-- 3. Indicator Computation (subprocess) -->
@@ -463,8 +457,9 @@ function renderSchedulerTable(){
     var nextRun=st.next_scheduled_utc?_fmtTime(st.next_scheduled_utc):'--';
     var isRunning=st.status==='collecting'||st.status==='computing';
     var runBtn='<button class="s-btn" onclick="triggerWatchlist(\''+name+'\')" '+(isRunning?'style="opacity:0.3;pointer-events:none;"':'')+'>Run</button>';
+    var label=(name==='AllTickers')?'✱ All Tickers':name;
     return '<tr>'
-      +'<td>'+name+'</td>'
+      +'<td>'+label+'</td>'
       +'<td><input type="checkbox" data-wl="'+name+'" data-field="enabled" '+(cfg.enabled?'checked':'')+'></td>'
       +'<td><select data-wl="'+name+'" data-field="mode">'+modeOpts+'</select></td>'
       +'<td style="font-size:11px;">'+intCell+'</td>'
@@ -648,74 +643,6 @@ fetch('/api/scheduler/ticker-backfill-status').then(function(r){return r.json();
     pollTickerBackfill();
   }
 });
-
-// ---------- All Tickers Backfill ----------
-var _allTickersList=[];
-
-function loadAllTickerCount(){
-  fetch('/api/scheduler/all-tickers').then(function(r){return r.json();}).then(function(d){
-    _allTickersList=d.tickers||[];
-    document.getElementById('allTickerCount').textContent=d.count+' unique tickers across all watchlists';
-  }).catch(function(){
-    document.getElementById('allTickerCount').textContent='Failed to load';
-  });
-}
-
-function triggerAllTickersBackfill(){
-  if(!_allTickersList.length){
-    document.getElementById('allBackfillStatus').textContent='No tickers loaded';
-    document.getElementById('allBackfillStatus').style.color='#ef4444';
-    return;
-  }
-  var btn=document.getElementById('allBackfillBtn');
-  var st=document.getElementById('allBackfillStatus');
-  btn.disabled=true;
-  st.textContent='Starting '+_allTickersList.length+' tickers...';st.style.color='#f59e0b';
-  fetch('/api/scheduler/trigger-ticker',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({ticker:_allTickersList.join(',')})
-  }).then(function(r){return r.json();}).then(function(r){
-    if(!r.ok){
-      st.textContent=r.error||'Failed';st.style.color='#ef4444';
-      btn.disabled=false;
-      return;
-    }
-    // Also populate the custom backfill ticker field + poll from there
-    document.getElementById('backfillTicker').value='ALL ('+_allTickersList.length+')';
-    document.getElementById('backfillBtn').disabled=true;
-    pollAllTickersBackfill();
-  }).catch(function(e){
-    st.textContent='Error: '+e;st.style.color='#ef4444';
-    btn.disabled=false;
-  });
-}
-
-function pollAllTickersBackfill(){
-  var _allPollTimer=setInterval(function(){
-    fetch('/api/scheduler/ticker-backfill-status').then(function(r){return r.json();}).then(function(s){
-      var st=document.getElementById('allBackfillStatus');
-      var st2=document.getElementById('backfillStatus');
-      var btn=document.getElementById('allBackfillBtn');
-      var btn2=document.getElementById('backfillBtn');
-      var prog=s.total>1?(' ('+s.completed+'/'+s.total+')'):'';
-      if(s.phase==='collecting'){
-        st.textContent='Collecting '+s.ticker+'...'+prog;st.style.color='#f59e0b';
-        st2.textContent=st.textContent;st2.style.color='#f59e0b';
-      }else if(s.phase==='computing'){
-        st.textContent='Computing '+s.ticker+'...'+prog;st.style.color='#f59e0b';
-        st2.textContent=st.textContent;st2.style.color='#f59e0b';
-      }else if(s.phase==='done'||s.phase==='done_with_errors'||s.phase==='error'){
-        st.textContent=s.message;
-        st.style.color=s.phase==='done'?'#22c55e':s.phase==='error'?'#ef4444':'#f59e0b';
-        st2.textContent=s.message;st2.style.color=st.style.color;
-        btn.disabled=false;btn2.disabled=false;
-        clearInterval(_allPollTimer);
-      }
-      if(!s.running){btn.disabled=false;btn2.disabled=false;}
-    });
-  },2000);
-}
-
-loadAllTickerCount();
 
 // ---------- Live Daemon (unified) ----------
 var _daemonPollTimer=null;

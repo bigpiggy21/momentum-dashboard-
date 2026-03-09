@@ -71,8 +71,20 @@ def _save_scheduler_config(config: dict) -> None:
 def _default_watchlist_config(name: str) -> dict:
     """Generate default config for a newly discovered watchlist.
     Large index universes default to after_close mode so RS computes daily.
+    AllTickers is a special virtual watchlist that discovers every ticker in the system.
     """
     _RS_UNIVERSES = {"Russell3000", "Russell2000", "Russell1000", "SP500"}
+    if name == "AllTickers":
+        return {
+            "enabled": False,
+            "mode": "manual",
+            "interval_minutes": 1440,
+            "priority": 50,
+            "collect_workers": 8,
+            "compute_workers": 8,
+            "market_hours_only": False,
+            "after_close_delay_minutes": 60,
+        }
     if name in _RS_UNIVERSES:
         return {
             "enabled": True,
@@ -97,7 +109,7 @@ def _default_watchlist_config(name: str) -> dict:
 
 
 def _ensure_all_watchlists(config: dict) -> dict:
-    """Add default entries for any watchlists not yet in config."""
+    """Add default entries for any watchlists not yet in config, plus AllTickers."""
     try:
         current_wls = _load_watchlists()
     except Exception:
@@ -108,6 +120,11 @@ def _ensure_all_watchlists(config: dict) -> dict:
         if wl_name not in config["watchlists"]:
             config["watchlists"][wl_name] = _default_watchlist_config(wl_name)
             changed = True
+
+    # Ensure the virtual "AllTickers" entry always exists
+    if "AllTickers" not in config["watchlists"]:
+        config["watchlists"]["AllTickers"] = _default_watchlist_config("AllTickers")
+        changed = True
 
     if changed:
         _save_scheduler_config(config)
@@ -638,13 +655,30 @@ class WatchlistScheduler:
             # the main thread of its own process — avoids Windows deadlock when
             # ProcessPoolExecutor is called from a non-main thread.
             state.mark_phase("computing")
+            tickers_file = None
             try:
                 import subprocess
+                import tempfile
                 engine_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "engine.py")
-                cmd = [sys.executable, engine_path,
-                       "--watchlist", name,
-                       "--workers", str(compute_workers),
-                       "--once"]
+
+                if name == "AllTickers":
+                    # Write tickers to temp file — engine.py reads via --tickers-file
+                    tickers_file = tempfile.NamedTemporaryFile(
+                        mode='w', suffix='.txt', prefix='alltickers_',
+                        dir=os.path.dirname(engine_path), delete=False
+                    )
+                    tickers_file.write('\n'.join(tickers))
+                    tickers_file.close()
+                    cmd = [sys.executable, engine_path,
+                           "--tickers-file", tickers_file.name,
+                           "--workers", str(compute_workers),
+                           "--once"]
+                else:
+                    cmd = [sys.executable, engine_path,
+                           "--watchlist", name,
+                           "--workers", str(compute_workers),
+                           "--once"]
+
                 result = subprocess.run(cmd, capture_output=True, timeout=1800,
                                         cwd=os.path.dirname(engine_path),
                                         encoding='utf-8', errors='replace')
@@ -663,6 +697,13 @@ class WatchlistScheduler:
                 if "Compute subprocess failed" not in str(e):
                     state.mark_error(f"Computation failed: {e}")
                 raise
+            finally:
+                # Clean up temp tickers file if we created one
+                if tickers_file and os.path.exists(tickers_file.name):
+                    try:
+                        os.unlink(tickers_file.name)
+                    except OSError:
+                        pass
 
             # Parse compute results from engine output
             import re
@@ -794,7 +835,10 @@ class WatchlistScheduler:
               f"duration={duration:.1f}s", flush=True)
 
     def _build_ticker_list(self, watchlist_name: str) -> List[str]:
-        """Extract deduplicated ticker list for a watchlist."""
+        """Extract deduplicated ticker list for a watchlist (or all sources for AllTickers)."""
+        if watchlist_name == "AllTickers":
+            return self._discover_all_tickers()
+
         try:
             all_wls = _load_watchlists()
         except Exception:
@@ -809,6 +853,58 @@ class WatchlistScheduler:
                     seen.add(display)
                     tickers.append(display)
         return tickers
+
+    def _discover_all_tickers(self) -> List[str]:
+        """Dynamically discover all tickers from watchlists + DB + cache.
+
+        Mirrors app.py serve_all_tickers() logic — unions 4 sources so we
+        capture tickers from old backfills, one-off fetches, and sweep data.
+        """
+        import sqlite3
+
+        seen = set()
+
+        # 1. Watchlist tickers
+        try:
+            all_wls = _load_watchlists()
+            for _name, groups in all_wls.items():
+                for _group_name, group_tickers in groups:
+                    for display, _api, _atype in group_tickers:
+                        seen.add(display)
+        except Exception:
+            pass
+
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "momentum_dashboard.db")
+
+        # 2. Indicator DB (snapshots table)
+        try:
+            conn = sqlite3.connect(db_path)
+            for row in conn.execute("SELECT DISTINCT ticker FROM snapshots"):
+                seen.add(row[0])
+            conn.close()
+        except Exception:
+            pass
+
+        # 3. Sweep DB (sweep_daily_summary)
+        try:
+            conn = sqlite3.connect(db_path)
+            for row in conn.execute("SELECT DISTINCT ticker FROM sweep_daily_summary"):
+                seen.add(row[0])
+            conn.close()
+        except Exception:
+            pass
+
+        # 4. CSV cache files ({TICKER}_day.csv)
+        try:
+            cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
+            if os.path.isdir(cache_dir):
+                for fname in os.listdir(cache_dir):
+                    if fname.endswith("_day.csv"):
+                        seen.add(fname.replace("_day.csv", ""))
+        except Exception:
+            pass
+
+        return sorted(seen)
 
     # ---------- Next-scheduled calculation ----------
 

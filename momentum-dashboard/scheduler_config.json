@@ -123,6 +123,16 @@
       "compute_workers": 8,
       "market_hours_only": false,
       "after_close_delay_minutes": 30
+    },
+    "AllTickers": {
+      "enabled": false,
+      "mode": "manual",
+      "interval_minutes": 1440,
+      "priority": 50,
+      "collect_workers": 8,
+      "compute_workers": 8,
+      "market_hours_only": false,
+      "after_close_delay_minutes": 60
     }
   },
   "eod_compute": {
