@@ -4465,18 +4465,15 @@ class PublicPortfolioHandler(DashboardHandler):
         path = parsed.path.rstrip("/") or "/"
         query = urllib.parse.parse_qs(parsed.query) if parsed.query else None
 
-        # Only allow portfolio-related routes
+        # Only allow portfolio-related routes — serve standalone public template (no nav header)
         if path == "/" or path == "/portfolio":
-            self.serve_page("portfolio.html")
+            self.serve_page("portfolio_public.html")
         elif path == "/api/portfolio/data":
             self.serve_portfolio_data()
         elif path == "/api/portfolio/history":
             self.serve_portfolio_history(query)
         elif path == "/api/portfolio/trades":
             self.serve_portfolio_trades()
-        elif path.startswith("/static/"):
-            # Serve CSS/JS needed for header
-            self.serve_static(path[8:])
         else:
             self.send_response(404)
             self.send_header("Content-Type", "text/plain")

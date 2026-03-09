@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Piggy Portfolio</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-serif;font-size:13px;color-scheme:dark;}
+input,select,textarea,button{color-scheme:dark;}
+
+/* ── Page container ── */
+.portfolio-page{max-width:1200px;margin:0 auto;padding:24px 32px 60px;}
+
+/* ── Page header ── */
+.portfolio-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.portfolio-title{font-size:24px;font-weight:700;color:#fff;display:flex;align-items:center;gap:10px;}
+.portfolio-title .piggy{font-size:28px;}
+.portfolio-title .accent{color:#f59e0b;}
+.header-right-info{display:flex;align-items:center;gap:14px;}
+.last-updated{font-size:11px;color:#555;font-family:'Consolas',monospace;}
+.btn-refresh{background:#1e293b;color:#f59e0b;border:1px solid #f59e0b;padding:5px 14px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;height:28px;display:inline-flex;align-items:center;gap:5px;}
+.btn-refresh:hover{background:#334155;color:#fbbf24;}
+.btn-refresh:disabled{opacity:0.4;cursor:not-allowed;}
+
+/* ── Trading hours info bar ── */
+.hours-bar{display:flex;gap:20px;align-items:center;margin-bottom:20px;padding:6px 12px;background:#0c0c14;border:1px solid #1e1e2e;border-radius:6px;font-size:11px;color:#555;}
+.hours-bar .hours-item{display:flex;align-items:center;gap:5px;}
+.hours-bar .flag{font-size:13px;}
+.hours-bar .exchange{color:#888;font-weight:600;}
+.hours-bar .times{color:#555;font-family:'Consolas',monospace;}
+.hours-bar .hours-sep{color:#1e1e2e;font-size:14px;}
+
+/* ── Summary bar (Cash vs Invested) ── */
+.summary-section{margin-bottom:28px;}
+.summary-label{font-size:10px;color:#555;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
+.summary-bar-wrap{background:#14141e;border:1px solid #1e1e2e;border-radius:6px;overflow:hidden;height:32px;display:flex;}
+.bar-invested{background:linear-gradient(90deg,#f59e0b,#d97706);height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000;transition:width 0.4s ease;min-width:0;}
+.bar-cash{background:#1e293b;height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#94a3b8;transition:width 0.4s ease;min-width:0;}
+.summary-stats{display:flex;gap:24px;margin-top:8px;}
+.summary-stat{display:flex;align-items:center;gap:6px;}
+.summary-dot{width:10px;height:10px;border-radius:2px;}
+.summary-dot.invested{background:#f59e0b;}
+.summary-dot.cash{background:#1e293b;border:1px solid #334155;}
+.summary-stat-label{font-size:11px;color:#888;}
+.summary-stat-val{font-size:12px;font-weight:700;color:#fff;font-family:'Consolas',monospace;}
+
+/* ── Content grid: pie + table ── */
+.content-grid{display:grid;grid-template-columns:340px 1fr;gap:28px;align-items:start;margin-bottom:28px;}
+
+/* ── Card shared ── */
+.card{background:#0c0c14;border:1px solid #1e1e2e;border-radius:8px;padding:20px;}
+.card-title{font-size:13px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
+.card-subtitle{font-size:11px;color:#555;font-weight:400;font-family:'Consolas',monospace;}
+
+/* ── Pie chart card ── */
+.chart-wrap{position:relative;width:280px;height:280px;margin:0 auto;}
+
+/* ── Positions table ── */
+.positions-table,.trades-table{width:100%;border-collapse:collapse;}
+.positions-table thead th,.trades-table thead th{text-align:left;font-size:10px;color:#555;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;padding:6px 10px;border-bottom:1px solid #1e1e2e;white-space:nowrap;}
+.positions-table thead th.col-right,.trades-table thead th.col-right{text-align:right;}
+.positions-table tbody tr,.trades-table tbody tr{border-bottom:1px solid #111118;transition:background 0.1s;}
+.positions-table tbody tr:hover,.trades-table tbody tr:hover{background:#111118;}
+.positions-table tbody td,.trades-table tbody td{padding:8px 10px;font-size:12px;white-space:nowrap;}
+.col-ticker{font-weight:700;color:#f59e0b;font-family:'Consolas',monospace;font-size:12px;}
+.col-name{color:#aaa;max-width:200px;overflow:hidden;text-overflow:ellipsis;}
+.col-right{text-align:right;font-family:'Consolas',monospace;}
+.col-weight{font-weight:600;color:#fff;}
+.col-gain{font-weight:600;}
+.gain-pos{color:#22c55e;}
+.gain-neg{color:#ef4444;}
+.gain-zero{color:#555;}
+
+/* Side badge */
+.side-buy{color:#22c55e;font-weight:600;font-size:11px;}
+.side-sell{color:#ef4444;font-weight:600;font-size:11px;}
+
+/* Weight bar within table */
+.weight-bar-cell{display:flex;align-items:center;gap:8px;justify-content:flex-end;}
+.weight-bar-bg{width:80px;height:6px;background:#14141e;border-radius:3px;overflow:hidden;flex-shrink:0;}
+.weight-bar-fill{height:100%;background:#f59e0b;border-radius:3px;transition:width 0.3s ease;}
+.weight-val{min-width:48px;text-align:right;}
+
+/* ── Value chart card ── */
+.value-chart-wrap{position:relative;height:240px;width:100%;}
+
+/* ── Chart range buttons ── */
+.chart-range-btns{display:flex;gap:4px;}
+.range-btn{background:#14141e;color:#888;border:1px solid #1e1e2e;padding:3px 12px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;text-transform:uppercase;letter-spacing:0.5px;}
+.range-btn:hover{background:#1e293b;color:#ccc;}
+.range-btn.active{background:#f59e0b;color:#000;border-color:#f59e0b;}
+
+/* ── Trades section tabs ── */
+.trades-tabs{display:flex;gap:4px;margin-bottom:12px;}
+.trades-tab{background:#14141e;color:#888;border:1px solid #1e1e2e;padding:4px 14px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;}
+.trades-tab:hover{background:#1e293b;color:#ccc;}
+.trades-tab.active{background:#f59e0b;color:#000;border-color:#f59e0b;}
+.trades-tab .tab-count{font-size:10px;opacity:0.7;margin-left:4px;}
+
+/* Fills badge */
+.fills-badge{font-size:9px;color:#555;font-weight:400;margin-left:3px;}
+
+/* ── Loading / Error ── */
+.loading-wrap{text-align:center;padding:80px 20px;color:#555;}
+.loading-wrap .spinner{display:inline-block;width:28px;height:28px;border:3px solid #1e1e2e;border-top-color:#f59e0b;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:12px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.error-msg{text-align:center;padding:40px 20px;color:#ef4444;font-size:13px;}
+.empty-msg{text-align:center;padding:30px 20px;color:#555;font-size:12px;}
+
+/* ── Responsive ── */
+@media(max-width:900px){
+  .content-grid{grid-template-columns:1fr;gap:20px;}
+  .chart-wrap{width:240px;height:240px;}
+  .portfolio-page{padding:16px;}
+  .hours-bar{flex-wrap:wrap;gap:8px;}
+}
+</style>
+</head>
+<body>
+
+<div class="portfolio-page">
+
+  <!-- Page header — standalone, no nav -->
+  <div class="portfolio-header">
+    <div class="portfolio-title">
+      <span class="piggy">&#x1F437;</span> Piggy <span class="accent">Portfolio</span>
+    </div>
+    <div class="header-right-info">
+      <span class="last-updated" id="lastUpdated">--</span>
+      <button class="btn-refresh" id="btnRefresh" onclick="loadPortfolio(true)">&#x21BB; Refresh</button>
+    </div>
+  </div>
+
+  <!-- Trading hours info bar -->
+  <div class="hours-bar">
+    <div class="hours-item">
+      <span class="flag">&#x1F1EC;&#x1F1E7;</span>
+      <span class="exchange">LSE</span>
+      <span class="times">08:00 – 16:30 GMT</span>
+    </div>
+    <span class="hours-sep">|</span>
+    <div class="hours-item">
+      <span class="flag">&#x1F1FA;&#x1F1F8;</span>
+      <span class="exchange">NYSE / NASDAQ</span>
+      <span class="times">14:30 – 21:00 GMT</span>
+    </div>
+    <span class="hours-sep">|</span>
+    <div class="hours-item" style="color:#444;">
+      Pre-market 09:00 GMT &middot; After-hours until 01:00 GMT
+    </div>
+  </div>
+
+  <!-- Loading state -->
+  <div id="loadingWrap" class="loading-wrap">
+    <div class="spinner"></div>
+    <div>Loading portfolio...</div>
+  </div>
+
+  <!-- Error state -->
+  <div id="errorWrap" class="error-msg" style="display:none;"></div>
+
+  <!-- Main content (hidden until loaded) -->
+  <div id="mainContent" style="display:none;">
+
+    <!-- Cash vs Invested bar -->
+    <div class="summary-section">
+      <div class="summary-label">Allocation</div>
+      <div class="summary-bar-wrap">
+        <div class="bar-invested" id="barInvested" style="width:0%"></div>
+        <div class="bar-cash" id="barCash" style="width:0%"></div>
+      </div>
+      <div class="summary-stats">
+        <div class="summary-stat">
+          <div class="summary-dot invested"></div>
+          <span class="summary-stat-label">Invested</span>
+          <span class="summary-stat-val" id="investedPct">--</span>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-dot cash"></div>
+          <span class="summary-stat-label">Cash</span>
+          <span class="summary-stat-val" id="cashPct">--</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pie + Positions grid -->
+    <div class="content-grid">
+      <div class="card">
+        <div class="card-title">Holdings Breakdown</div>
+        <div class="chart-wrap">
+          <canvas id="pieChart"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">
+          Positions
+          <span class="card-subtitle" id="posCount"></span>
+        </div>
+        <table class="positions-table">
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th>Name</th>
+              <th class="col-right">Weight %</th>
+              <th class="col-right">Gain %</th>
+            </tr>
+          </thead>
+          <tbody id="posBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Portfolio value chart -->
+    <div class="card" style="margin-bottom:28px;">
+      <div class="card-title">
+        Portfolio Performance
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span class="card-subtitle" id="perfLabel">Since 01 Mar 2026</span>
+          <div class="chart-range-btns">
+            <button class="range-btn" onclick="switchRange('1w',this)">1W</button>
+            <button class="range-btn" onclick="switchRange('1m',this)">1M</button>
+            <button class="range-btn active" onclick="switchRange('all',this)">All</button>
+          </div>
+        </div>
+      </div>
+      <div class="value-chart-wrap">
+        <canvas id="valueChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Trades section -->
+    <div class="card">
+      <div class="card-title">
+        Trade History
+        <span class="card-subtitle" id="tradeCount"></span>
+      </div>
+      <div class="trades-tabs">
+        <button class="trades-tab active" onclick="switchTradeTab('open',this)">Open<span class="tab-count" id="openCount"></span></button>
+        <button class="trades-tab" onclick="switchTradeTab('closed',this)">Closed<span class="tab-count" id="closedCount"></span></button>
+      </div>
+      <div id="tradesWrap">
+        <table class="trades-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Ticker</th>
+              <th>Name</th>
+              <th>Side</th>
+              <th class="col-right">Gain %</th>
+            </tr>
+          </thead>
+          <tbody id="tradesBody"></tbody>
+        </table>
+      </div>
+      <div id="tradesEmpty" class="empty-msg" style="display:none;">No trades found</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  var _pieChart = null;
+  var _valueChart = null;
+  var _currentRange = 'all';
+  var _tradeData = {open:[], closed:[]};
+  var _currentTradeTab = 'open';
+
+  var PIE_COLORS = [
+    '#f59e0b','#d97706','#b45309','#92400e','#78350f',
+    '#fbbf24','#f59e0b','#d97706','#b45309','#92400e',
+    '#eab308','#ca8a04','#a16207','#854d0e','#713f12',
+    '#fde68a','#fcd34d','#fbbf24','#f59e0b','#d97706'
+  ];
+  var OTHER_COLOR = '#1e293b';
+
+  function loadPortfolio(force){
+    var btn = document.getElementById('btnRefresh');
+    btn.disabled = true;
+    btn.innerHTML = '&#x21BB; Loading...';
+
+    var url = '/api/portfolio/data';
+    if(force) url += '?bust=' + Date.now();
+
+    fetch(url).then(function(r){ return r.json(); }).then(function(d){
+      btn.disabled = false;
+      btn.innerHTML = '&#x21BB; Refresh';
+
+      if(d.error){
+        document.getElementById('loadingWrap').style.display = 'none';
+        document.getElementById('errorWrap').style.display = 'block';
+        document.getElementById('errorWrap').textContent = d.error;
+        document.getElementById('mainContent').style.display = 'none';
+        return;
+      }
+
+      document.getElementById('loadingWrap').style.display = 'none';
+      document.getElementById('errorWrap').style.display = 'none';
+      document.getElementById('mainContent').style.display = 'block';
+
+      renderSummary(d);
+      renderPieChart(d.positions);
+      renderTable(d.positions);
+
+      if(d.updatedAt){
+        var dt = new Date(d.updatedAt);
+        document.getElementById('lastUpdated').textContent = 'Updated ' + dt.toLocaleTimeString();
+      }
+
+      loadHistory(_currentRange);
+      loadTrades();
+    }).catch(function(err){
+      btn.disabled = false;
+      btn.innerHTML = '&#x21BB; Refresh';
+      document.getElementById('loadingWrap').style.display = 'none';
+      document.getElementById('errorWrap').style.display = 'block';
+      document.getElementById('errorWrap').textContent = 'Failed to load: ' + err.message;
+    });
+  }
+
+  function renderSummary(d){
+    var inv = d.investedPct || 0;
+    var cash = d.cashPct || 0;
+    document.getElementById('barInvested').style.width = inv + '%';
+    document.getElementById('barInvested').textContent = inv >= 8 ? inv.toFixed(1) + '% Invested' : '';
+    document.getElementById('barCash').style.width = cash + '%';
+    document.getElementById('barCash').textContent = cash >= 8 ? cash.toFixed(1) + '% Cash' : '';
+    document.getElementById('investedPct').textContent = inv.toFixed(1) + '%';
+    document.getElementById('cashPct').textContent = cash.toFixed(1) + '%';
+  }
+
+  function renderPieChart(positions){
+    var slices = [];
+    var otherWeight = 0;
+    for(var i = 0; i < positions.length; i++){
+      if(positions[i].weight >= 2) slices.push(positions[i]);
+      else otherWeight += positions[i].weight;
+    }
+    if(otherWeight > 0)
+      slices.push({ticker:'Other', name:'Other small positions', weight:Math.round(otherWeight*100)/100});
+
+    var labels = slices.map(function(s){ return s.ticker; });
+    var data = slices.map(function(s){ return s.weight; });
+    var colors = slices.map(function(s,i){ return s.ticker==='Other' ? OTHER_COLOR : PIE_COLORS[i%PIE_COLORS.length]; });
+
+    if(_pieChart) _pieChart.destroy();
+    _pieChart = new Chart(document.getElementById('pieChart').getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{data:data, backgroundColor:colors, borderColor:'#08080d', borderWidth:2, hoverBorderColor:'#fff', hoverBorderWidth:2}]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:true, cutout:'55%',
+        plugins: {
+          legend:{display:true,position:'bottom',labels:{color:'#888',font:{size:10,family:"'Segoe UI',sans-serif"},boxWidth:10,boxHeight:10,padding:8,usePointStyle:true,pointStyle:'rectRounded'}},
+          tooltip:{backgroundColor:'#14141e',titleColor:'#fff',bodyColor:'#ccc',borderColor:'#2a2a3a',borderWidth:1,cornerRadius:6,padding:10,
+            callbacks:{label:function(ctx){return ctx.label+': '+ctx.parsed.toFixed(1)+'%';}}}
+        }
+      }
+    });
+  }
+
+  function renderTable(positions){
+    document.getElementById('posCount').textContent = positions.length + ' holdings';
+    var maxW = positions.length > 0 ? positions[0].weight : 1;
+    var html = '';
+    for(var i = 0; i < positions.length; i++){
+      var p = positions[i];
+      var gainCls = p.gain > 0 ? 'gain-pos' : (p.gain < 0 ? 'gain-neg' : 'gain-zero');
+      var gainSign = p.gain > 0 ? '+' : '';
+      var barW = maxW > 0 ? Math.round(p.weight / maxW * 100) : 0;
+      html += '<tr>'
+        + '<td class="col-ticker">' + esc(p.ticker) + '</td>'
+        + '<td class="col-name">' + esc(p.name) + '</td>'
+        + '<td class="col-right col-weight"><div class="weight-bar-cell">'
+          + '<span class="weight-val">' + p.weight.toFixed(1) + '%</span>'
+          + '<div class="weight-bar-bg"><div class="weight-bar-fill" style="width:' + barW + '%"></div></div>'
+        + '</div></td>'
+        + '<td class="col-right col-gain ' + gainCls + '">' + gainSign + p.gain.toFixed(1) + '%</td>'
+        + '</tr>';
+    }
+    document.getElementById('posBody').innerHTML = html;
+  }
+
+  function loadHistory(range){
+    _currentRange = range || 'all';
+    fetch('/api/portfolio/history?range=' + _currentRange).then(function(r){return r.json();}).then(function(d){
+      if(d.error || !d.snapshots || d.snapshots.length === 0){
+        document.getElementById('perfLabel').textContent = 'No data yet';
+        return;
+      }
+      renderValueChart(d.snapshots);
+    }).catch(function(){});
+  }
+
+  function switchRange(range, btn){
+    var btns = document.querySelectorAll('.range-btn');
+    for(var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
+    btn.classList.add('active');
+    loadHistory(range);
+  }
+
+  function renderValueChart(snapshots){
+    var labels = snapshots.map(function(s){ return s.date; });
+    var data = snapshots.map(function(s){ return s.pct; });
+
+    var lastVal = data[data.length - 1] || 0;
+    var lineColor = lastVal >= 0 ? '#22c55e' : '#ef4444';
+    var fillColor = lastVal >= 0 ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)';
+
+    if(_valueChart) _valueChart.destroy();
+    _valueChart = new Chart(document.getElementById('valueChart').getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: data,
+          borderColor: lineColor,
+          backgroundColor: fillColor,
+          fill: true,
+          tension: 0.3,
+          borderWidth: 2,
+          pointRadius: data.length > 30 ? 0 : 3,
+          pointBackgroundColor: lineColor,
+          pointBorderColor: '#08080d',
+          pointBorderWidth: 1,
+          pointHoverRadius: 5
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {mode: 'index', intersect: false},
+        plugins: {
+          legend: {display: false},
+          tooltip: {
+            backgroundColor:'#14141e',titleColor:'#fff',bodyColor:'#ccc',
+            borderColor:'#2a2a3a',borderWidth:1,cornerRadius:6,padding:10,
+            callbacks: {
+              label: function(ctx){
+                var v = ctx.parsed.y;
+                return (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: {color:'#111118',drawBorder:false},
+            ticks: {color:'#555',font:{size:10},maxTicksLimit:10}
+          },
+          y: {
+            grid: {color:'#111118',drawBorder:false},
+            ticks: {
+              color:'#555',font:{size:10},
+              callback: function(v){ return (v >= 0 ? '+' : '') + v.toFixed(1) + '%'; }
+            },
+            beginAtZero: false
+          }
+        }
+      }
+    });
+
+    var rangeLabels = {'1w':'Last 7 days','1m':'Last 30 days','all':'Since 01 Mar 2026'};
+    var label = rangeLabels[_currentRange] || 'Since 01 Mar 2026';
+    var curPct = lastVal >= 0 ? '+' + lastVal.toFixed(2) + '%' : lastVal.toFixed(2) + '%';
+    document.getElementById('perfLabel').textContent = label + '  ·  ' + curPct;
+  }
+
+  function loadTrades(){
+    fetch('/api/portfolio/trades').then(function(r){return r.json();}).then(function(d){
+      if(d.error){
+        document.getElementById('tradesEmpty').textContent = d.error;
+        document.getElementById('tradesEmpty').style.display = 'block';
+        document.getElementById('tradesWrap').style.display = 'none';
+        return;
+      }
+      _tradeData.open = d.open || [];
+      _tradeData.closed = d.closed || [];
+
+      document.getElementById('openCount').textContent = ' (' + _tradeData.open.length + ')';
+      document.getElementById('closedCount').textContent = ' (' + _tradeData.closed.length + ')';
+
+      var total = _tradeData.open.length + _tradeData.closed.length;
+      document.getElementById('tradeCount').textContent = total + ' trades';
+
+      renderTradeTab();
+    }).catch(function(){});
+  }
+
+  function switchTradeTab(tab, btn){
+    _currentTradeTab = tab;
+    var tabs = document.querySelectorAll('.trades-tab');
+    for(var i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
+    btn.classList.add('active');
+    renderTradeTab();
+  }
+
+  function renderTradeTab(){
+    var trades = _currentTradeTab === 'open' ? _tradeData.open : _tradeData.closed;
+    if(trades.length === 0){
+      document.getElementById('tradesEmpty').textContent = 'No ' + _currentTradeTab + ' trades';
+      document.getElementById('tradesEmpty').style.display = 'block';
+      document.getElementById('tradesWrap').style.display = 'none';
+      return;
+    }
+    document.getElementById('tradesEmpty').style.display = 'none';
+    document.getElementById('tradesWrap').style.display = 'block';
+
+    var html = '';
+    for(var i = 0; i < trades.length; i++){
+      var t = trades[i];
+      var sideCls = t.side === 'Buy' ? 'side-buy' : 'side-sell';
+      var gainStr = '--';
+      var gainCls = 'gain-zero';
+      if(t.gain !== null && t.gain !== undefined){
+        gainCls = t.gain > 0 ? 'gain-pos' : (t.gain < 0 ? 'gain-neg' : 'gain-zero');
+        gainStr = (t.gain > 0 ? '+' : '') + t.gain.toFixed(1) + '%';
+      }
+      var fillsStr = t.fills > 1 ? '<span class="fills-badge">(' + t.fills + ' fills)</span>' : '';
+      html += '<tr>'
+        + '<td>' + esc(t.date) + '</td>'
+        + '<td class="col-ticker">' + esc(t.ticker) + '</td>'
+        + '<td class="col-name">' + esc(t.name || '') + fillsStr + '</td>'
+        + '<td class="' + sideCls + '">' + esc(t.side) + '</td>'
+        + '<td class="col-right col-gain ' + gainCls + '">' + gainStr + '</td>'
+        + '</tr>';
+    }
+    document.getElementById('tradesBody').innerHTML = html;
+  }
+
+  function esc(s){
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  window.loadPortfolio = loadPortfolio;
+  window.switchRange = switchRange;
+  window.switchTradeTab = switchTradeTab;
+  loadPortfolio(false);
+})();
+</script>
+
+</body>
+</html>
