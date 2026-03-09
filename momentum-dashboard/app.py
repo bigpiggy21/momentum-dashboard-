@@ -67,7 +67,8 @@ _TRACKER_CACHE_TTL = 60   # seconds
 
 _portfolio_cache = {"data": None, "ts": 0}
 _portfolio_trades_cache = {"data": None, "ts": 0}
-_PORTFOLIO_CACHE_TTL = 60  # seconds
+_PORTFOLIO_CACHE_TTL = 300        # 5 minutes for positions/cash
+_PORTFOLIO_TRADES_CACHE_TTL = 600 # 10 minutes for trade history (slow paginated endpoint)
 
 # ── Portfolio helpers ──────────────────────────────────────────────────
 def _get_t212_headers():
@@ -3484,7 +3485,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         global _portfolio_trades_cache
         try:
             # Return cache if fresh
-            if _portfolio_trades_cache["data"] and (time.time() - _portfolio_trades_cache["ts"]) < _PORTFOLIO_CACHE_TTL:
+            if _portfolio_trades_cache["data"] and (time.time() - _portfolio_trades_cache["ts"]) < _PORTFOLIO_TRADES_CACHE_TTL:
                 self.send_json(_portfolio_trades_cache["data"])
                 return
 
