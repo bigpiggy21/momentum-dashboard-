@@ -3356,9 +3356,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             cash_pct = round(free_cash / total_value * 100, 2)
             invested_pct = round(100 - cash_pct, 2)  # ensures cash + invested = 100%
 
-            # Load ticker names for display
+            # Load ticker names for display — merge sweep engine names + names from trades cache
             from sweep_engine import load_ticker_names as _load_names
             ticker_names = _load_names() or {}
+            if _portfolio_trades_cache.get("data"):
+                for _tlist in (_portfolio_trades_cache["data"].get("open", []),
+                               _portfolio_trades_cache["data"].get("closed", [])):
+                    for _t in _tlist:
+                        if _t.get("name") and _t["ticker"] not in ticker_names:
+                            ticker_names[_t["ticker"]] = _t["name"]
 
             # Build sanitised position list (% only, no £ amounts)
             # Pass 1: collect positions with ppl (account currency) for weight calc
