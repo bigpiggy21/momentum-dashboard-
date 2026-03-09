@@ -2322,18 +2322,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             L.append("rareColor    = color.new(#a78bfa, opacity)")
             L.append("")
 
-            # Ticker index lookup
-            L.append(f"// \u2500\u2500 Ticker Lookup ({len(all_tickers)} tickers) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")
-            # Emit ticker array (use _emit helper for auto-chunking)
-            ticker_strings = [f'"{t}"' for t in all_tickers]
-            _emit("tickerList", ticker_strings, 10, "string")
-            L.append("tidx = array.indexof(tickerList, syminfo.ticker)")
-            L.append("dateKey = year * 10000 + month * 100 + dayofmonth")
-            L.append("newDay  = ta.change(time('D')) != 0  // only plot once per day on intraday charts")
-            L.append("myKey = tidx * 100000000 + dateKey")
-            L.append("")
-
-            # Emit data arrays — auto-chunks at 3900 to stay under Pine's 4000-arg limit
+            # Emit helper — auto-chunks at 3900 to stay under Pine's 4000-arg limit
             PINE_ARRAY_LIMIT = 3900
 
             def _emit(name, items, per_line, empty_type="int"):
@@ -2365,6 +2354,16 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     L.append(f"var {name} = {chunks[0]}")
                     for ch in chunks[1:]:
                         L.append(f"array.concat({name}, {ch})")
+
+            # Ticker index lookup
+            L.append(f"// \u2500\u2500 Ticker Lookup ({len(all_tickers)} tickers) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")
+            ticker_strings = [f'"{t}"' for t in all_tickers]
+            _emit("tickerList", ticker_strings, 10, "string")
+            L.append("tidx = array.indexof(tickerList, syminfo.ticker)")
+            L.append("dateKey = year * 10000 + month * 100 + dayofmonth")
+            L.append("newDay  = ta.change(time('D')) != 0  // only plot once per day on intraday charts")
+            L.append("myKey = tidx * 100000000 + dateKey")
+            L.append("")
 
             L.append(f"// \u2500\u2500 Event Data ({stats['clusterbombs']} CB, {stats['monsters']} monster, {stats['rare']} rare) \u2500\u2500")
             _emit("cbKeys", cb_keys, 8)
