@@ -2330,30 +2330,36 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     L.append(f"var {name} = array.new_{empty_type}(0)")
                     return
                 if len(items) <= PINE_ARRAY_LIMIT:
-                    # Single array.from() — fits in one call
-                    L.append(f"var {name} = array.from(")
+                    # Small array — wrap in function to keep main body short
+                    L.append(f"_init_{name}() =>")
+                    L.append(f"    array.from(")
                     for i in range(0, len(items), per_line):
                         chunk = ", ".join(items[i:i+per_line])
                         comma = "," if i + per_line < len(items) else ""
-                        L.append(f"  {chunk}{comma}")
-                    L.append("  )")
+                        L.append(f"      {chunk}{comma}")
+                    L.append("      )")
+                    L.append(f"var {name} = _init_{name}()")
                 else:
-                    # Split into chunks, concat
-                    chunks = []
+                    # Large array — split into chunk functions, concat in init
+                    chunk_names = []
                     for ci in range(0, len(items), PINE_ARRAY_LIMIT):
                         chunk_items = items[ci:ci+PINE_ARRAY_LIMIT]
-                        chunk_name = f"_{name}_{ci // PINE_ARRAY_LIMIT}"
-                        chunks.append(chunk_name)
-                        L.append(f"var {chunk_name} = array.from(")
+                        cn = f"_init_{name}_{ci // PINE_ARRAY_LIMIT}"
+                        chunk_names.append(cn)
+                        L.append(f"{cn}() =>")
+                        L.append(f"    array.from(")
                         for i in range(0, len(chunk_items), per_line):
                             row = ", ".join(chunk_items[i:i+per_line])
                             comma = "," if i + per_line < len(chunk_items) else ""
-                            L.append(f"  {row}{comma}")
-                        L.append("  )")
-                    # Concat all chunks into final array
-                    L.append(f"var {name} = {chunks[0]}")
-                    for ch in chunks[1:]:
-                        L.append(f"array.concat({name}, {ch})")
+                            L.append(f"      {row}{comma}")
+                        L.append("      )")
+                    # Init function that concats all chunks
+                    L.append(f"_init_{name}() =>")
+                    L.append(f"    a = {chunk_names[0]}()")
+                    for cn in chunk_names[1:]:
+                        L.append(f"    array.concat(a, {cn}())")
+                    L.append(f"    a")
+                    L.append(f"var {name} = _init_{name}()")
 
             # Ticker index lookup
             L.append(f"// \u2500\u2500 Ticker Lookup ({len(all_tickers)} tickers) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")
