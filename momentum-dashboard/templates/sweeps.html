@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TBD Technologies — Dark Pool Sweeps</title>
+<title>TBD Technologies — Stock Sweeps</title>
 <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 <link rel="stylesheet" href="/static/header.css">
 <style>
@@ -398,7 +398,7 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
 <!-- =================== LEFT PANEL: Watchlist Tracker =================== -->
 <div class="left-panel" id="leftPanel">
   <div class="left-panel-header">
-    <div class="tracker-title"><span class="cb-icon">&#x1F4A3;</span> Darkpool Sweep Tracker</div>
+    <div class="tracker-title"><span class="cb-icon">&#x1F4A3;</span> Stock Sweeps</div>
     <div class="stats-bar" id="statsBar">
       <div class="stat-item"><div class="stat-label">Tickers</div><div class="stat-value" id="statTickers">—</div></div>
       <div class="stat-item"><div class="stat-label">Sweeps</div><div class="stat-value accent" id="statSweeps">—</div></div>
@@ -2394,16 +2394,21 @@ function copyPineScript(){
     .then(function(r){ return r.json(); })
     .then(function(d){
       if(!d.ok){ showToast('Error: ' + (d.error || 'unknown')); return; }
-      navigator.clipboard.writeText(d.script).then(function(){
-        var s = d.stats;
-        var kb = (d.script_size / 1024).toFixed(1);
-        showToast(s.tickers + ' tickers copied (' + s.clusterbombs + ' CB, ' + s.monsters + ' M, ' + s.rare + ' R) — ' + kb + 'KB');
-      }).catch(function(){
+      var s = d.stats;
+      var kb = (d.script_size / 1024).toFixed(1);
+      var openInTab = function(){
         var w = window.open('', '_blank');
         w.document.write('<pre style="background:#1a1a2e;color:#d0d0d8;padding:20px;font-size:12px;white-space:pre-wrap;">'
           + d.script.replace(/</g,'&lt;') + '</pre>');
-        showToast('Clipboard failed — opened in new tab');
-      });
+        showToast(s.tickers + ' tickers — opened in new tab (clipboard unavailable over HTTP)');
+      };
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(d.script).then(function(){
+          showToast(s.tickers + ' tickers copied (' + s.clusterbombs + ' CB, ' + s.monsters + ' M, ' + s.rare + ' R) — ' + kb + 'KB');
+        }).catch(openInTab);
+      } else {
+        openInTab();
+      }
     })
     .catch(function(e){ showToast('Failed: ' + e.message); });
 }

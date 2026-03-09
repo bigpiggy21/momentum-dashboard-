@@ -38,13 +38,13 @@
     // ? button (links to home / about)
     + '<a class="page-btn page-help-btn" href="/" title="Home">?</a>'
 
-    // Darkpool Sweeps (highlighted with orange border)
+    // Darkpool Intelligence
     + '<div class="header-divider"></div>'
     + '<div class="header-section">'
-    + '<div class="section-label">INTELLIGENCE</div>'
+    + '<div class="section-label">DARKPOOL INTELLIGENCE</div>'
     + '<div class="section-controls">'
-    + btn('/sweeps', 'Dark Pool Sweeps', '&#x1F4A3; Darkpool Sweeps', 'sweeps')
-    + btn('/etf-sweeps', 'ETF Dark Pool Sweeps', '&#x1F4C8; ETF Sweeps', 'etf-sweeps')
+    + btn('/sweeps', 'Stock Sweeps', '&#x1F4A3; Stock Sweeps', 'sweeps')
+    + btn('/etf-sweeps', 'ETF Sweeps', '&#x1F4C8; ETF Sweeps', 'etf-sweeps')
     + btn('/analysis', 'Sweep Analysis', '&#x1F4CA; Analysis', 'analysis')
     + '</div></div>'
 
