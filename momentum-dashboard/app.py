@@ -2193,19 +2193,30 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def serve_sweep_pinescript_all(self, query=None):
         """GET /api/sweeps/pinescript-all — universal multi-ticker Pine Script indicator.
-        Optional ?details=1 to include tip arrays for detail labels (~90KB extra).
+        Optional params:
+          ?details=1   — include tip arrays for detail labels (~90KB extra)
+          ?months=6    — only events from last N months (default: 6, max: 36)
+          ?types=cb,monster,rare — comma-separated types to include (default: all)
         """
-        include_tips = (query or {}).get("details", ["0"])[0] == "1"
+        q = query or {}
+        include_tips = q.get("details", ["0"])[0] == "1"
+        months = min(int(q.get("months", ["6"])[0] or 6), 36)
+        types_param = q.get("types", ["cb,monster,rare"])[0]
+        include_types = set(t.strip().lower() for t in types_param.split(","))
         try:
             import sqlite3
             from sweep_engine import get_ticker_day_ranks
+            from datetime import datetime, timedelta
+
+            cutoff = (datetime.now() - timedelta(days=months * 30)).strftime("%Y-%m-%d")
 
             conn = sqlite3.connect(DB_PATH, timeout=10)
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 "SELECT ticker, event_date, sweep_count, total_notional, avg_price, "
                 "direction, is_rare, COALESCE(is_monster, 0) as is_monster "
-                "FROM clusterbomb_events ORDER BY ticker, event_date"
+                "FROM clusterbomb_events WHERE event_date >= ? ORDER BY ticker, event_date",
+                (cutoff,)
             ).fetchall()
             conn.close()
 
@@ -2246,19 +2257,22 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 price_str = f"{price:.2f}"
 
                 if r["is_monster"]:
-                    monster_keys.append(str(combined_key))
-                    monster_tips.append(f'"{tip}"')
-                    monster_prices.append(price_str)
+                    if "monster" in include_types:
+                        monster_keys.append(str(combined_key))
+                        monster_tips.append(f'"{tip}"')
+                        monster_prices.append(price_str)
                     stats["monsters"] += 1
                 elif r["is_rare"]:
-                    rare_keys.append(str(combined_key))
-                    rare_tips.append(f'"{tip}"')
-                    rare_prices.append(price_str)
+                    if "rare" in include_types:
+                        rare_keys.append(str(combined_key))
+                        rare_tips.append(f'"{tip}"')
+                        rare_prices.append(price_str)
                     stats["rare"] += 1
                 else:
-                    cb_keys.append(str(combined_key))
-                    cb_tips.append(f'"{tip}"')
-                    cb_prices.append(price_str)
+                    if "cb" in include_types:
+                        cb_keys.append(str(combined_key))
+                        cb_tips.append(f'"{tip}"')
+                        cb_prices.append(price_str)
                     stats["clusterbombs"] += 1
 
             # ── Build Pine Script ──
@@ -2383,10 +2397,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     L.append(f"          textcolor=color.white, style=label.style_label_down, size={lbl_sz})")
             L.append("")
 
-            L.append(f'// Generated {datetime.now().strftime("%Y-%m-%d %H:%M")}')
-            L.append(f"// {stats['tickers']} tickers, {stats['clusterbombs']} CB, {stats['monsters']} monsters, {stats['rare']} rare")
+            included = len(cb_keys) + len(monster_keys) + len(rare_keys)
+            L.append(f'// Generated {datetime.now().strftime("%Y-%m-%d %H:%M")} | {months}mo window')
+            L.append(f"// {stats['tickers']} tickers, {included} events ({len(cb_keys)} CB, {len(monster_keys)} monsters, {len(rare_keys)} rare)")
 
             script = "\n".join(L)
+            stats["included"] = included
+            stats["months"] = months
+            stats["types"] = list(include_types)
             self.send_json({"ok": True, "script": script, "stats": stats,
                             "tickers": all_tickers, "script_size": len(script)})
         except Exception as e:

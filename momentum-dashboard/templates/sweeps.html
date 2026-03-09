@@ -379,7 +379,31 @@ td .rare-flag,td .monster-flag{font-size:9px;padding:1px 4px;border-radius:2px;m
 <button class="btn-action" id="btnFetch" onclick="fetchSweeps()">&#x1F4E1; Fetch</button>
 <button class="btn-secondary" onclick="loadAll()" title="Refresh all data">&#x21BB;</button>
 <div class="filter-divider"></div>
-<button class="btn-pine" id="btnPineScript" onclick="copyPineScript()" title="Copy universal Pine Script indicator (all tickers) to clipboard">&#x1F4CB; Pine Script</button>
+<div style="position:relative;display:inline-block;">
+<button class="btn-pine" id="btnPineScript" onclick="togglePineMenu()" title="Generate Pine Script indicator for TradingView">&#x1F4CB; Pine Script</button>
+<div id="pineMenu" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#1e1e30;border:1px solid #333;border-radius:6px;padding:12px 14px;z-index:999;min-width:220px;box-shadow:0 4px 12px rgba(0,0,0,.5);">
+  <div style="font-size:11px;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Pine Script Config</div>
+  <div style="margin-bottom:8px;">
+    <label style="font-size:12px;color:#ccc;">Date range</label>
+    <select id="pineMonths" style="width:100%;margin-top:3px;padding:4px 6px;background:#161625;color:#d0d0d8;border:1px solid #444;border-radius:4px;font-size:12px;">
+      <option value="3">Last 3 months</option>
+      <option value="6" selected>Last 6 months</option>
+      <option value="12">Last 12 months</option>
+      <option value="24">Last 2 years</option>
+      <option value="36">All time (max 3yr)</option>
+    </select>
+  </div>
+  <div style="margin-bottom:10px;">
+    <label style="font-size:12px;color:#ccc;">Event types</label>
+    <div style="margin-top:4px;display:flex;gap:8px;">
+      <label style="font-size:11px;color:#d0d0d8;cursor:pointer;"><input type="checkbox" id="pineCB" checked style="margin-right:3px;">CB</label>
+      <label style="font-size:11px;color:#d0d0d8;cursor:pointer;"><input type="checkbox" id="pineMonster" checked style="margin-right:3px;">Monster</label>
+      <label style="font-size:11px;color:#d0d0d8;cursor:pointer;"><input type="checkbox" id="pineRare" checked style="margin-right:3px;">Rare</label>
+    </div>
+  </div>
+  <button onclick="copyPineScript()" style="width:100%;padding:6px 10px;background:#f59e0b;color:#000;border:none;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;">Generate & Copy</button>
+</div>
+</div>
 </div>
 
 <!-- Stats bar removed from here — moved inside left panel -->
@@ -2387,24 +2411,45 @@ function _downloadChartBlob(canvas){
   showToast('Chart saved as PNG');
 }
 
+function togglePineMenu(){
+  var m = document.getElementById('pineMenu');
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+}
+// Close pine menu on outside click
+document.addEventListener('click', function(e){
+  var m = document.getElementById('pineMenu');
+  if(m && m.style.display !== 'none' && !e.target.closest('#pineMenu') && !e.target.closest('#btnPineScript')){
+    m.style.display = 'none';
+  }
+});
+
 function copyPineScript(){
-  // Universal multi-ticker indicator — works on any chart
-  showToast('Generating universal Pine Script...');
-  fetch('/api/sweeps/pinescript-all')
+  var months = document.getElementById('pineMonths').value;
+  var types = [];
+  if(document.getElementById('pineCB').checked) types.push('cb');
+  if(document.getElementById('pineMonster').checked) types.push('monster');
+  if(document.getElementById('pineRare').checked) types.push('rare');
+  if(!types.length){ showToast('Select at least one event type'); return; }
+
+  document.getElementById('pineMenu').style.display = 'none';
+  showToast('Generating Pine Script (' + months + 'mo, ' + types.join('+') + ')...');
+
+  fetch('/api/sweeps/pinescript-all?months=' + months + '&types=' + types.join(','))
     .then(function(r){ return r.json(); })
     .then(function(d){
       if(!d.ok){ showToast('Error: ' + (d.error || 'unknown')); return; }
       var s = d.stats;
       var kb = (d.script_size / 1024).toFixed(1);
+      var inc = s.included || 0;
       var openInTab = function(){
         var w = window.open('', '_blank');
         w.document.write('<pre style="background:#1a1a2e;color:#d0d0d8;padding:20px;font-size:12px;white-space:pre-wrap;">'
           + d.script.replace(/</g,'&lt;') + '</pre>');
-        showToast(s.tickers + ' tickers — opened in new tab (clipboard unavailable over HTTP)');
+        showToast(inc + ' events across ' + s.tickers + ' tickers — opened in new tab');
       };
       if(navigator.clipboard && navigator.clipboard.writeText){
         navigator.clipboard.writeText(d.script).then(function(){
-          showToast(s.tickers + ' tickers copied (' + s.clusterbombs + ' CB, ' + s.monsters + ' M, ' + s.rare + ' R) — ' + kb + 'KB');
+          showToast(inc + ' events copied (' + kb + 'KB) — ' + months + 'mo window');
         }).catch(openInTab);
       } else {
         openInTab();
