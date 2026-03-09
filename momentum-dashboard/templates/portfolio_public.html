@@ -182,10 +182,6 @@ input,select,textarea,button{color-scheme:dark;}
           <span class="summary-stat-label">Cash</span>
           <span class="summary-stat-val" id="cashPct">--</span>
         </div>
-        <div class="summary-stat" style="margin-left:auto;">
-          <span class="summary-stat-label">1D</span>
-          <span class="summary-stat-val" id="dayChangePct">--</span>
-        </div>
       </div>
     </div>
 
@@ -220,6 +216,7 @@ input,select,textarea,button{color-scheme:dark;}
     <div class="card" style="margin-bottom:28px;">
       <div class="card-title">
         Portfolio Performance
+        <span id="dayChangePct" style="font-size:14px;font-weight:600;margin-left:12px;"></span>
         <div style="display:flex;align-items:center;gap:12px;">
           <span class="card-subtitle" id="perfLabel">Since 01 Mar 2026</span>
           <div class="chart-range-btns">
@@ -333,15 +330,15 @@ input,select,textarea,button{color-scheme:dark;}
     document.getElementById('barCash').textContent = cash >= 8 ? cash.toFixed(1) + '% Cash' : '';
     document.getElementById('investedPct').textContent = inv.toFixed(1) + '%';
     document.getElementById('cashPct').textContent = cash.toFixed(1) + '%';
-    // 1D change
+    // 1D change — shown next to chart title
     var dayEl = document.getElementById('dayChangePct');
     if (d.dayChangePct != null) {
       var dc = d.dayChangePct;
-      dayEl.textContent = (dc >= 0 ? '+' : '') + dc.toFixed(2) + '%';
+      var label = '1D: ';
+      dayEl.textContent = label + (dc >= 0 ? '+' : '') + dc.toFixed(2) + '%';
       dayEl.style.color = dc >= 0 ? '#4caf50' : '#ef5350';
     } else {
-      dayEl.textContent = '--';
-      dayEl.style.color = '';
+      dayEl.textContent = '';
     }
   }
 

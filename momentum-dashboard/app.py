@@ -3762,26 +3762,27 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             # Sort by weight descending
             pos_list.sort(key=lambda x: x["weight"], reverse=True)
 
-            # 1D performance — compare current value vs previous close snapshot
+            # 1D performance — current value vs last trading day's close
+            # Find most recent snapshot from a DIFFERENT date than today
+            # (on Monday, this gets Friday/weekend snapshots which reflect Friday close)
             day_change_pct = None
+            prev_close_date = None
             try:
                 import sqlite3 as _sql3
                 _init_portfolio_db()
                 _pconn = _sql3.connect(DB_PATH, timeout=5)
                 today_str = datetime.utcnow().strftime("%Y-%m-%d")
-                # Best: yesterday's close snapshot. Fallback: most recent snapshot before today.
+                # Get the latest snapshot from any previous day (prefer is_close, fallback any)
                 prev_row = _pconn.execute(
-                    "SELECT total_value FROM portfolio_snapshots "
-                    "WHERE date < ? AND is_close = 1 ORDER BY date DESC LIMIT 1",
+                    "SELECT total_value, date FROM portfolio_snapshots "
+                    "WHERE date < ? ORDER BY ts DESC LIMIT 1",
                     (today_str,)).fetchone()
-                if not prev_row:
-                    prev_row = _pconn.execute(
-                        "SELECT total_value FROM portfolio_snapshots "
-                        "WHERE date < ? ORDER BY ts DESC LIMIT 1",
-                        (today_str,)).fetchone()
                 _pconn.close()
                 if prev_row and prev_row[0] and prev_row[0] > 0:
-                    day_change_pct = round((total_value - prev_row[0]) / prev_row[0] * 100, 2)
+                    # Skip if only the seed baseline exists (would show total gain, not 1D)
+                    if prev_row[1] != "2026-03-01":
+                        day_change_pct = round((total_value - prev_row[0]) / prev_row[0] * 100, 2)
+                        prev_close_date = prev_row[1]
             except Exception:
                 pass
 
@@ -3789,6 +3790,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "cashPct": cash_pct,
                 "investedPct": invested_pct,
                 "dayChangePct": day_change_pct,
+                "prevCloseDate": prev_close_date,
                 "positions": pos_list,
                 "updatedAt": datetime.utcnow().isoformat() + "Z",
             }
