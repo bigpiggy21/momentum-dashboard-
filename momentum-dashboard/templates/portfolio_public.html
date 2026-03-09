@@ -221,10 +221,10 @@ input,select,textarea,button{color-scheme:dark;}
           <div style="display:flex;align-items:center;gap:12px;">
             <span class="card-subtitle" id="perfLabel">Since 01 Mar 2026</span>
             <div class="chart-range-btns">
-              <button class="range-btn" onclick="switchRange('1d',this)">1D</button>
+              <button class="range-btn active" onclick="switchRange('1d',this)">1D</button>
               <button class="range-btn" onclick="switchRange('1w',this)">1W</button>
               <button class="range-btn" onclick="switchRange('1m',this)">1M</button>
-              <button class="range-btn active" onclick="switchRange('all',this)">All</button>
+              <button class="range-btn" onclick="switchRange('all',this)">All</button>
             </div>
           </div>
         </div>
@@ -266,7 +266,7 @@ input,select,textarea,button{color-scheme:dark;}
 (function(){
   var _pieChart = null;
   var _valueChart = null;
-  var _currentRange = 'all';
+  var _currentRange = '1d';
   var _tradeData = {open:[], closed:[]};
   var _currentTradeTab = 'open';
 

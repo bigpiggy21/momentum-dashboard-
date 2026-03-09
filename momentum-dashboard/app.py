@@ -3826,7 +3826,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
             if range_param == "1d":
                 # 1D: show intraday snapshots indexed from previous close
-                today_str = datetime.utcnow().strftime("%Y-%m-%d")
+                now = datetime.utcnow()
+                today_str = now.strftime("%Y-%m-%d")
+                now_ts = now.strftime("%Y-%m-%dT%H:%M")
 
                 # Find previous close value (latest snapshot from any day before today)
                 prev_row = conn.execute(
@@ -3835,11 +3837,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     (today_str,)).fetchone()
                 prev_val = prev_row["total_value"] if prev_row else None
 
-                # Get all of today's snapshots (hourly granularity)
+                # Get today's snapshots up to current time only (no future/stale points)
                 rows = conn.execute(
                     "SELECT ts, total_value FROM portfolio_snapshots "
-                    "WHERE date = ? ORDER BY ts ASC",
-                    (today_str,)).fetchall()
+                    "WHERE date = ? AND ts <= ? ORDER BY ts ASC",
+                    (today_str, now_ts)).fetchall()
                 conn.close()
 
                 if not prev_val or prev_val <= 0:
