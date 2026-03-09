@@ -221,6 +221,7 @@ input,select,textarea,button{color-scheme:dark;}
           <div style="display:flex;align-items:center;gap:12px;">
             <span class="card-subtitle" id="perfLabel">Since 01 Mar 2026</span>
             <div class="chart-range-btns">
+              <button class="range-btn" onclick="switchRange('1d',this)">1D</button>
               <button class="range-btn" onclick="switchRange('1w',this)">1W</button>
               <button class="range-btn" onclick="switchRange('1m',this)">1M</button>
               <button class="range-btn active" onclick="switchRange('all',this)">All</button>
@@ -400,9 +401,15 @@ input,select,textarea,button{color-scheme:dark;}
     _currentRange = range || 'all';
     fetch('/api/portfolio/history?range=' + _currentRange).then(function(r){return r.json();}).then(function(d){
       if(d.error || !d.snapshots || d.snapshots.length === 0){
-        document.getElementById('perfLabel').textContent = 'No data yet';
+        document.getElementById('perfLabel').textContent = range === '1d' ? 'No intraday data yet' : 'No data yet';
         return;
       }
+      // Update subtitle label
+      var label = 'Since 01 Mar 2026';
+      if(range === '1d') label = 'Since prev close' + (d.prevClose ? ' (' + d.prevClose + ')' : '');
+      else if(range === '1w') label = 'Last 7 days';
+      else if(range === '1m') label = 'Last 30 days';
+      document.getElementById('perfLabel').textContent = label;
       renderValueChart(d.snapshots);
     }).catch(function(){});
   }

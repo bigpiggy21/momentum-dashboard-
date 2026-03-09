@@ -3812,34 +3812,68 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def serve_portfolio_history(self, query=None):
         """GET /api/portfolio/history — return indexed % snapshots for chart.
-        Optional ?range=1w|1m|all (default all). For chart, return one point per day (latest snapshot)."""
+        ?range=1d|1w|1m|all (default all).
+        1d: intraday hourly snapshots indexed from previous close (0%).
+        Others: one point per day indexed from March 1 baseline."""
         try:
             _init_portfolio_db()
             import sqlite3
             conn = sqlite3.connect(DB_PATH, timeout=5)
             conn.row_factory = sqlite3.Row
 
-            # Determine date range filter
             range_param = (query or {}).get("range", ["all"])[0] if query else "all"
+
+            if range_param == "1d":
+                # 1D: show intraday snapshots indexed from previous close
+                today_str = datetime.utcnow().strftime("%Y-%m-%d")
+
+                # Find previous close value (latest snapshot from any day before today)
+                prev_row = conn.execute(
+                    "SELECT total_value, date FROM portfolio_snapshots "
+                    "WHERE date < ? ORDER BY ts DESC LIMIT 1",
+                    (today_str,)).fetchone()
+                prev_val = prev_row["total_value"] if prev_row else None
+
+                # Get all of today's snapshots (hourly granularity)
+                rows = conn.execute(
+                    "SELECT ts, total_value FROM portfolio_snapshots "
+                    "WHERE date = ? ORDER BY ts ASC",
+                    (today_str,)).fetchall()
+                conn.close()
+
+                if not prev_val or prev_val <= 0:
+                    self.send_json({"snapshots": [], "range": "1d"})
+                    return
+
+                snapshots = []
+                for r in rows:
+                    pct = round((r["total_value"] - prev_val) / prev_val * 100, 2)
+                    # Show time portion: "2026-03-09T14:00" -> "14:00"
+                    ts = r["ts"]
+                    label = ts[11:16] if len(ts) >= 16 else ts
+                    snapshots.append({"date": label, "pct": pct})
+
+                self.send_json({"snapshots": snapshots, "range": "1d",
+                                "prevClose": prev_row["date"] if prev_row else None})
+                return
+
+            # Non-1D ranges: one point per day
             date_filter = "2026-03-01"
             if range_param == "1w":
                 date_filter = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
             elif range_param == "1m":
                 date_filter = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
 
-            # Get one point per day (the latest snapshot for each day)
             rows = conn.execute(
                 "SELECT date, total_pct, ts FROM portfolio_snapshots "
-                "WHERE date >= ? "
-                "ORDER BY ts ASC",
-                (date_filter,)
-            ).fetchall()
+                "WHERE date >= ? ORDER BY ts ASC",
+                (date_filter,)).fetchall()
             conn.close()
 
             # Deduplicate to latest snapshot per day
             day_map = {}
             for r in rows:
-                day_map[r["date"]] = r["total_pct"]  # last one per day wins (ordered by ts ASC)
+                day_map[r["date"]] = r["total_pct"]
 
             snapshots = [{"date": d, "pct": p} for d, p in sorted(day_map.items())]
             self.send_json({"snapshots": snapshots})
