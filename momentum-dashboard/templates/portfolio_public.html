@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{background:#0e0e16;color:#dcdce4;font-family:'Segoe UI',-apple-system,sans-serif;font-size:13px;color-scheme:dark;}
+body{background:#0e0e16;color:#dcdce4;font-family:'Segoe UI',-apple-system,sans-serif;font-size:15px;color-scheme:dark;}
 input,select,textarea,button{color-scheme:dark;}
 
 /* ── Page container ── */
@@ -15,57 +15,57 @@ input,select,textarea,button{color-scheme:dark;}
 
 /* ── Page header ── */
 .portfolio-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
-.portfolio-title{font-size:24px;font-weight:700;color:#fff;display:flex;align-items:center;gap:10px;}
-.portfolio-title .piggy{font-size:28px;}
+.portfolio-title{font-size:32px;font-weight:700;color:#fff;display:flex;align-items:center;gap:12px;}
+.portfolio-title .piggy{font-size:36px;}
 .portfolio-title .accent{color:#f59e0b;}
 .header-right-info{display:flex;align-items:center;gap:14px;}
-.last-updated{font-size:11px;color:#555;font-family:'Consolas',monospace;}
-.btn-refresh{background:#1e293b;color:#f59e0b;border:1px solid #f59e0b;padding:5px 14px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;height:28px;display:inline-flex;align-items:center;gap:5px;}
+.last-updated{font-size:14px;color:#778;font-family:'Consolas',monospace;}
+.btn-refresh{background:#1e293b;color:#f59e0b;border:1px solid #f59e0b;padding:6px 18px;border-radius:5px;font-size:14px;font-weight:700;cursor:pointer;height:36px;display:inline-flex;align-items:center;gap:6px;}
 .btn-refresh:hover{background:#334155;color:#fbbf24;}
 .btn-refresh:disabled{opacity:0.4;cursor:not-allowed;}
 
 /* ── Trading hours info bar ── */
-.hours-bar{display:flex;gap:20px;align-items:center;margin-bottom:20px;padding:6px 12px;background:#12121c;border:1px solid #252538;border-radius:6px;font-size:11px;color:#667;}
-.hours-bar .hours-item{display:flex;align-items:center;gap:5px;}
-.hours-bar .flag{font-size:13px;}
+.hours-bar{display:flex;gap:20px;align-items:center;margin-bottom:20px;padding:8px 14px;background:#12121c;border:1px solid #252538;border-radius:6px;font-size:13px;color:#667;}
+.hours-bar .hours-item{display:flex;align-items:center;gap:6px;}
+.hours-bar .flag{font-size:16px;}
 .hours-bar .exchange{color:#999;font-weight:600;}
-.hours-bar .times{color:#667;font-family:'Consolas',monospace;}
-.hours-bar .hours-sep{color:#252538;font-size:14px;}
+.hours-bar .times{color:#778;font-family:'Consolas',monospace;}
+.hours-bar .hours-sep{color:#252538;font-size:16px;}
 
 /* ── Summary bar (Cash vs Invested) ── */
 .summary-section{margin-bottom:28px;}
-.summary-label{font-size:10px;color:#778;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
-.summary-bar-wrap{background:#181824;border:1px solid #252538;border-radius:6px;overflow:hidden;height:32px;display:flex;}
-.bar-invested{background:linear-gradient(90deg,#f59e0b,#d97706);height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000;transition:width 0.4s ease;min-width:0;}
-.bar-cash{background:#1e293b;height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#94a3b8;transition:width 0.4s ease;min-width:0;}
+.summary-label{font-size:13px;color:#778;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;}
+.summary-bar-wrap{background:#181824;border:1px solid #252538;border-radius:6px;overflow:hidden;height:38px;display:flex;}
+.bar-invested{background:linear-gradient(90deg,#f59e0b,#d97706);height:100%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#000;transition:width 0.4s ease;min-width:0;}
+.bar-cash{background:#1e293b;height:100%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#94a3b8;transition:width 0.4s ease;min-width:0;}
 .summary-stats{display:flex;gap:24px;margin-top:8px;}
 .summary-stat{display:flex;align-items:center;gap:6px;}
-.summary-dot{width:10px;height:10px;border-radius:2px;}
+.summary-dot{width:12px;height:12px;border-radius:2px;}
 .summary-dot.invested{background:#f59e0b;}
 .summary-dot.cash{background:#1e293b;border:1px solid #334155;}
-.summary-stat-label{font-size:11px;color:#999;}
-.summary-stat-val{font-size:12px;font-weight:700;color:#fff;font-family:'Consolas',monospace;}
+.summary-stat-label{font-size:14px;color:#999;}
+.summary-stat-val{font-size:15px;font-weight:700;color:#fff;font-family:'Consolas',monospace;}
 
 /* ── Content grid: pie + table ── */
 .content-grid{display:grid;grid-template-columns:340px 1fr;gap:28px;align-items:start;margin-bottom:28px;}
 
 /* ── Card shared ── */
 .card{background:#12121c;border:1px solid #252538;border-radius:8px;padding:20px;}
-.card-title{font-size:13px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
-.card-subtitle{font-size:11px;color:#778;font-weight:400;font-family:'Consolas',monospace;}
+.card-title{font-size:16px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;}
+.card-subtitle{font-size:13px;color:#778;font-weight:400;font-family:'Consolas',monospace;}
 
 /* ── Pie chart card ── */
 .chart-wrap{position:relative;width:280px;height:280px;margin:0 auto;}
 
 /* ── Positions table ── */
 .positions-table,.trades-table{width:100%;border-collapse:collapse;}
-.positions-table thead th,.trades-table thead th{text-align:left;font-size:10px;color:#778;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;padding:6px 10px;border-bottom:1px solid #252538;white-space:nowrap;}
+.positions-table thead th,.trades-table thead th{text-align:left;font-size:12px;color:#778;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;padding:8px 10px;border-bottom:1px solid #252538;white-space:nowrap;}
 .positions-table thead th.col-right,.trades-table thead th.col-right{text-align:right;}
 .positions-table tbody tr,.trades-table tbody tr{border-bottom:1px solid #1a1a28;transition:background 0.1s;}
 .positions-table tbody tr:hover,.trades-table tbody tr:hover{background:#1a1a24;}
-.positions-table tbody td,.trades-table tbody td{padding:8px 10px;font-size:12px;white-space:nowrap;}
-.col-ticker{font-weight:700;color:#f59e0b;font-family:'Consolas',monospace;font-size:12px;}
-.col-name{color:#bbb;max-width:200px;overflow:hidden;text-overflow:ellipsis;}
+.positions-table tbody td,.trades-table tbody td{padding:9px 10px;font-size:14px;white-space:nowrap;}
+.col-ticker{font-weight:700;color:#f59e0b;font-family:'Consolas',monospace;font-size:14px;}
+.col-name{color:#bbb;max-width:240px;overflow:hidden;text-overflow:ellipsis;}
 .col-right{text-align:right;font-family:'Consolas',monospace;}
 .col-weight{font-weight:600;color:#fff;}
 .col-gain{font-weight:600;}
@@ -74,8 +74,8 @@ input,select,textarea,button{color-scheme:dark;}
 .gain-zero{color:#778;}
 
 /* Side badge */
-.side-buy{color:#22c55e;font-weight:600;font-size:11px;}
-.side-sell{color:#ef4444;font-weight:600;font-size:11px;}
+.side-buy{color:#22c55e;font-weight:600;font-size:14px;}
+.side-sell{color:#ef4444;font-weight:600;font-size:14px;}
 
 /* Weight bar within table */
 .weight-bar-cell{display:flex;align-items:center;gap:8px;justify-content:flex-end;}
@@ -88,26 +88,26 @@ input,select,textarea,button{color-scheme:dark;}
 
 /* ── Chart range buttons ── */
 .chart-range-btns{display:flex;gap:4px;}
-.range-btn{background:#181824;color:#999;border:1px solid #252538;padding:3px 12px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;text-transform:uppercase;letter-spacing:0.5px;}
+.range-btn{background:#181824;color:#999;border:1px solid #252538;padding:4px 14px;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;text-transform:uppercase;letter-spacing:0.5px;}
 .range-btn:hover{background:#1e293b;color:#ddd;}
 .range-btn.active{background:#f59e0b;color:#000;border-color:#f59e0b;}
 
 /* ── Trades section tabs ── */
 .trades-tabs{display:flex;gap:4px;margin-bottom:12px;}
-.trades-tab{background:#181824;color:#999;border:1px solid #252538;padding:4px 14px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;}
+.trades-tab{background:#181824;color:#999;border:1px solid #252538;padding:5px 16px;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;}
 .trades-tab:hover{background:#1e293b;color:#ddd;}
 .trades-tab.active{background:#f59e0b;color:#000;border-color:#f59e0b;}
-.trades-tab .tab-count{font-size:10px;opacity:0.7;margin-left:4px;}
+.trades-tab .tab-count{font-size:12px;opacity:0.7;margin-left:4px;}
 
 /* Fills badge */
-.fills-badge{font-size:9px;color:#778;font-weight:400;margin-left:3px;}
+.fills-badge{font-size:11px;color:#778;font-weight:400;margin-left:4px;}
 
 /* ── Loading / Error ── */
 .loading-wrap{text-align:center;padding:80px 20px;color:#778;}
 .loading-wrap .spinner{display:inline-block;width:28px;height:28px;border:3px solid #252538;border-top-color:#f59e0b;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:12px;}
 @keyframes spin{to{transform:rotate(360deg);}}
-.error-msg{text-align:center;padding:40px 20px;color:#ef4444;font-size:13px;}
-.empty-msg{text-align:center;padding:30px 20px;color:#778;font-size:12px;}
+.error-msg{text-align:center;padding:40px 20px;color:#ef4444;font-size:15px;}
+.empty-msg{text-align:center;padding:30px 20px;color:#778;font-size:14px;}
 
 /* ── Responsive ── */
 @media(max-width:900px){
@@ -147,7 +147,7 @@ input,select,textarea,button{color-scheme:dark;}
       <span class="times">14:30 – 21:00 GMT</span>
     </div>
     <span class="hours-sep">|</span>
-    <div class="hours-item" style="color:#444;">
+    <div class="hours-item" style="color:#667;">
       Pre-market 09:00 GMT &middot; After-hours until 01:00 GMT
     </div>
   </div>
@@ -213,7 +213,7 @@ input,select,textarea,button{color-scheme:dark;}
     </div>
 
     <!-- Performance chart + Trades grid -->
-    <div class="content-grid" style="grid-template-columns:1fr 1fr;">
+    <div class="content-grid" style="grid-template-columns:1fr 1.85fr;">
       <div class="card">
         <div class="card-title">
           Portfolio Performance
@@ -357,7 +357,7 @@ input,select,textarea,button{color-scheme:dark;}
       options: {
         responsive:true, maintainAspectRatio:true, cutout:'55%',
         plugins: {
-          legend:{display:true,position:'bottom',labels:{color:'#999',font:{size:10,family:"'Segoe UI',sans-serif"},boxWidth:10,boxHeight:10,padding:8,usePointStyle:true,pointStyle:'rectRounded'}},
+          legend:{display:true,position:'bottom',labels:{color:'#999',font:{size:12,family:"'Segoe UI',sans-serif"},boxWidth:12,boxHeight:12,padding:10,usePointStyle:true,pointStyle:'rectRounded'}},
           tooltip:{backgroundColor:'#181824',titleColor:'#fff',bodyColor:'#ddd',borderColor:'#353548',borderWidth:1,cornerRadius:6,padding:10,
             callbacks:{label:function(ctx){return ctx.label+': '+ctx.parsed.toFixed(1)+'%';}}}
         }
@@ -453,12 +453,12 @@ input,select,textarea,button{color-scheme:dark;}
         scales: {
           x: {
             grid: {color:'#1a1a28',drawBorder:false},
-            ticks: {color:'#778',font:{size:10},maxTicksLimit:10}
+            ticks: {color:'#778',font:{size:12},maxTicksLimit:10}
           },
           y: {
             grid: {color:'#1a1a28',drawBorder:false},
             ticks: {
-              color:'#778',font:{size:10},
+              color:'#778',font:{size:12},
               callback: function(v){ return (v >= 0 ? '+' : '') + v.toFixed(1) + '%'; }
             },
             beginAtZero: false
