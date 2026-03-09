@@ -441,14 +441,17 @@ class UnifiedLiveDaemon:
         self._bars = {}
         self._bars_lock = threading.Lock()
         self._trading_date = None
-        self._price_msg_timestamps = []
+        self._price_msg_count = 0         # rolling count for msgs/s
+        self._price_msg_window_start = 0  # epoch second of current window
         self._flush_tickers = None    # set of safe-name tickers from watchlists
         self._flush_tickers_ts = 0    # last refresh time
 
         # ── Sweep state ──
         self._sweep_buffer = []
         self._sweep_buffer_lock = threading.Lock()
-        self._trade_timestamps = []
+        self._trade_count = 0             # rolling count for trades/s
+        self._trade_window_start = 0      # epoch second of current window
+        self._last_trade_ts = 0           # monotonic timestamp of last T.* message
 
         # ── Combined status ──
         self._status = {
@@ -739,7 +742,7 @@ class UnifiedLiveDaemon:
                 self._start_sub_thread(attr, target, name)
 
     def _run_loop_inner(self):
-        reconnect_wait = RECONNECT_MIN_WAIT
+        self._reconnect_wait = RECONNECT_MIN_WAIT
 
         _daemon_log("daemon_start", "Unified daemon starting")
 
@@ -769,10 +772,10 @@ class UnifiedLiveDaemon:
 
             with self._lock:
                 self._status["reconnect_count"] += 1
-            _daemon_log("reconnecting", f"wait={reconnect_wait}s")
-            print(f"[LIVE] Reconnecting in {reconnect_wait}s...", flush=True)
-            self._stop_event.wait(timeout=reconnect_wait)
-            reconnect_wait = min(reconnect_wait * 2, RECONNECT_MAX_WAIT)
+            _daemon_log("reconnecting", f"wait={self._reconnect_wait}s")
+            print(f"[LIVE] Reconnecting in {self._reconnect_wait}s...", flush=True)
+            self._stop_event.wait(timeout=self._reconnect_wait)
+            self._reconnect_wait = min(self._reconnect_wait * 2, RECONNECT_MAX_WAIT)
 
     def _connect_and_run(self):
         self._ws = websocket.WebSocketApp(
@@ -861,6 +864,8 @@ class UnifiedLiveDaemon:
             _daemon_log("subscribed", message)
             with self._lock:
                 self._status["subscribed"] = True
+            # Reset reconnect backoff — we're fully operational
+            self._reconnect_wait = RECONNECT_MIN_WAIT
 
         elif status == "error":
             print(f"[LIVE] Server error: {message}", flush=True)
@@ -873,17 +878,19 @@ class UnifiedLiveDaemon:
 
     def _handle_minute_bar(self, msg):
         now = time.time()
-        self._price_msg_timestamps.append(now)
+        now_sec = int(now)
+
+        # Cheap per-second counter instead of O(n) list rebuild
+        if now_sec != self._price_msg_window_start:
+            with self._lock:
+                self._status["price_messages_per_sec"] = self._price_msg_count
+            self._price_msg_count = 0
+            self._price_msg_window_start = now_sec
+        self._price_msg_count += 1
 
         with self._lock:
             self._status["price_messages_received"] += 1
             self._status["price_last_message_at"] = datetime.now(timezone.utc).isoformat()
-
-        cutoff = now - 60
-        self._price_msg_timestamps = [t for t in self._price_msg_timestamps if t > cutoff]
-        with self._lock:
-            self._status["price_messages_per_sec"] = round(
-                len(self._price_msg_timestamps) / 60.0, 1)
 
         ticker = msg.get("sym", "")
         if not ticker:
@@ -934,35 +941,32 @@ class UnifiedLiveDaemon:
 
     def _handle_trade(self, msg):
         now = time.time()
-        self._trade_timestamps.append(now)
+        now_sec = int(now)
+        self._last_trade_ts = now
 
-        with self._lock:
-            self._status["trades_received"] += 1
-
-        cutoff = now - 60
-        self._trade_timestamps = [t for t in self._trade_timestamps if t > cutoff]
-        with self._lock:
-            self._status["trades_per_sec"] = round(
-                len(self._trade_timestamps) / 60.0, 1)
+        # Cheap per-second counter instead of O(n) list rebuild
+        if now_sec != self._trade_window_start:
+            with self._lock:
+                self._status["trades_per_sec"] = self._trade_count
+                self._status["trades_received"] += self._trade_count
+            self._trade_count = 0
+            self._trade_window_start = now_sec
+        self._trade_count += 1
 
         # Filter: dark pool intermarket sweep with significant notional
         exchange = msg.get("x", 0)
+        if exchange != FINRA_TRF_EXCHANGE_ID:
+            return  # fast reject: not dark pool
+
         conditions = msg.get("c", [])
+        if INTERMARKET_SWEEP_CONDITION not in conditions:
+            return  # fast reject: not a sweep
+
         price = msg.get("p", 0)
         size = msg.get("s", 0)
         notional = price * size
-
-        is_darkpool = (exchange == FINRA_TRF_EXCHANGE_ID)
-        # Condition 14 (ISO) = the ONLY reliable sweep identifier.
-        # Condition 41 (Trade Thru Exempt) is NOT sufficient alone — it appears
-        # on closing crosses [12,22,41], VWAP fills [12,2,41], late blocks [12,41],
-        # after-hours fills [10,2,41], and QCTs [53,41].  Real sweeps always
-        # carry condition 14; condition 41 just means they're exempt from
-        # trade-through rules (which ISOs are by definition).
-        is_sweep = (INTERMARKET_SWEEP_CONDITION in conditions)
-
-        if not (is_darkpool and is_sweep and notional >= self._min_notional):
-            return
+        if notional < self._min_notional:
+            return  # fast reject: below threshold
 
         ticker = msg.get("sym", "")
         sip_ts = msg.get("t", 0)
@@ -973,15 +977,12 @@ class UnifiedLiveDaemon:
         #   Microseconds (2025-2030): ~1.74e15 – 1.90e15
         #   Milliseconds (2025-2030): ~1.74e12 – 1.90e12
         if sip_ts > 1e17:
-            # Nanoseconds
             trade_dt = datetime.fromtimestamp(sip_ts / 1e9, tz=timezone.utc)
             sip_ts_ns = sip_ts
         elif sip_ts > 1e14:
-            # Microseconds (what the delayed feed actually sends)
             trade_dt = datetime.fromtimestamp(sip_ts / 1e6, tz=timezone.utc)
             sip_ts_ns = sip_ts * 1000
         else:
-            # Milliseconds
             trade_dt = datetime.fromtimestamp(sip_ts / 1e3, tz=timezone.utc)
             sip_ts_ns = sip_ts * 1000000
 
@@ -1001,6 +1002,7 @@ class UnifiedLiveDaemon:
             "fetched_at": datetime.now(timezone.utc).isoformat(),
         }
 
+        # Single lock acquisition for buffer + stats (never do DB writes here)
         with self._sweep_buffer_lock:
             self._sweep_buffer.append(trade_record)
 
@@ -1015,10 +1017,8 @@ class UnifiedLiveDaemon:
             }
             self._status["last_sweep"] = sweep_entry
             self._status["recent_sweeps"].appendleft(sweep_entry)
-
-        with self._sweep_buffer_lock:
-            if len(self._sweep_buffer) >= self._sweep_flush_max:
-                self._do_sweep_flush()
+        # Buffer flush is handled ONLY by the timer thread (_sweep_flush_loop)
+        # — never block the WebSocket reader thread with DB writes
 
     # ------------------------------------------------------------------
     # Price CSV flush
@@ -1308,14 +1308,44 @@ class UnifiedLiveDaemon:
     # ------------------------------------------------------------------
 
     def _heartbeat_loop(self):
-        """Print a one-line status summary every 30 minutes."""
-        self._stop_event.wait(timeout=300)  # first heartbeat after 5 min
+        """Print status every 30 minutes + stale-connection watchdog every 60s."""
+        WATCHDOG_INTERVAL = 60       # check liveness every 60 seconds
+        STALE_THRESHOLD = 90         # force reconnect if no trades in 90 seconds
+        HEARTBEAT_INTERVAL = 1800    # print summary every 30 minutes
+        last_heartbeat = time.time()
+
+        self._stop_event.wait(timeout=60)  # initial grace period
         while not self._stop_event.is_set():
             try:
-                self._print_heartbeat()
+                now = time.time()
+
+                # Stale-connection watchdog: if connected + subscribed but no
+                # T.* messages in STALE_THRESHOLD seconds, the connection is dead
+                with self._lock:
+                    connected = self._status.get("connected", False)
+                    subscribed = self._status.get("subscribed", False)
+                last_trade = self._last_trade_ts
+                if connected and subscribed and last_trade > 0:
+                    silence = now - last_trade
+                    if silence > STALE_THRESHOLD:
+                        print(f"[LIVE] WATCHDOG: No trades for {silence:.0f}s — "
+                              f"forcing reconnect", flush=True)
+                        _daemon_log("watchdog_reconnect",
+                                    f"stale {silence:.0f}s")
+                        try:
+                            if self._ws:
+                                self._ws.close()
+                        except Exception:
+                            pass
+
+                # Periodic heartbeat summary
+                if now - last_heartbeat >= HEARTBEAT_INTERVAL:
+                    self._print_heartbeat()
+                    last_heartbeat = now
+
             except Exception as e:
                 print(f"[LIVE] Heartbeat error: {e}", flush=True)
-            self._stop_event.wait(timeout=1800)  # every 30 min
+            self._stop_event.wait(timeout=WATCHDOG_INTERVAL)
 
     def _print_heartbeat(self):
         with self._lock:
