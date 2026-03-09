@@ -66,9 +66,11 @@ _tracker_cache = {}       # {cache_key: {"data": response_dict, "ts": float}}
 _TRACKER_CACHE_TTL = 60   # seconds
 
 _portfolio_cache = {"data": None, "ts": 0}
-_portfolio_trades_cache = {"data": None, "ts": 0}
 _PORTFOLIO_CACHE_TTL = 300        # 5 minutes for positions/cash
-_PORTFOLIO_TRADES_CACHE_TTL = 600 # 10 minutes for trade history (slow paginated endpoint)
+_portfolio_prices_cache = {"prices": {}, "open_raw": set(), "ts": 0}
+_PORTFOLIO_PRICES_TTL = 120       # 2 minutes for current prices (lightweight)
+_portfolio_trades_resp_cache = {"data": None, "ts": 0}
+_PORTFOLIO_TRADES_RESP_TTL = 30   # 30 seconds — assembled response cache (DB reads are fast)
 
 # ── Portfolio helpers ──────────────────────────────────────────────────
 def _get_t212_headers():
@@ -125,6 +127,24 @@ def _init_portfolio_db():
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ps_date ON portfolio_snapshots(date)")
+    # Portfolio trades table — persistent trade history from T212
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS portfolio_trades (
+            date TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            raw_ticker TEXT NOT NULL,
+            name TEXT,
+            side TEXT NOT NULL,
+            avg_fill REAL NOT NULL,
+            total_qty REAL NOT NULL,
+            num_fills INTEGER DEFAULT 1,
+            rpnl REAL DEFAULT 0,
+            net_val REAL DEFAULT 0,
+            synced_at TEXT NOT NULL,
+            PRIMARY KEY (date, ticker, side)
+        )
+    """)
+
     # Seed March 1 baseline if not present
     has_baseline = conn.execute("SELECT 1 FROM portfolio_snapshots WHERE date = '2026-03-01'").fetchone()
     if not has_baseline:
@@ -154,8 +174,174 @@ def _record_portfolio_snapshot(total_value, is_close=False):
     conn.commit()
     conn.close()
 
+def _sync_portfolio_trades(full=False):
+    """Sync T212 order history into portfolio_trades table.
+
+    full=True:  paginate all pages (initial backfill)
+    full=False: fetch page 1 only, stop if all orders already in DB (incremental)
+    Returns (new_count, total_count).
+    """
+    import sqlite3
+    from collections import defaultdict
+    from config import TRADING212_API_KEY
+    if not TRADING212_API_KEY or TRADING212_API_KEY == "YOUR_T212_API_KEY_HERE":
+        return (0, 0)
+
+    _init_portfolio_db()
+    base = "https://live.trading212.com/api/v0"
+    headers = _get_t212_headers()
+
+    # Fetch order pages
+    all_orders = []
+    url = f"{base}/equity/history/orders?limit=50"
+    max_pages = 20 if full else 1
+    for page_num in range(max_pages):
+        try:
+            if page_num > 0:
+                time.sleep(11)  # respect 6 req/min rate limit
+            resp = requests.get(url, headers=headers, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            items = data.get("items", [])
+            all_orders.extend(items)
+            next_page = data.get("nextPagePath")
+            if not next_page or not items:
+                break
+            url = f"https://live.trading212.com{next_page}"
+        except Exception:
+            break
+
+    # Parse fills
+    raw_fills = []
+    for item in all_orders:
+        order = item.get("order", {})
+        fill = item.get("fill", {})
+        fill_price = float(fill.get("price") or 0)
+        if fill_price <= 0:
+            continue
+        filled_qty = float(fill.get("quantity") or order.get("filledQuantity") or 0)
+        date_str = (fill.get("filledAt") or order.get("createdAt") or "")[:10]
+        if date_str < "2026-03-01":
+            continue
+        raw_ticker = order.get("ticker", "")
+        instrument = order.get("instrument", {})
+        ticker_name = instrument.get("name", "")
+        clean_ticker = raw_ticker.split("_")[0] if "_" in raw_ticker else raw_ticker
+        clean_ticker = clean_ticker.rstrip("abcdefghijklmnopqrstuvwxyz") or clean_ticker
+        side_str = order.get("side", "").upper()
+        side = "Buy" if side_str == "BUY" else "Sell"
+        rpnl = 0.0
+        net_val = 0.0
+        if side == "Sell":
+            wallet = fill.get("walletImpact", {})
+            rpnl = float(wallet.get("realisedProfitLoss") or 0)
+            net_val = float(wallet.get("netValue") or 0)
+        raw_fills.append({
+            "date": date_str, "raw_ticker": raw_ticker, "ticker": clean_ticker,
+            "name": ticker_name, "side": side, "fill_price": fill_price,
+            "qty": filled_qty, "rpnl": rpnl, "net_val": net_val,
+        })
+
+    # Group by (date, ticker, side)
+    groups = defaultdict(list)
+    for f in raw_fills:
+        groups[(f["date"], f["ticker"], f["side"])].append(f)
+
+    # Upsert into DB
+    now_str = datetime.utcnow().isoformat() + "Z"
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    new_count = 0
+    for (date, ticker, side), fills in groups.items():
+        name = fills[0]["name"]
+        raw_t = fills[0]["raw_ticker"]
+        total_qty = sum(f["qty"] for f in fills)
+        num_fills = len(fills)
+        if side == "Buy":
+            total_cost = sum(f["fill_price"] * f["qty"] for f in fills)
+            avg_fill = total_cost / total_qty if total_qty > 0 else 0
+            rpnl_sum = 0.0
+            net_sum = 0.0
+        else:
+            avg_fill = sum(f["fill_price"] * f["qty"] for f in fills) / total_qty if total_qty > 0 else 0
+            rpnl_sum = sum(f["rpnl"] for f in fills)
+            net_sum = sum(f["net_val"] for f in fills)
+
+        existing = conn.execute(
+            "SELECT 1 FROM portfolio_trades WHERE date=? AND ticker=? AND side=?",
+            (date, ticker, side)).fetchone()
+        conn.execute(
+            "INSERT OR REPLACE INTO portfolio_trades "
+            "(date, ticker, raw_ticker, name, side, avg_fill, total_qty, num_fills, rpnl, net_val, synced_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (date, ticker, raw_t, name, side, avg_fill, total_qty, num_fills, rpnl_sum, net_sum, now_str))
+        if not existing:
+            new_count += 1
+
+    conn.commit()
+    total_count = conn.execute("SELECT COUNT(*) FROM portfolio_trades").fetchone()[0]
+    conn.close()
+    return (new_count, total_count)
+
+
+def _refresh_portfolio_prices():
+    """Lightweight refresh of current prices from T212 positions API.
+    Single call, no pagination. Cached for 2 minutes."""
+    global _portfolio_prices_cache
+    if time.time() - _portfolio_prices_cache["ts"] < _PORTFOLIO_PRICES_TTL:
+        return _portfolio_prices_cache
+
+    from config import TRADING212_API_KEY
+    if not TRADING212_API_KEY or TRADING212_API_KEY == "YOUR_T212_API_KEY_HERE":
+        return _portfolio_prices_cache
+
+    try:
+        base = "https://live.trading212.com/api/v0"
+        headers = _get_t212_headers()
+        resp = requests.get(f"{base}/equity/portfolio", headers=headers, timeout=15)
+        resp.raise_for_status()
+        prices = {}
+        open_raw = set()
+        for p in resp.json():
+            raw = p.get("ticker", "")
+            open_raw.add(raw)
+            prices[raw] = {
+                "currentPrice": float(p.get("currentPrice") or 0),
+                "averagePrice": float(p.get("averagePrice") or 0),
+            }
+        _portfolio_prices_cache = {"prices": prices, "open_raw": open_raw, "ts": time.time()}
+    except Exception as e:
+        print(f"⚠️  Portfolio price refresh error: {e}", flush=True)
+
+    return _portfolio_prices_cache
+
+
+def _get_portfolio_ticker_names():
+    """Load ticker names from portfolio_trades DB + sweep engine fallback."""
+    import sqlite3
+    names = {}
+    # DB names first (from T212 instrument data)
+    try:
+        _init_portfolio_db()
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        rows = conn.execute("SELECT ticker, name FROM portfolio_trades WHERE name IS NOT NULL AND name != ''").fetchall()
+        conn.close()
+        for ticker, name in rows:
+            names[ticker] = name
+    except Exception:
+        pass
+    # Sweep engine names as fallback
+    try:
+        from sweep_engine import load_ticker_names as _load_names
+        for k, v in (_load_names() or {}).items():
+            if k not in names:
+                names[k] = v
+    except Exception:
+        pass
+    return names
+
+
 def _portfolio_snapshot_thread():
-    """Background thread: records a portfolio snapshot every hour."""
+    """Background thread: records a portfolio snapshot every hour + keeps prices warm."""
     print("📊 Portfolio snapshot thread started (hourly)")
     while True:
         try:
@@ -177,8 +363,46 @@ def _portfolio_snapshot_thread():
             is_close = (uk_hour == 16 and now_utc.minute >= 20) or (uk_hour == 17 and now_utc.minute <= 10)
             _record_portfolio_snapshot(total, is_close=is_close)
             print(f"📊 Portfolio snapshot: £{total:.0f} ({'close' if is_close else 'hourly'})", flush=True)
+            # Keep prices warm so next page load has fresh gains
+            try:
+                _refresh_portfolio_prices()
+            except Exception:
+                pass
         except Exception as e:
             print(f"⚠️  Portfolio snapshot error: {e}", flush=True)
+
+
+def _portfolio_trade_sync_thread():
+    """Background thread: syncs T212 order history to DB every 30 minutes."""
+    try:
+        from config import TRADING212_API_KEY
+        if not TRADING212_API_KEY or TRADING212_API_KEY == "YOUR_T212_API_KEY_HERE":
+            return
+    except (ImportError, AttributeError):
+        return
+    # Initial sync on startup
+    try:
+        _init_portfolio_db()
+        import sqlite3
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        count = conn.execute("SELECT COUNT(*) FROM portfolio_trades").fetchone()[0]
+        conn.close()
+        full = (count == 0)
+        new, total = _sync_portfolio_trades(full=full)
+        print(f"📊 Trade sync ({'backfill' if full else 'incremental'}): "
+              f"+{new} new ({total} total)", flush=True)
+    except Exception as e:
+        print(f"⚠️  Initial trade sync failed: {e}", flush=True)
+
+    # Periodic incremental sync
+    while True:
+        try:
+            time.sleep(1800)  # 30 minutes
+            new, total = _sync_portfolio_trades(full=False)
+            if new > 0:
+                print(f"📊 Trade sync: +{new} new trades ({total} total)", flush=True)
+        except Exception as e:
+            print(f"⚠️  Trade sync error: {e}", flush=True)
 
 # ── Daemon watchdog ──────────────────────────────────────────────────────
 _WATCHDOG_INTERVAL = 30         # seconds between health checks
@@ -3474,15 +3698,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             cash_pct = round(free_cash / total_value * 100, 2)
             invested_pct = round(100 - cash_pct, 2)  # ensures cash + invested = 100%
 
-            # Load ticker names for display — merge sweep engine names + names from trades cache
-            from sweep_engine import load_ticker_names as _load_names
-            ticker_names = _load_names() or {}
-            if _portfolio_trades_cache.get("data"):
-                for _tlist in (_portfolio_trades_cache["data"].get("open", []),
-                               _portfolio_trades_cache["data"].get("closed", [])):
-                    for _t in _tlist:
-                        if _t.get("name") and _t["ticker"] not in ticker_names:
-                            ticker_names[_t["ticker"]] = _t["name"]
+            # Load ticker names from DB (persistent) + sweep engine fallback
+            ticker_names = _get_portfolio_ticker_names()
 
             # Build sanitised position list (% only, no £ amounts)
             # Pass 1: collect positions with ppl (account currency) for weight calc
@@ -3545,9 +3762,33 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             # Sort by weight descending
             pos_list.sort(key=lambda x: x["weight"], reverse=True)
 
+            # 1D performance — compare current value vs previous close snapshot
+            day_change_pct = None
+            try:
+                import sqlite3 as _sql3
+                _init_portfolio_db()
+                _pconn = _sql3.connect(DB_PATH, timeout=5)
+                today_str = datetime.utcnow().strftime("%Y-%m-%d")
+                # Best: yesterday's close snapshot. Fallback: most recent snapshot before today.
+                prev_row = _pconn.execute(
+                    "SELECT total_value FROM portfolio_snapshots "
+                    "WHERE date < ? AND is_close = 1 ORDER BY date DESC LIMIT 1",
+                    (today_str,)).fetchone()
+                if not prev_row:
+                    prev_row = _pconn.execute(
+                        "SELECT total_value FROM portfolio_snapshots "
+                        "WHERE date < ? ORDER BY ts DESC LIMIT 1",
+                        (today_str,)).fetchone()
+                _pconn.close()
+                if prev_row and prev_row[0] and prev_row[0] > 0:
+                    day_change_pct = round((total_value - prev_row[0]) / prev_row[0] * 100, 2)
+            except Exception:
+                pass
+
             result = {
                 "cashPct": cash_pct,
                 "investedPct": invested_pct,
+                "dayChangePct": day_change_pct,
                 "positions": pos_list,
                 "updatedAt": datetime.utcnow().isoformat() + "Z",
             }
@@ -3604,154 +3845,83 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_json({"error": str(e)})
 
     def serve_portfolio_trades(self):
-        """GET /api/portfolio/trades — fetch T212 order history, group by ticker+day,
-        separate open vs closed positions. Returns sanitised trades with % gain only."""
-        global _portfolio_trades_cache
+        """GET /api/portfolio/trades — read trades from DB, apply cached current prices.
+        Separates open vs closed positions. Returns sanitised trades with % gain only."""
+        global _portfolio_trades_resp_cache
         try:
-            # Return cache if fresh
-            if _portfolio_trades_cache["data"] and (time.time() - _portfolio_trades_cache["ts"]) < _PORTFOLIO_TRADES_CACHE_TTL:
-                self.send_json(_portfolio_trades_cache["data"])
+            # Return assembled response cache if fresh (30s)
+            if _portfolio_trades_resp_cache["data"] and (time.time() - _portfolio_trades_resp_cache["ts"]) < _PORTFOLIO_TRADES_RESP_TTL:
+                self.send_json(_portfolio_trades_resp_cache["data"])
                 return
 
-            from config import TRADING212_API_KEY
-            if not TRADING212_API_KEY or TRADING212_API_KEY == "YOUR_T212_API_KEY_HERE":
-                self.send_json({"error": "Trading 212 API key not configured"})
-                return
+            import sqlite3
+            _init_portfolio_db()
 
-            base = "https://live.trading212.com/api/v0"
-            headers = _get_t212_headers()
-
-            # Get current positions for current prices + open ticker list
-            cur_prices = {}
-            open_tickers_raw = set()
-            try:
-                pos_resp = requests.get(f"{base}/equity/portfolio", headers=headers, timeout=15)
-                pos_resp.raise_for_status()
-                for p in pos_resp.json():
-                    raw = p.get("ticker", "")
-                    clean = raw.split("_")[0] if "_" in raw else raw
-                    clean = clean.rstrip("abcdefghijklmnopqrstuvwxyz") or clean
-                    open_tickers_raw.add(raw)
-                    cur_prices[raw] = {
-                        "currentPrice": float(p.get("currentPrice") or 0),
-                        "averagePrice": float(p.get("averagePrice") or 0),
-                        "clean": clean,
-                    }
-            except Exception:
-                pass
-
-            # Fetch order history (paginate) — rate limit: 6 req/min
-            all_orders = []
-            url = f"{base}/equity/history/orders?limit=50"
-            for page_num in range(20):  # max 1000 orders
+            # If DB is empty, trigger a full sync (one-time backfill)
+            conn = sqlite3.connect(DB_PATH, timeout=5)
+            conn.row_factory = sqlite3.Row
+            count = conn.execute("SELECT COUNT(*) FROM portfolio_trades").fetchone()[0]
+            conn.close()
+            if count == 0:
                 try:
-                    if page_num > 0:
-                        time.sleep(11)  # respect 6 req/min rate limit
-                    resp = requests.get(url, headers=headers, timeout=15)
-                    resp.raise_for_status()
-                    data = resp.json()
-                    items = data.get("items", [])
-                    all_orders.extend(items)
-                    next_page = data.get("nextPagePath")
-                    if not next_page or not items:
-                        break
-                    url = f"https://live.trading212.com{next_page}"
-                except Exception:
-                    break
+                    _sync_portfolio_trades(full=True)
+                except Exception as e:
+                    print(f"⚠️  Initial trade sync failed: {e}", flush=True)
 
-            # Parse individual fills — T212 returns nested {order: {...}, fill: {...}}
-            raw_fills = []
-            for item in all_orders:
-                order = item.get("order", {})
-                fill = item.get("fill", {})
+            # Get current prices (cached, 2-min TTL, single API call)
+            pc = _refresh_portfolio_prices()
+            cur_prices = pc["prices"]
+            open_raw = pc["open_raw"]
 
-                fill_price = float(fill.get("price") or 0)
-                if fill_price <= 0:
-                    continue  # skip unfilled/cancelled
+            # Read all trades from DB
+            conn = sqlite3.connect(DB_PATH, timeout=5)
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT date, ticker, raw_ticker, name, side, avg_fill, total_qty, "
+                "num_fills, rpnl, net_val FROM portfolio_trades ORDER BY date DESC"
+            ).fetchall()
+            conn.close()
 
-                filled_qty = float(fill.get("quantity") or order.get("filledQuantity") or 0)
-                date_str = (fill.get("filledAt") or order.get("createdAt") or "")[:10]
-                if date_str < "2026-03-01":
-                    continue
+            # Load ticker names for any gaps
+            ticker_names = _get_portfolio_ticker_names()
 
-                raw_ticker = order.get("ticker", "")
-                instrument = order.get("instrument", {})
-                ticker_name = instrument.get("name", "")
-                clean_ticker = raw_ticker.split("_")[0] if "_" in raw_ticker else raw_ticker
-                clean_ticker = clean_ticker.rstrip("abcdefghijklmnopqrstuvwxyz") or clean_ticker
-
-                side_str = order.get("side", "").upper()
-                side = "Buy" if side_str == "BUY" else "Sell"
-
-                # For sells: capture realised P&L
-                rpnl = 0.0
-                net_val = 0.0
-                if side == "Sell":
-                    wallet = fill.get("walletImpact", {})
-                    rpnl = float(wallet.get("realisedProfitLoss") or 0)
-                    net_val = float(wallet.get("netValue") or 0)
-
-                raw_fills.append({
-                    "date": date_str,
-                    "raw_ticker": raw_ticker,
-                    "ticker": clean_ticker,
-                    "name": ticker_name,
-                    "side": side,
-                    "fill_price": fill_price,
-                    "qty": filled_qty,
-                    "rpnl": rpnl,
-                    "net_val": net_val,
-                })
-
-            # Group fills by ticker + day + side
-            from collections import defaultdict
-            groups = defaultdict(list)
-            for f in raw_fills:
-                key = (f["date"], f["ticker"], f["side"])
-                groups[key].append(f)
-
-            # Build grouped trades
+            # Build open/closed trade lists
             open_trades = []
             closed_trades = []
-            for (date, ticker, side), fills in sorted(groups.items(), reverse=True):
-                name = fills[0]["name"]
-                raw_t = fills[0]["raw_ticker"]
-                total_qty = sum(f["qty"] for f in fills)
-                num_fills = len(fills)
+            for r in rows:
+                ticker = r["ticker"]
+                raw_t = r["raw_ticker"]
+                name = r["name"] or ticker_names.get(ticker, ticker)
+                side = r["side"]
+                avg_fill = r["avg_fill"]
+                num_fills = r["num_fills"]
 
                 if side == "Buy":
-                    # Weighted avg fill price
-                    total_cost = sum(f["fill_price"] * f["qty"] for f in fills)
-                    avg_fill = total_cost / total_qty if total_qty > 0 else 0
-                    # Check if this ticker is still held (open) or closed
-                    is_open = raw_t in open_tickers_raw
+                    is_open = raw_t in open_raw
                     if is_open and raw_t in cur_prices:
                         cur_p = cur_prices[raw_t]["currentPrice"]
                         gain_pct = round((cur_p - avg_fill) / avg_fill * 100, 2) if avg_fill > 0 else 0.0
                     else:
-                        gain_pct = None  # closed buy — gain realised on sell side
-                    trade = {"date": date, "ticker": ticker, "name": name, "side": side,
-                             "gain": gain_pct, "fills": num_fills}
+                        gain_pct = None
+                    trade = {"date": r["date"], "ticker": ticker, "name": name,
+                             "side": side, "gain": gain_pct, "fills": num_fills}
                     if is_open:
                         open_trades.append(trade)
                     else:
                         closed_trades.append(trade)
                 else:
-                    # Sell — sum up realised P&L across fills
-                    total_rpnl = sum(f["rpnl"] for f in fills)
-                    total_net = sum(f["net_val"] for f in fills)
+                    total_rpnl = r["rpnl"]
+                    total_net = r["net_val"]
                     total_cost = total_net - total_rpnl
                     gain_pct = round(total_rpnl / total_cost * 100, 2) if total_cost > 0 else None
-                    trade = {"date": date, "ticker": ticker, "name": name, "side": side,
-                             "gain": gain_pct, "fills": num_fills}
+                    trade = {"date": r["date"], "ticker": ticker, "name": name,
+                             "side": side, "gain": gain_pct, "fills": num_fills}
                     closed_trades.append(trade)
 
             result = {"open": open_trades, "closed": closed_trades}
-            _portfolio_trades_cache = {"data": result, "ts": time.time()}
+            _portfolio_trades_resp_cache = {"data": result, "ts": time.time()}
             self.send_json(result)
 
-        except requests.exceptions.RequestException as e:
-            self.send_json({"error": f"T212 API error: {e}"})
         except Exception as e:
             self.send_json({"error": str(e)})
 
@@ -4733,14 +4903,17 @@ def main():
                                name="daemon-watchdog")
         _wd.start()
 
-        # Start portfolio snapshot thread (hourly T212 value recording)
+        # Start portfolio threads (snapshot + trade sync)
         try:
             _init_portfolio_db()
             _ps = threading.Thread(target=_portfolio_snapshot_thread, daemon=True,
                                    name="portfolio-snapshots")
             _ps.start()
+            _pts = threading.Thread(target=_portfolio_trade_sync_thread, daemon=True,
+                                    name="portfolio-trade-sync")
+            _pts.start()
         except Exception as _e:
-            print(f"⚠️  Portfolio snapshot thread failed to start: {_e}")
+            print(f"⚠️  Portfolio threads failed to start: {_e}")
 
         start_server(args.port, args.public_port)
         return

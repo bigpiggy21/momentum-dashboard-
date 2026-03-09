@@ -422,7 +422,10 @@ class UnifiedLiveDaemon:
             "last_sweep": None,
             "recent_sweeps": deque(maxlen=10),
             "sweep_tickers_active": set(),
-            "events_detected": {"clusterbomb": 0, "rare_sweep": 0, "monster_sweep": 0},
+            "events_detected": {"clusterbomb": 0, "rare_sweep": 0, "monster_sweep": 0,
+                                "etf_daily": 0, "etf_rare_sweep": 0, "etf_ranked": 0},
+            "events_today": {},  # cumulative daily detection totals
+            "_events_date": None,
             "last_detection_at": None,
             "last_sweep_flush_at": None,
             # Compute stats
@@ -636,6 +639,7 @@ class UnifiedLiveDaemon:
             ("_sweep_flush_thread", self._sweep_flush_loop, "live-sweep-flush"),
             ("_detection_thread", self._detection_loop, "live-detection"),
             ("_eod_compute_thread", self._eod_compute_loop, "live-eod-compute"),
+            ("_heartbeat_thread", self._heartbeat_loop, "live-heartbeat"),
         ]
         for attr, target, name in threads:
             t = getattr(self, attr, None)
@@ -651,6 +655,7 @@ class UnifiedLiveDaemon:
         self._start_sub_thread("_sweep_flush_thread", self._sweep_flush_loop, "live-sweep-flush")
         self._start_sub_thread("_detection_thread", self._detection_loop, "live-detection")
         self._start_sub_thread("_eod_compute_thread", self._eod_compute_loop, "live-eod-compute")
+        self._start_sub_thread("_heartbeat_thread", self._heartbeat_loop, "live-heartbeat")
 
         while not self._stop_event.is_set():
             # Revive any dead sub-threads before each connection attempt
@@ -1251,12 +1256,85 @@ class UnifiedLiveDaemon:
         with self._lock:
             self._status["events_detected"] = results
             self._status["last_detection_at"] = datetime.now(timezone.utc).isoformat()
+            # Accumulate daily totals (reset on date change)
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            if self._status.get("_events_date") != today:
+                self._status["_events_date"] = today
+                self._status["events_today"] = {}
+            et = self._status["events_today"]
+            for k, v in results.items():
+                et[k] = et.get(k, 0) + v
 
         elapsed = time.time() - t0
-        print(f"[LIVE] Detection complete in {elapsed:.1f}s — "
-              f"{results.get('clusterbomb', 0)} CBs, "
-              f"{results.get('rare_sweep', 0)} rare, "
-              f"{results.get('monster_sweep', 0)} monsters", flush=True)
+        # Build stock/ETF delta summary
+        stock_n = results.get("clusterbomb", 0) + results.get("rare_sweep", 0) + results.get("monster_sweep", 0)
+        etf_n = results.get("etf_daily", 0) + results.get("etf_rare_sweep", 0) + results.get("etf_ranked", 0)
+        parts = []
+        if stock_n:
+            sub = []
+            if results.get("clusterbomb"): sub.append(f"{results['clusterbomb']} CB")
+            if results.get("rare_sweep"):  sub.append(f"{results['rare_sweep']} rare")
+            if results.get("monster_sweep"): sub.append(f"{results['monster_sweep']} monster")
+            parts.append(f"Stock +{stock_n} ({', '.join(sub)})")
+        if etf_n:
+            sub = []
+            if results.get("etf_daily"):      sub.append(f"{results['etf_daily']} daily")
+            if results.get("etf_rare_sweep"): sub.append(f"{results['etf_rare_sweep']} rare")
+            if results.get("etf_ranked"):     sub.append(f"{results['etf_ranked']} ranked")
+            parts.append(f"ETF +{etf_n} ({', '.join(sub)})")
+        if not parts:
+            parts.append("no new events")
+        print(f"[LIVE] Detection {elapsed:.1f}s — {' | '.join(parts)}", flush=True)
+
+    # ------------------------------------------------------------------
+    # Heartbeat — periodic one-line status summary
+    # ------------------------------------------------------------------
+
+    def _heartbeat_loop(self):
+        """Print a one-line status summary every 30 minutes."""
+        self._stop_event.wait(timeout=300)  # first heartbeat after 5 min
+        while not self._stop_event.is_set():
+            try:
+                self._print_heartbeat()
+            except Exception as e:
+                print(f"[LIVE] Heartbeat error: {e}", flush=True)
+            self._stop_event.wait(timeout=1800)  # every 30 min
+
+    def _print_heartbeat(self):
+        with self._lock:
+            s = dict(self._status)
+            et = dict(s.get("events_today", {}))
+        # Uptime
+        started = s.get("started_at")
+        if started:
+            delta = datetime.now(timezone.utc) - datetime.fromisoformat(started)
+            hrs = delta.total_seconds() / 3600
+            uptime = f"{hrs:.0f}h" if hrs >= 1 else f"{delta.total_seconds()/60:.0f}m"
+        else:
+            uptime = "?"
+        conn = "connected" if s.get("connected") else "disconnected"
+        # Prices
+        prices = s.get("price_tickers_active", 0)
+        # Sweeps received today
+        sweeps = s.get("sweeps_today", 0)
+        # Stock events today (cumulative)
+        s_cb = et.get("clusterbomb", 0)
+        s_rare = et.get("rare_sweep", 0)
+        s_mon = et.get("monster_sweep", 0)
+        stock_total = s_cb + s_rare + s_mon
+        # ETF events today (cumulative)
+        e_daily = et.get("etf_daily", 0)
+        e_rare = et.get("etf_rare_sweep", 0)
+        e_ranked = et.get("etf_ranked", 0)
+        etf_total = e_daily + e_rare + e_ranked
+        # Format
+        stock_str = f"{stock_total}" if not stock_total else f"{s_cb}cb {s_rare}r {s_mon}m"
+        etf_str = f"{etf_total}" if not etf_total else f"{e_daily}d {e_rare}r {e_ranked}rk"
+        now = datetime.now().strftime("%H:%M")
+        print(f"[{now}] Up {uptime} {conn} | "
+              f"Prices: {prices:,} tickers | Sweeps: {sweeps:,} | "
+              f"Stock: {stock_str} | ETF: {etf_str}",
+              flush=True)
 
     # ------------------------------------------------------------------
     # End of Day compute — RS + HVC after market close
