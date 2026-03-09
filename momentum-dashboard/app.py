@@ -2324,30 +2324,47 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
             # Ticker index lookup
             L.append(f"// \u2500\u2500 Ticker Lookup ({len(all_tickers)} tickers) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")
-            # Emit ticker array
-            L.append("var tickerList = array.from(")
-            for i in range(0, len(all_tickers), 10):
-                chunk = ", ".join(f'"{t}"' for t in all_tickers[i:i+10])
-                comma = "," if i + 10 < len(all_tickers) else ""
-                L.append(f"  {chunk}{comma}")
-            L.append("  )")
+            # Emit ticker array (use _emit helper for auto-chunking)
+            ticker_strings = [f'"{t}"' for t in all_tickers]
+            _emit("tickerList", ticker_strings, 10, "string")
             L.append("tidx = array.indexof(tickerList, syminfo.ticker)")
             L.append("dateKey = year * 10000 + month * 100 + dayofmonth")
             L.append("newDay  = ta.change(time('D')) != 0  // only plot once per day on intraday charts")
             L.append("myKey = tidx * 100000000 + dateKey")
             L.append("")
 
-            # Emit data arrays
+            # Emit data arrays — auto-chunks at 3900 to stay under Pine's 4000-arg limit
+            PINE_ARRAY_LIMIT = 3900
+
             def _emit(name, items, per_line, empty_type="int"):
                 if not items:
                     L.append(f"var {name} = array.new_{empty_type}(0)")
                     return
-                L.append(f"var {name} = array.from(")
-                for i in range(0, len(items), per_line):
-                    chunk = ", ".join(items[i:i+per_line])
-                    comma = "," if i + per_line < len(items) else ""
-                    L.append(f"  {chunk}{comma}")
-                L.append("  )")
+                if len(items) <= PINE_ARRAY_LIMIT:
+                    # Single array.from() — fits in one call
+                    L.append(f"var {name} = array.from(")
+                    for i in range(0, len(items), per_line):
+                        chunk = ", ".join(items[i:i+per_line])
+                        comma = "," if i + per_line < len(items) else ""
+                        L.append(f"  {chunk}{comma}")
+                    L.append("  )")
+                else:
+                    # Split into chunks, concat
+                    chunks = []
+                    for ci in range(0, len(items), PINE_ARRAY_LIMIT):
+                        chunk_items = items[ci:ci+PINE_ARRAY_LIMIT]
+                        chunk_name = f"_{name}_{ci // PINE_ARRAY_LIMIT}"
+                        chunks.append(chunk_name)
+                        L.append(f"var {chunk_name} = array.from(")
+                        for i in range(0, len(chunk_items), per_line):
+                            row = ", ".join(chunk_items[i:i+per_line])
+                            comma = "," if i + per_line < len(chunk_items) else ""
+                            L.append(f"  {row}{comma}")
+                        L.append("  )")
+                    # Concat all chunks into final array
+                    L.append(f"var {name} = {chunks[0]}")
+                    for ch in chunks[1:]:
+                        L.append(f"array.concat({name}, {ch})")
 
             L.append(f"// \u2500\u2500 Event Data ({stats['clusterbombs']} CB, {stats['monsters']} monster, {stats['rare']} rare) \u2500\u2500")
             _emit("cbKeys", cb_keys, 8)
