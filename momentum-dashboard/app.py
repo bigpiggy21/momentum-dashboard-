@@ -2144,9 +2144,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             # ── Plot circles — true data-point rendering, perfectly price-anchored ──
             lines.append("// \u2500\u2500 Price-anchored circles (plot = true chart data, no drift) \u2500\u2500")
             for kind, flag, color_var, lw, price_var in [
-                ("Clusterbomb", "showCB and isCB", "cbColor", 3, "cbPrice"),
-                ("Monster", "showMonster and isMonster", "monsterColor", 4, "monsterPrice"),
-                ("Rare Sweep", "showRare and isRare", "rareColor", 3, "rarePrice"),
+                ("Clusterbomb", "showCB and isCB", "cbColor", 12, "cbPrice"),
+                ("Monster", "showMonster and isMonster", "monsterColor", 14, "monsterPrice"),
+                ("Rare Sweep", "showRare and isRare", "rareColor", 11, "rarePrice"),
             ]:
                 lines.append(f'plot({flag} and newDay ? {price_var} : na, "{kind}", color={color_var},')
                 lines.append(f'  style=plot.style_circles, linewidth={lw})')
@@ -2427,9 +2427,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             # Plot circles — true chart data points, perfectly price-anchored
             L.append("// ── Price-anchored circles (plot = true chart data, no drift) ──")
             for kind, flag, color_var, lw, price_var in [
-                ("Clusterbomb", "showCB and isCB", "cbColor", 3, "cbPrice"),
-                ("Monster", "showMonster and isMonster", "monsterColor", 4, "monsterPrice"),
-                ("Rare Sweep", "showRare and isRare", "rareColor", 3, "rarePrice"),
+                ("Clusterbomb", "showCB and isCB", "cbColor", 12, "cbPrice"),
+                ("Monster", "showMonster and isMonster", "monsterColor", 14, "monsterPrice"),
+                ("Rare Sweep", "showRare and isRare", "rareColor", 11, "rarePrice"),
             ]:
                 L.append(f'plot({flag} and newDay ? {price_var} : na, "{kind}", color={color_var},')
                 L.append(f'  style=plot.style_circles, linewidth={lw})')
