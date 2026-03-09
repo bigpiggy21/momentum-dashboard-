@@ -2222,6 +2222,24 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     for display, api, atype in tickers:
                         ticker_filter.add(display)
 
+            # Load detection config thresholds for filtering
+            from sweep_engine import load_detection_config
+            det_cfg = load_detection_config().get("stock", {})
+            cb_min_total = det_cfg.get("min_total", 38000000)
+            cb_min_sweeps = det_cfg.get("min_sweeps", 3)
+            rare_min_notional = det_cfg.get("rare_min_notional", 1000000)
+            monster_min_notional = det_cfg.get("monster_min_notional", 100000000)
+
+            # Filter: CBs must meet notional+sweep thresholds, rare/monster have their own
+            threshold_filter = (
+                "AND ("
+                "  (event_type='clusterbomb' AND total_notional >= ? AND sweep_count >= ?)"
+                "  OR (event_type='rare_sweep' AND total_notional >= ?)"
+                "  OR (event_type='monster_sweep' AND total_notional >= ?)"
+                ")"
+            )
+            threshold_params = (cb_min_total, cb_min_sweeps, rare_min_notional, monster_min_notional)
+
             conn = sqlite3.connect(DB_PATH, timeout=10)
             conn.row_factory = sqlite3.Row
             if ticker_filter:
@@ -2231,8 +2249,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     "direction, is_rare, COALESCE(is_monster, 0) as is_monster "
                     f"FROM clusterbomb_events WHERE event_date >= ? AND ticker IN ({placeholders}) "
                     "AND event_type IN ('clusterbomb', 'rare_sweep', 'monster_sweep') "
+                    f"{threshold_filter} "
                     "ORDER BY ticker, event_date",
-                    (cutoff, *sorted(ticker_filter))
+                    (cutoff, *sorted(ticker_filter), *threshold_params)
                 ).fetchall()
             else:
                 rows = conn.execute(
@@ -2240,8 +2259,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     "direction, is_rare, COALESCE(is_monster, 0) as is_monster "
                     "FROM clusterbomb_events WHERE event_date >= ? "
                     "AND event_type IN ('clusterbomb', 'rare_sweep', 'monster_sweep') "
+                    f"{threshold_filter} "
                     "ORDER BY ticker, event_date",
-                    (cutoff,)
+                    (cutoff, *threshold_params)
                 ).fetchall()
             conn.close()
 
