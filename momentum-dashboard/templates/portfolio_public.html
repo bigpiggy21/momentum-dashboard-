@@ -212,50 +212,50 @@ input,select,textarea,button{color-scheme:dark;}
       </div>
     </div>
 
-    <!-- Portfolio value chart -->
-    <div class="card" style="margin-bottom:28px;">
-      <div class="card-title">
-        Portfolio Performance
-        <span id="dayChangePct" style="font-size:14px;font-weight:600;margin-left:12px;"></span>
-        <div style="display:flex;align-items:center;gap:12px;">
-          <span class="card-subtitle" id="perfLabel">Since 01 Mar 2026</span>
-          <div class="chart-range-btns">
-            <button class="range-btn" onclick="switchRange('1w',this)">1W</button>
-            <button class="range-btn" onclick="switchRange('1m',this)">1M</button>
-            <button class="range-btn active" onclick="switchRange('all',this)">All</button>
+    <!-- Performance chart + Trades grid -->
+    <div class="content-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="card">
+        <div class="card-title">
+          Portfolio Performance
+          <span id="dayChangePct" style="font-size:14px;font-weight:600;margin-left:12px;"></span>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span class="card-subtitle" id="perfLabel">Since 01 Mar 2026</span>
+            <div class="chart-range-btns">
+              <button class="range-btn" onclick="switchRange('1w',this)">1W</button>
+              <button class="range-btn" onclick="switchRange('1m',this)">1M</button>
+              <button class="range-btn active" onclick="switchRange('all',this)">All</button>
+            </div>
           </div>
         </div>
+        <div class="value-chart-wrap">
+          <canvas id="valueChart"></canvas>
+        </div>
       </div>
-      <div class="value-chart-wrap">
-        <canvas id="valueChart"></canvas>
+      <div class="card">
+        <div class="card-title">
+          Trade History
+          <span class="card-subtitle" id="tradeCount"></span>
+        </div>
+        <div class="trades-tabs">
+          <button class="trades-tab active" onclick="switchTradeTab('open',this)">Open<span class="tab-count" id="openCount"></span></button>
+          <button class="trades-tab" onclick="switchTradeTab('closed',this)">Closed<span class="tab-count" id="closedCount"></span></button>
+        </div>
+        <div id="tradesWrap">
+          <table class="trades-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Ticker</th>
+                <th>Name</th>
+                <th>Side</th>
+                <th class="col-right">Gain %</th>
+              </tr>
+            </thead>
+            <tbody id="tradesBody"></tbody>
+          </table>
+        </div>
+        <div id="tradesEmpty" class="empty-msg" style="display:none;">No trades found</div>
       </div>
-    </div>
-
-    <!-- Trades section -->
-    <div class="card">
-      <div class="card-title">
-        Trade History
-        <span class="card-subtitle" id="tradeCount"></span>
-      </div>
-      <div class="trades-tabs">
-        <button class="trades-tab active" onclick="switchTradeTab('open',this)">Open<span class="tab-count" id="openCount"></span></button>
-        <button class="trades-tab" onclick="switchTradeTab('closed',this)">Closed<span class="tab-count" id="closedCount"></span></button>
-      </div>
-      <div id="tradesWrap">
-        <table class="trades-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Ticker</th>
-              <th>Name</th>
-              <th>Side</th>
-              <th class="col-right">Gain %</th>
-            </tr>
-          </thead>
-          <tbody id="tradesBody"></tbody>
-        </table>
-      </div>
-      <div id="tradesEmpty" class="empty-msg" style="display:none;">No trades found</div>
     </div>
 
   </div>
