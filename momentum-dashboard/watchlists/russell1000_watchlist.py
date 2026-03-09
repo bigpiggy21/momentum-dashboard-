@@ -1,6 +1,6 @@
 """
-Russell1000 watchlist.
-Edited via TBD Technologies watchlist manager.
+Russell 1000 watchlist.
+Updated 2026-03-09 - added 8 SP500 tickers that were missing.
 """
 
 RUSSELL1000_GROUPS = [
@@ -99,6 +99,7 @@ RUSSELL1000_GROUPS = [
         ("NTAP", "NTAP", "stock"),
         ("NTNX", "NTNX", "stock"),
         ("NVDA", "NVDA", "stock"),
+        ("NXPI", "NXPI", "stock"),
         ("OKTA", "OKTA", "stock"),
         ("OLED", "OLED", "stock"),
         ("ON", "ON", "stock"),
@@ -125,10 +126,12 @@ RUSSELL1000_GROUPS = [
         ("SNOW", "SNOW", "stock"),
         ("SNPS", "SNPS", "stock"),
         ("SNX", "SNX", "stock"),
+        ("STX", "STX", "stock"),
         ("SWKS", "SWKS", "stock"),
         ("TDC", "TDC", "stock"),
         ("TDY", "TDY", "stock"),
         ("TEAM", "TEAM", "stock"),
+        ("TEL", "TEL", "stock"),
         ("TER", "TER", "stock"),
         ("TRMB", "TRMB", "stock"),
         ("TWLO", "TWLO", "stock"),
@@ -179,9 +182,11 @@ RUSSELL1000_GROUPS = [
         ("NYT", "NYT", "stock"),
         ("OMC", "OMC", "stock"),
         ("PINS", "PINS", "stock"),
+        ("PSKY", "PSKY", "stock"),
         ("RBLX", "RBLX", "stock"),
         ("RDDT", "RDDT", "stock"),
         ("ROKU", "ROKU", "stock"),
+        ("SATS", "SATS", "stock"),
         ("SIRI", "SIRI", "stock"),
         ("SPOT", "SPOT", "stock"),
         ("T", "T", "stock"),
@@ -325,6 +330,7 @@ RUSSELL1000_GROUPS = [
     ("Consumer Staples", [
         ("ACI", "ACI", "stock"),
         ("ADM", "ADM", "stock"),
+        ("BF.B", "BF.B", "stock"),
         ("BFA", "BFA", "stock"),
         ("BFB", "BFB", "stock"),
         ("BG", "BG", "stock"),
@@ -521,6 +527,7 @@ RUSSELL1000_GROUPS = [
         ("BLSH", "BLSH", "stock"),
         ("BOKF", "BOKF", "stock"),
         ("BPOP", "BPOP", "stock"),
+        ("BRK.B", "BRK.B", "stock"),
         ("BRKB", "BRKB", "stock"),
         ("BRO", "BRO", "stock"),
         ("BX", "BX", "stock"),
@@ -542,6 +549,7 @@ RUSSELL1000_GROUPS = [
         ("EEFT", "EEFT", "stock"),
         ("EG", "EG", "stock"),
         ("EQH", "EQH", "stock"),
+        ("ERIE", "ERIE", "stock"),
         ("EVR", "EVR", "stock"),
         ("EWBC", "EWBC", "stock"),
         ("FAF", "FAF", "stock"),

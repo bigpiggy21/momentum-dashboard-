@@ -1,6 +1,6 @@
 """
-Russell3000 watchlist.
-Edited via TBD Technologies watchlist manager.
+Russell 3000 watchlist.
+Updated 2026-03-09 - added 7 tickers missing from R1K/SP500.
 """
 
 RUSSELL3000_GROUPS = [
@@ -232,6 +232,7 @@ RUSSELL3000_GROUPS = [
         ("NVDA", "NVDA", "stock"),
         ("NVEC", "NVEC", "stock"),
         ("NVTS", "NVTS", "stock"),
+        ("NXPI", "NXPI", "stock"),
         ("OKTA", "OKTA", "stock"),
         ("OLED", "OLED", "stock"),
         ("ON", "ON", "stock"),
@@ -303,6 +304,7 @@ RUSSELL3000_GROUPS = [
         ("SPSC", "SPSC", "stock"),
         ("SPT", "SPT", "stock"),
         ("SSTI", "SSTI", "stock"),
+        ("STX", "STX", "stock"),
         ("SVCO", "SVCO", "stock"),
         ("SWKS", "SWKS", "stock"),
         ("SYNA", "SYNA", "stock"),
@@ -311,6 +313,7 @@ RUSSELL3000_GROUPS = [
         ("TDC", "TDC", "stock"),
         ("TDY", "TDY", "stock"),
         ("TEAM", "TEAM", "stock"),
+        ("TEL", "TEL", "stock"),
         ("TENB", "TENB", "stock"),
         ("TER", "TER", "stock"),
         ("TLS", "TLS", "stock"),
@@ -439,6 +442,7 @@ RUSSELL3000_GROUPS = [
         ("OPTU", "OPTU", "stock"),
         ("PINS", "PINS", "stock"),
         ("PLTK", "PLTK", "stock"),
+        ("PSKY", "PSKY", "stock"),
         ("PUBM", "PUBM", "stock"),
         ("QNST", "QNST", "stock"),
         ("RBLX", "RBLX", "stock"),
@@ -815,6 +819,7 @@ RUSSELL3000_GROUPS = [
         ("ALCO", "ALCO", "stock"),
         ("ANDE", "ANDE", "stock"),
         ("AVO", "AVO", "stock"),
+        ("BF.B", "BF.B", "stock"),
         ("BFA", "BFA", "stock"),
         ("BFB", "BFB", "stock"),
         ("BG", "BG", "stock"),
@@ -1521,6 +1526,7 @@ RUSSELL3000_GROUPS = [
         ("BPOP", "BPOP", "stock"),
         ("BPRN", "BPRN", "stock"),
         ("BRBS", "BRBS", "stock"),
+        ("BRK.B", "BRK.B", "stock"),
         ("BRKB", "BRKB", "stock"),
         ("BRO", "BRO", "stock"),
         ("BRSP", "BRSP", "stock"),
@@ -1615,6 +1621,7 @@ RUSSELL3000_GROUPS = [
         ("ENVA", "ENVA", "stock"),
         ("EQBK", "EQBK", "stock"),
         ("EQH", "EQH", "stock"),
+        ("ERIE", "ERIE", "stock"),
         ("ESNT", "ESNT", "stock"),
         ("ESQ", "ESQ", "stock"),
         ("EVR", "EVR", "stock"),
