@@ -23,7 +23,7 @@ import time
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
 import urllib.parse
 
@@ -158,7 +158,7 @@ def _init_portfolio_db():
 def _record_portfolio_snapshot(total_value, is_close=False):
     """Record an hourly portfolio snapshot. % change computed from the fixed March 1 baseline."""
     import sqlite3
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     ts = now.strftime("%Y-%m-%dT%H:%M")
     date_str = now.strftime("%Y-%m-%d")
     pct = round((total_value - _PORTFOLIO_BASELINE) / _PORTFOLIO_BASELINE * 100, 2) if _PORTFOLIO_BASELINE > 0 else 0.0
@@ -248,7 +248,7 @@ def _sync_portfolio_trades(full=False):
         groups[(f["date"], f["ticker"], f["side"])].append(f)
 
     # Upsert into DB
-    now_str = datetime.utcnow().isoformat() + "Z"
+    now_str = datetime.now(timezone.utc).isoformat() + "Z"
     conn = sqlite3.connect(DB_PATH, timeout=5)
     new_count = 0
     for (date, ticker, side), fills in groups.items():
@@ -358,7 +358,7 @@ def _portfolio_snapshot_thread():
                 continue
             # Check if this is around LSE close (16:30 UK time)
             # UK is UTC+0 before ~Mar 29, UTC+1 after (BST)
-            now_utc = datetime.utcnow()
+            now_utc = datetime.now(timezone.utc)
             uk_hour = now_utc.hour  # ~correct for early March (UTC+0)
             is_close = (uk_hour == 16 and now_utc.minute >= 20) or (uk_hour == 17 and now_utc.minute <= 10)
             _record_portfolio_snapshot(total, is_close=is_close)
@@ -704,7 +704,7 @@ def scan_all(tickers=None):
         print(f"Scan complete. {len(all_results)}/{len(tickers)} tickers processed.")
     
     # Summary of recent events
-    events = get_recent_events(limit=50, since=(datetime.utcnow() - timedelta(minutes=5)).isoformat())
+    events = get_recent_events(limit=50, since=(datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat())
     if events:
         print(f"\n⚡ Recent changes ({len(events)}):")
         for e in events:
@@ -1083,7 +1083,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         ticker_filter = query.get("ticker", [None])[0]
         tickers = [ticker_filter] if ticker_filter else None
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if period == "last":
             compare_time = self._get_previous_session_close(div_adj)
             if not compare_time:
@@ -1207,7 +1207,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "criteria": body.get("criteria", []),
                 "adj": int(body.get("adj", 0)),
                 "watchlist": body.get("watchlist", ""),
-                "created": datetime.utcnow().isoformat(),
+                "created": datetime.now(timezone.utc).isoformat(),
             }
             _save_saved_searches(searches)
             self.send_json({"ok": True, "name": name})
@@ -1253,7 +1253,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "activeInds": body.get("activeInds", {}),
                 "activeTFs": body.get("activeTFs", []),
                 "ticker": body.get("ticker", ""),
-                "created": datetime.utcnow().isoformat(),
+                "created": datetime.now(timezone.utc).isoformat(),
             }
             _save_log_filters(filters)
             self.send_json({"ok": True, "name": name})
@@ -2840,7 +2840,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
             # Bump precompute timestamp so in-memory caches auto-invalidate
             from datetime import datetime
-            new_ts = datetime.utcnow().isoformat()
+            new_ts = datetime.now(timezone.utc).isoformat()
             c.execute("INSERT OR REPLACE INTO backtest_meta (key, value) VALUES ('last_precompute', ?)", (new_ts,))
             conn.commit()
             conn.close()
@@ -3772,7 +3772,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 import sqlite3 as _sql3
                 _init_portfolio_db()
                 _pconn = _sql3.connect(DB_PATH, timeout=5)
-                today_str = datetime.utcnow().strftime("%Y-%m-%d")
+                today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
                 # Get the latest snapshot from any previous day (prefer is_close, fallback any)
                 prev_row = _pconn.execute(
                     "SELECT total_value, date FROM portfolio_snapshots "
@@ -3793,7 +3793,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "dayChangePct": day_change_pct,
                 "prevCloseDate": prev_close_date,
                 "positions": pos_list,
-                "updatedAt": datetime.utcnow().isoformat() + "Z",
+                "updatedAt": datetime.now(timezone.utc).isoformat() + "Z",
             }
 
             _portfolio_cache = {"data": result, "ts": time.time()}
@@ -3826,7 +3826,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
             if range_param == "1d":
                 # 1D: show intraday snapshots indexed from previous close
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
                 today_str = now.strftime("%Y-%m-%d")
                 now_ts = now.strftime("%Y-%m-%dT%H:%M")
 
@@ -3863,9 +3863,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             # Non-1D ranges: one point per day
             date_filter = "2026-03-01"
             if range_param == "1w":
-                date_filter = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
+                date_filter = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
             elif range_param == "1m":
-                date_filter = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
+                date_filter = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
 
             rows = conn.execute(
                 "SELECT date, total_pct, ts FROM portfolio_snapshots "
