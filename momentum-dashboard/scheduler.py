@@ -625,55 +625,65 @@ class WatchlistScheduler:
             "error": sum(1 for r in collect_results if r.get("status") == "error"),
         }
 
-        # Phase 2: Compute (CPU-bound)
-        # Spawn engine.py as a subprocess so ProcessPoolExecutor runs from
-        # the main thread of its own process — avoids Windows deadlock when
-        # ProcessPoolExecutor is called from a non-main thread.
-        state.mark_phase("computing")
-        try:
-            import subprocess
-            engine_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "engine.py")
-            cmd = [sys.executable, engine_path,
-                   "--watchlist", name,
-                   "--workers", str(compute_workers),
-                   "--once"]
-            result = subprocess.run(cmd, capture_output=True, timeout=1800,
-                                    cwd=os.path.dirname(engine_path),
-                                    encoding='utf-8', errors='replace')
-            if result.returncode != 0:
-                err_msg = result.stderr[-500:] if result.stderr else "unknown error"
-                state.mark_error(f"Compute subprocess failed: {err_msg}")
-                raise RuntimeError(f"engine.py exited with code {result.returncode}")
-            # Parse summary from stdout
-            stdout = result.stdout or ""
-            if stdout:
-                print(stdout[-2000:] if len(stdout) > 2000 else stdout)
-        except subprocess.TimeoutExpired:
-            state.mark_error("Compute subprocess timed out (30min)")
-            raise
-        except Exception as e:
-            if "Compute subprocess failed" not in str(e):
-                state.mark_error(f"Computation failed: {e}")
-            raise
+        # Phase 2: Compute (CPU-bound) — skippable via config
+        do_compute = cfg.get("compute", True)
+        stdout = ""
+        n_ok = 0
+        n_skip = len(tickers)
+        n_events = 0
+        compute_summary = {"ok": 0, "skipped": len(tickers), "error": 0, "events": 0}
 
-        # Parse compute results from engine output
-        import re
-        compute_ok_m = re.search(r'(\d+) computed', stdout or "")
-        compute_skip_m = re.search(r'(\d+) skipped', stdout or "")
-        events_m = re.search(r'Total events: (\d+)', stdout or "")
-        n_ok = int(compute_ok_m.group(1)) if compute_ok_m else len(tickers)
-        n_skip = int(compute_skip_m.group(1)) if compute_skip_m else 0
-        n_events = int(events_m.group(1)) if events_m else 0
-        compute_summary = {
-            "ok": n_ok,
-            "skipped": n_skip,
-            "error": 0,
-            "events": n_events,
-        }
+        if not do_compute:
+            print(f"[SCHEDULER] Skipping compute for {name} (compute=false)")
+        else:
+            # Spawn engine.py as a subprocess so ProcessPoolExecutor runs from
+            # the main thread of its own process — avoids Windows deadlock when
+            # ProcessPoolExecutor is called from a non-main thread.
+            state.mark_phase("computing")
+            try:
+                import subprocess
+                engine_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "engine.py")
+                cmd = [sys.executable, engine_path,
+                       "--watchlist", name,
+                       "--workers", str(compute_workers),
+                       "--once"]
+                result = subprocess.run(cmd, capture_output=True, timeout=1800,
+                                        cwd=os.path.dirname(engine_path),
+                                        encoding='utf-8', errors='replace')
+                if result.returncode != 0:
+                    err_msg = result.stderr[-500:] if result.stderr else "unknown error"
+                    state.mark_error(f"Compute subprocess failed: {err_msg}")
+                    raise RuntimeError(f"engine.py exited with code {result.returncode}")
+                # Parse summary from stdout
+                stdout = result.stdout or ""
+                if stdout:
+                    print(stdout[-2000:] if len(stdout) > 2000 else stdout)
+            except subprocess.TimeoutExpired:
+                state.mark_error("Compute subprocess timed out (30min)")
+                raise
+            except Exception as e:
+                if "Compute subprocess failed" not in str(e):
+                    state.mark_error(f"Computation failed: {e}")
+                raise
 
-        # Phase 3: RS Rating (optional, for large universes only)
+            # Parse compute results from engine output
+            import re
+            compute_ok_m = re.search(r'(\d+) computed', stdout or "")
+            compute_skip_m = re.search(r'(\d+) skipped', stdout or "")
+            events_m = re.search(r'Total events: (\d+)', stdout or "")
+            n_ok = int(compute_ok_m.group(1)) if compute_ok_m else len(tickers)
+            n_skip = int(compute_skip_m.group(1)) if compute_skip_m else 0
+            n_events = int(events_m.group(1)) if events_m else 0
+            compute_summary = {
+                "ok": n_ok,
+                "skipped": n_skip,
+                "error": 0,
+                "events": n_events,
+            }
+
+        # Phase 3: RS Rating (optional, for large universes only — requires compute)
         RS_ELIGIBLE = {"Russell3000", "Russell2000", "Russell1000", "SP500"}
-        if name in RS_ELIGIBLE:
+        if do_compute and name in RS_ELIGIBLE:
             try:
                 import subprocess as _sp3
                 rs_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rs_engine.py")
