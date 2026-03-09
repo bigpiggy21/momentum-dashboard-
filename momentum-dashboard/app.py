@@ -847,6 +847,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_eod_compute_config()
         elif path == "/api/eod-compute/status":
             self.serve_eod_compute_status()
+        elif path == "/api/scheduler/indicator-compute/config":
+            self.serve_indicator_compute_config()
+        elif path == "/api/scheduler/indicator-compute/status":
+            self.serve_indicator_compute_status()
         # ── TradingView UDF Datafeed Endpoints ──────────────────────
         elif path == "/api/tv/config":
             self.serve_tv_config()
@@ -929,6 +933,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.save_eod_compute_config_handler()
         elif path == "/api/eod-compute/trigger":
             self.trigger_eod_compute()
+        elif path == "/api/scheduler/indicator-compute/config":
+            self.serve_indicator_compute_save_config()
+        elif path == "/api/scheduler/indicator-compute/trigger":
+            self.serve_indicator_compute_trigger()
         else:
             self.send_response(404)
             self.end_headers()
@@ -3471,15 +3479,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
             save_live_price_config(body)
-            # Hot-reload compute_watchlists on running daemon (no restart needed)
-            if _live_daemon is not None:
-                try:
-                    wl = body.get("compute_watchlists", ["Leverage"])
-                    _live_daemon._compute_watchlists = list(wl)
-                    with _live_daemon._lock:
-                        _live_daemon._status["compute_watchlists"] = list(wl)
-                except Exception:
-                    pass
             self.send_json({"ok": True})
         except Exception as e:
             self.send_json({"ok": False, "error": str(e)})
@@ -3615,6 +3614,98 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     print(f"[EOD] Direct: No tickers found in watchlists", flush=True)
             except Exception as e:
                 print(f"[EOD] Direct: HVC error: {e}", flush=True)
+
+    # ------------------------------------------------------------------
+    # Indicator Compute endpoints (subprocess-based)
+    # ------------------------------------------------------------------
+
+    def serve_indicator_compute_config(self):
+        """GET /api/scheduler/indicator-compute/config"""
+        from live_daemon import load_indicator_compute_config
+        try:
+            self.send_json(load_indicator_compute_config())
+        except Exception as e:
+            self.send_json({"error": str(e)})
+
+    def serve_indicator_compute_save_config(self):
+        """POST /api/scheduler/indicator-compute/config"""
+        from live_daemon import save_indicator_compute_config
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            save_indicator_compute_config(body)
+            # Hot-reload on running daemon
+            if _live_daemon is not None:
+                try:
+                    _live_daemon._indicator_compute_config = body
+                except Exception:
+                    pass
+            self.send_json({"ok": True})
+        except Exception as e:
+            self.send_json({"ok": False, "error": str(e)})
+
+    def serve_indicator_compute_status(self):
+        """GET /api/scheduler/indicator-compute/status"""
+        global _live_daemon
+        if _live_daemon:
+            with _live_daemon._lock:
+                self.send_json({
+                    "last_at": _live_daemon._status.get("compute_last_at"),
+                    "last_result": _live_daemon._status.get("compute_last_result"),
+                    "last_duration_s": _live_daemon._status.get("compute_last_duration_s", 0),
+                    "last_error": _live_daemon._status.get("compute_last_error"),
+                })
+        else:
+            self.send_json({
+                "last_at": None, "last_result": None,
+                "last_duration_s": 0, "last_error": None,
+            })
+
+    def serve_indicator_compute_trigger(self):
+        """POST /api/scheduler/indicator-compute/trigger — run as subprocess."""
+        global _live_daemon
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            watchlists = body.get("watchlists", ["Leverage"])
+            workers = body.get("workers", 8)
+
+            def _run():
+                if _live_daemon is not None:
+                    # Use daemon's method (tracks status)
+                    _live_daemon._run_indicator_compute_subprocess()
+                else:
+                    # Run directly as subprocess
+                    engine_path = os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)), "engine.py")
+                    args = [sys.executable, engine_path, "--once",
+                            "--workers", str(workers)]
+                    for wl in watchlists:
+                        args.extend(["--watchlist", wl])
+                    print(f"[COMPUTE] Direct trigger: {watchlists} w={workers}",
+                          flush=True)
+                    try:
+                        result = subprocess.run(
+                            args, capture_output=True, timeout=600,
+                            cwd=os.path.dirname(engine_path),
+                            encoding="utf-8", errors="replace")
+                        if result.returncode == 0:
+                            print("[COMPUTE] Direct trigger complete", flush=True)
+                        else:
+                            print(f"[COMPUTE] Direct trigger FAILED: "
+                                  f"{(result.stderr or '')[-200:]}", flush=True)
+                    except Exception as e:
+                        print(f"[COMPUTE] Direct trigger error: {e}", flush=True)
+
+            t = threading.Thread(target=_run, daemon=True)
+            t.start()
+            self.send_json({"ok": True, "message": f"Indicator compute triggered for {watchlists}"})
+        except Exception as e:
+            self.send_json({"ok": False, "error": str(e)})
+
+    # ------------------------------------------------------------------
+    # Sweep Detection Config endpoints
+    # ------------------------------------------------------------------
 
     def serve_sweep_detection_config(self):
         """GET /api/sweeps/detection-config — return current detection parameters."""

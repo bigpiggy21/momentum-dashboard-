@@ -184,18 +184,34 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
     <button class="live-price-save" onclick="saveLivePriceConfig()">Save</button>
     <span class="live-price-save-status" id="lpSaveStatus"></span>
   </div>
-  <!-- Post-flush compute -->
-  <div class="lp-compute-row">
-    <div class="lp-compute-label">Compute indicators after flush:</div>
-    <div class="lp-compute-chips" id="lpComputeChips">
-      <span style="font-size:10px;color:#444;">Loading watchlists...</span>
+</div>
+
+<!-- Indicator Computation (subprocess) -->
+<div class="eod-section" id="indicatorSection" style="margin-top:10px;">
+  <div class="eod-header">
+    <h3>&#x1F9EE; Indicator Computation</h3>
+    <span style="font-size:10px;color:#666;" id="indStatusText">Idle</span>
+  </div>
+  <div class="live-price-settings" style="margin-top:6px;">
+    <label><input type="checkbox" id="indEnabled" checked> Periodic (subprocess)</label>
+    <label>Interval: <input type="number" id="indInterval" min="5" max="120" value="30" style="width:50px;"> min</label>
+    <label>Workers: <input type="number" id="indWorkers" min="1" max="16" value="8" style="width:40px;"></label>
+  </div>
+  <div style="margin-top:6px;">
+    <div style="font-size:10px;color:#666;margin-bottom:4px;">Target watchlists:</div>
+    <div class="lp-compute-chips" id="indComputeChips">
+      <span style="font-size:10px;color:#444;">Loading...</span>
     </div>
-    <div class="lp-compute-stats" id="lpComputeStats" style="display:none;">
-      <span>Last compute: <span class="val" id="lpCompAt">--</span></span>
-      <span>Tickers: <span class="val" id="lpCompTickers">0</span></span>
-      <span>Events: <span class="val" id="lpCompEvents">0</span></span>
-      <span>Duration: <span class="val" id="lpCompDuration">--</span></span>
-    </div>
+  </div>
+  <div class="lp-compute-stats" id="indStats" style="display:none;margin-top:6px;">
+    <span>Last run: <span class="val" id="indLastAt">--</span></span>
+    <span>Result: <span class="val" id="indLastResult">--</span></span>
+    <span>Duration: <span class="val" id="indLastDuration">--</span></span>
+  </div>
+  <div style="margin-top:6px;">
+    <button class="backfill-btn" onclick="triggerIndicatorCompute()">Run Now</button>
+    <button class="live-price-save" onclick="saveIndicatorConfig()">Save</button>
+    <span class="live-price-save-status" id="indSaveStatus"></span>
   </div>
 </div>
 
@@ -679,27 +695,6 @@ function updateLivePriceUI(s){
     stats.style.display='none';
   }
 
-  // Compute stats
-  var compStats=document.getElementById('lpComputeStats');
-  if(s.compute_last_at||s.compute_last_tickers>0){
-    compStats.style.display='flex';
-    if(s.compute_last_at){
-      try{
-        var cd=new Date(s.compute_last_at);
-        var cdiff=Math.round((Date.now()-cd.getTime())/1000);
-        document.getElementById('lpCompAt').textContent=cdiff<60?cdiff+'s ago':Math.round(cdiff/60)+'m ago';
-      }catch(e){document.getElementById('lpCompAt').textContent='--';}
-    }else{document.getElementById('lpCompAt').textContent='--';}
-    document.getElementById('lpCompTickers').textContent=s.compute_last_tickers||0;
-    var evN=s.compute_last_events||0;
-    var evEl=document.getElementById('lpCompEvents');
-    evEl.textContent=evN;
-    evEl.style.color=evN>0?'#f59e0b':'#999';
-    document.getElementById('lpCompDuration').textContent=s.compute_last_duration_s?s.compute_last_duration_s+'s':'--';
-  }else{
-    compStats.style.display='none';
-  }
-
   // Keep polling if running
   if(s.running&&!_lpPollTimer){
     startLivePricePoll();
@@ -716,62 +711,11 @@ function stopLivePricePoll(){
   if(_lpPollTimer){clearInterval(_lpPollTimer);_lpPollTimer=null;}
 }
 
-var _lpComputeWatchlists=[];  // Currently saved compute watchlists
-
-function loadComputeWatchlistOptions(){
-  // Fetch available watchlists, then fetch saved config to check active ones
-  Promise.all([
-    fetch('/api/watchlists').then(function(r){return r.json();}),
-    fetch('/api/scheduler/live-price/config').then(function(r){return r.json();})
-  ]).then(function(results){
-    var watchlists=results[0];
-    var cfg=results[1];
-    _lpComputeWatchlists=(cfg.compute_watchlists||['Leverage']).slice();
-    var container=document.getElementById('lpComputeChips');
-    container.innerHTML='';
-    watchlists.forEach(function(wl){
-      var chip=document.createElement('span');
-      chip.className='lp-compute-chip';
-      chip.textContent=wl.name;
-      chip.setAttribute('data-wl',wl.name);
-      // Count tickers for tooltip
-      var count=0;
-      wl.groups.forEach(function(g){count+=g.tickers.length;});
-      chip.title=count+' tickers';
-      if(_lpComputeWatchlists.indexOf(wl.name)>=0){
-        chip.classList.add('active');
-      }
-      chip.onclick=function(){
-        chip.classList.toggle('active');
-      };
-      container.appendChild(chip);
-    });
-    if(watchlists.length===0){
-      container.innerHTML='<span style="font-size:10px;color:#444;">No watchlists found</span>';
-    }
-  }).catch(function(){});
-}
-
-function getSelectedComputeWatchlists(){
-  var selected=[];
-  document.querySelectorAll('#lpComputeChips .lp-compute-chip.active').forEach(function(el){
-    selected.push(el.getAttribute('data-wl'));
-  });
-  return selected;
-}
-
 function loadLivePriceConfig(){
   fetch('/api/scheduler/live-price/config').then(function(r){return r.json();}).then(function(cfg){
     document.getElementById('lpAutoStart').checked=!!cfg.auto_start;
     document.getElementById('lpFlushInterval').value=cfg.flush_interval_minutes||5;
     document.getElementById('lpFlushOnClose').checked=cfg.flush_on_close!==false;
-    // Update compute chips if already loaded
-    _lpComputeWatchlists=(cfg.compute_watchlists||['Leverage']).slice();
-    document.querySelectorAll('#lpComputeChips .lp-compute-chip').forEach(function(el){
-      var wl=el.getAttribute('data-wl');
-      if(_lpComputeWatchlists.indexOf(wl)>=0){el.classList.add('active');}
-      else{el.classList.remove('active');}
-    });
   }).catch(function(){});
 }
 
@@ -781,23 +725,108 @@ function saveLivePriceConfig(){
     auto_start:document.getElementById('lpAutoStart').checked,
     ws_url:'wss://delayed.polygon.io/stocks',
     flush_interval_minutes:parseInt(document.getElementById('lpFlushInterval').value)||5,
-    flush_on_close:document.getElementById('lpFlushOnClose').checked,
-    compute_watchlists:getSelectedComputeWatchlists()
+    flush_on_close:document.getElementById('lpFlushOnClose').checked
   };
   fetch('/api/scheduler/live-price/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)
   }).then(function(r){return r.json();}).then(function(r){
     var st=document.getElementById('lpSaveStatus');
     st.textContent=r.ok?'Saved!':'Error';
     st.style.color=r.ok?'#22c55e':'#ef4444';
-    if(r.ok)_lpComputeWatchlists=cfg.compute_watchlists.slice();
     setTimeout(function(){st.textContent='';},3000);
   });
 }
 
-// Init: check live price status + load config + load compute watchlists
+// ---------- Indicator Computation (subprocess) ----------
+function loadIndicatorConfig(){
+  Promise.all([
+    fetch('/api/watchlists').then(function(r){return r.json();}),
+    fetch('/api/scheduler/indicator-compute/config').then(function(r){return r.json();})
+  ]).then(function(results){
+    var watchlists=results[0];
+    var cfg=results[1];
+    document.getElementById('indEnabled').checked=cfg.enabled!==false;
+    document.getElementById('indInterval').value=cfg.interval_minutes||30;
+    document.getElementById('indWorkers').value=cfg.workers||8;
+    var activeWl=(cfg.watchlists||['Leverage']);
+    var container=document.getElementById('indComputeChips');
+    container.innerHTML='';
+    watchlists.forEach(function(wl){
+      var chip=document.createElement('span');
+      chip.className='lp-compute-chip';
+      chip.textContent=wl.name;
+      chip.setAttribute('data-wl',wl.name);
+      var count=0;
+      wl.groups.forEach(function(g){count+=g.tickers.length;});
+      chip.title=count+' tickers';
+      if(activeWl.indexOf(wl.name)>=0) chip.classList.add('active');
+      chip.onclick=function(){chip.classList.toggle('active');};
+      container.appendChild(chip);
+    });
+  }).catch(function(){});
+}
+
+function pollIndicatorStatus(){
+  fetch('/api/scheduler/indicator-compute/status').then(function(r){return r.json();}).then(function(s){
+    var stats=document.getElementById('indStats');
+    if(s.last_at){
+      stats.style.display='flex';
+      try{
+        var d=new Date(s.last_at);
+        var diff=Math.round((Date.now()-d.getTime())/1000);
+        document.getElementById('indLastAt').textContent=diff<60?diff+'s ago':Math.round(diff/60)+'m ago';
+      }catch(e){document.getElementById('indLastAt').textContent='--';}
+      var rEl=document.getElementById('indLastResult');
+      rEl.textContent=s.last_result||'--';
+      rEl.style.color=s.last_result==='success'?'#22c55e':s.last_result==='error'?'#ef4444':'#999';
+      document.getElementById('indLastDuration').textContent=s.last_duration_s?s.last_duration_s+'s':'--';
+    }else{
+      stats.style.display='none';
+    }
+  }).catch(function(){});
+}
+
+function saveIndicatorConfig(){
+  var selected=[];
+  document.querySelectorAll('#indComputeChips .lp-compute-chip.active').forEach(function(el){
+    selected.push(el.getAttribute('data-wl'));
+  });
+  var cfg={
+    enabled:document.getElementById('indEnabled').checked,
+    interval_minutes:parseInt(document.getElementById('indInterval').value)||30,
+    watchlists:selected.length?selected:['Leverage'],
+    workers:parseInt(document.getElementById('indWorkers').value)||8
+  };
+  fetch('/api/scheduler/indicator-compute/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)
+  }).then(function(r){return r.json();}).then(function(r){
+    var st=document.getElementById('indSaveStatus');
+    st.textContent=r.ok?'Saved!':'Error';
+    st.style.color=r.ok?'#22c55e':'#ef4444';
+    setTimeout(function(){st.textContent='';},3000);
+  });
+}
+
+function triggerIndicatorCompute(){
+  var selected=[];
+  document.querySelectorAll('#indComputeChips .lp-compute-chip.active').forEach(function(el){
+    selected.push(el.getAttribute('data-wl'));
+  });
+  fetch('/api/scheduler/indicator-compute/trigger',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({watchlists:selected.length?selected:['Leverage'],
+      workers:parseInt(document.getElementById('indWorkers').value)||8})
+  }).then(function(r){return r.json();}).then(function(r){
+    var st=document.getElementById('indSaveStatus');
+    st.textContent=r.ok?'Triggered!':'Error: '+(r.error||'');
+    st.style.color=r.ok?'#f59e0b':'#ef4444';
+    setTimeout(function(){st.textContent='';},5000);
+  });
+}
+
+// Init: check live price status + load config + load indicator config
 pollLivePriceStatus();
 loadLivePriceConfig();
-loadComputeWatchlistOptions();
+loadIndicatorConfig();
+pollIndicatorStatus();
+setInterval(pollIndicatorStatus,30000);
 
 // ---------- End of Day Compute ----------
 var _eodConfig = null;

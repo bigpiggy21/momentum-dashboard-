@@ -3142,16 +3142,16 @@ def _merge_live_bars_into_df(df, ticker, timeframe, suffix):
     Returns the modified DataFrame (or original if no live data available).
     """
     try:
-        from app import _live_price_daemon
-        if not _live_price_daemon:
+        from app import _live_daemon
+        if not _live_daemon:
             return df
-        status = _live_price_daemon.get_status()
+        status = _live_daemon.get_status()
         if not status.get("connected"):
             return df
     except (ImportError, AttributeError):
         return df
 
-    live = _live_price_daemon.get_latest_bars(ticker)
+    live = _live_daemon.get_latest_bars(ticker)
     if not live:
         return df
 

@@ -91,7 +91,6 @@ def load_live_price_config():
         "ws_url": DEFAULT_WS_URL,
         "flush_interval_minutes": DEFAULT_FLUSH_INTERVAL,
         "flush_on_close": True,
-        "compute_watchlists": ["Leverage"],
     }
     try:
         with open(SCHEDULER_CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -166,6 +165,42 @@ def save_eod_compute_config(config):
     except (FileNotFoundError, json.JSONDecodeError):
         full = {}
     full["eod_compute"] = config
+    with open(SCHEDULER_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(full, f, indent=2, ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------------
+# Config helpers — indicator compute (scheduler_config.json)
+# ---------------------------------------------------------------------------
+
+def load_indicator_compute_config():
+    """Load indicator computation config from scheduler_config.json."""
+    defaults = {
+        "enabled": True,
+        "interval_minutes": 30,
+        "watchlists": ["Leverage"],
+        "workers": 8,
+    }
+    try:
+        with open(SCHEDULER_CONFIG_PATH, "r", encoding="utf-8") as f:
+            saved = json.load(f)
+        if "indicator_compute" in saved and isinstance(saved["indicator_compute"], dict):
+            result = dict(defaults)
+            result.update(saved["indicator_compute"])
+            return result
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return defaults
+
+
+def save_indicator_compute_config(config):
+    """Save indicator computation config to scheduler_config.json (merges)."""
+    try:
+        with open(SCHEDULER_CONFIG_PATH, "r", encoding="utf-8") as f:
+            full = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        full = {}
+    full["indicator_compute"] = config
     with open(SCHEDULER_CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(full, f, indent=2, ensure_ascii=False)
 
@@ -383,8 +418,6 @@ class UnifiedLiveDaemon:
         # Price settings
         self._flush_interval = pcfg.get("flush_interval_minutes", DEFAULT_FLUSH_INTERVAL)
         self._flush_on_close = pcfg.get("flush_on_close", True)
-        self._compute_watchlists = pcfg.get("compute_watchlists", ["Leverage"])
-
         # Sweep settings
         self._min_notional = scfg.get("min_notional", MIN_SWEEP_NOTIONAL)
         self._detection_interval = scfg.get("detection_interval_minutes", DEFAULT_DETECTION_INTERVAL)
@@ -405,6 +438,8 @@ class UnifiedLiveDaemon:
         self._bars_lock = threading.Lock()
         self._trading_date = None
         self._price_msg_timestamps = []
+        self._cached_tickers = None   # set of safe-name prefixes with cache CSVs
+        self._cached_tickers_ts = 0   # last refresh time
 
         # ── Sweep state ──
         self._sweep_buffer = []
@@ -441,12 +476,6 @@ class UnifiedLiveDaemon:
             "_events_date": None,
             "last_detection_at": None,
             "last_sweep_flush_at": None,
-            # Compute stats
-            "compute_last_at": None,
-            "compute_last_tickers": 0,
-            "compute_last_events": 0,
-            "compute_last_duration_s": 0,
-            "compute_watchlists": self._compute_watchlists,
             # Crash tracking
             "crash_count": 0,
             "last_crash_at": None,
@@ -462,9 +491,16 @@ class UnifiedLiveDaemon:
             "eod_hvc_last_duration_s": 0,
             "eod_hvc_last_error": None,
             "eod_hvc_last_date": None,
+            # Indicator compute status (subprocess)
+            "compute_last_at": None,
+            "compute_last_result": None,
+            "compute_last_duration_s": 0,
+            "compute_last_error": None,
         }
         self._eod_compute_thread = None
         self._eod_config = load_eod_compute_config()
+        self._indicator_compute_thread = None
+        self._indicator_compute_config = load_indicator_compute_config()
 
     # ------------------------------------------------------------------
     # Public interface
@@ -596,12 +632,6 @@ class UnifiedLiveDaemon:
             "last_message_at": full["price_last_message_at"],
             "reconnect_count": full["reconnect_count"],
             "error": full["error"],
-            # Compute stats
-            "compute_last_at": full["compute_last_at"],
-            "compute_last_tickers": full["compute_last_tickers"],
-            "compute_last_events": full["compute_last_events"],
-            "compute_last_duration_s": full["compute_last_duration_s"],
-            "compute_watchlists": full["compute_watchlists"],
         }
 
     def get_latest_bars(self, ticker):
@@ -653,6 +683,7 @@ class UnifiedLiveDaemon:
             ("_sweep_flush_thread", self._sweep_flush_loop, "live-sweep-flush"),
             ("_detection_thread", self._detection_loop, "live-detection"),
             ("_eod_compute_thread", self._eod_compute_loop, "live-eod-compute"),
+            ("_indicator_compute_thread", self._indicator_compute_loop, "live-indicator-compute"),
             ("_heartbeat_thread", self._heartbeat_loop, "live-heartbeat"),
         ]
         for attr, target, name in threads:
@@ -671,6 +702,7 @@ class UnifiedLiveDaemon:
         self._start_sub_thread("_sweep_flush_thread", self._sweep_flush_loop, "live-sweep-flush")
         self._start_sub_thread("_detection_thread", self._detection_loop, "live-detection")
         self._start_sub_thread("_eod_compute_thread", self._eod_compute_loop, "live-eod-compute")
+        self._start_sub_thread("_indicator_compute_thread", self._indicator_compute_loop, "live-indicator-compute")
         self._start_sub_thread("_heartbeat_thread", self._heartbeat_loop, "live-heartbeat")
 
         while not self._stop_event.is_set():
@@ -952,69 +984,66 @@ class UnifiedLiveDaemon:
             try:
                 self._stop_event.wait(timeout=interval_s)
                 if not self._stop_event.is_set():
-                    flushed = set()
                     try:
-                        flushed = self._flush_price_csv()
+                        self._flush_price_csv()
                     except Exception as e:
                         print(f"[LIVE] Price flush error: {e}", flush=True)
                         traceback.print_exc()
-                    # Post-flush: compute indicators for watchlist tickers
-                    if flushed:
-                        try:
-                            self._compute_indicators(flushed)
-                        except Exception as e:
-                            print(f"[LIVE] Post-flush compute error: {e}", flush=True)
-                            traceback.print_exc()
             except Exception as e:
                 print(f"[LIVE] CRITICAL: price_flush_loop unexpected error: {e}", flush=True)
                 traceback.print_exc()
                 self._stop_event.wait(timeout=10)  # cooldown before retry
 
-    def _get_flush_tickers(self):
-        """Build set of API ticker symbols that should be flushed to CSV.
-
-        Only tickers belonging to configured compute_watchlists are flushed,
-        so we don't waste time writing CSVs for 7000+ tickers when we only
-        compute indicators on ~80.
-        """
+    def _refresh_cached_tickers(self):
+        """Scan cache/ for tickers that have existing CSV files."""
         try:
-            from config import WATCHLISTS
-        except ImportError:
-            return None  # flush all if we can't resolve watchlists
-        if not self._compute_watchlists:
-            return None  # flush all
-        tickers = set()
-        for wl_name in self._compute_watchlists:
-            wl_groups = WATCHLISTS.get(wl_name)
-            if not wl_groups:
-                continue
-            for _group_name, group_tickers in wl_groups:
-                for _display, api, _atype in group_tickers:
-                    tickers.add(api.upper())
-        return tickers if tickers else None
+            cached = set()
+            for fname in os.listdir(CACHE_DIR):
+                if fname.endswith("_day.csv"):
+                    cached.add(fname[:-8].upper())
+                elif fname.endswith("_hour.csv"):
+                    cached.add(fname[:-9].upper())
+            self._cached_tickers = cached
+            self._cached_tickers_ts = time.time()
+            print(f"[LIVE] Cache scan: {len(cached)} tickers with CSV files",
+                  flush=True)
+        except Exception as e:
+            print(f"[LIVE] Cache scan error: {e}", flush=True)
+
+    def _get_flush_tickers(self):
+        """Return set of safe-name prefixes for tickers with existing CSV cache.
+
+        Flushes ALL tickers that have cache files (not just watchlist tickers),
+        so sweep page charts stay fresh for all tracked tickers.
+        Refreshes the set every hour.
+        """
+        if self._cached_tickers is None or (time.time() - self._cached_tickers_ts > 3600):
+            self._refresh_cached_tickers()
+        return self._cached_tickers
 
     def _flush_price_csv(self):
-        """Flush in-memory bars to CSV files. Returns set of flushed ticker symbols.
+        """Flush in-memory bars to CSV files.
 
-        Only flushes tickers in configured compute_watchlists to keep flush
-        fast (~80 tickers vs 7000+).
+        Flushes all tickers that have existing cache CSV files, keeping
+        sweep page charts fresh for all tracked tickers.
         """
         flush_filter = self._get_flush_tickers()
 
         with self._bars_lock:
             if not self._bars:
-                return set()
+                return
             tickers_data = {}
             for ticker, tb in self._bars.items():
-                # Only flush tickers we'll compute indicators for
-                if flush_filter is not None and ticker.upper() not in flush_filter:
+                # Match websocket ticker against cache filenames
+                safe = ticker.replace(":", "_").replace("/", "_").upper()
+                if flush_filter is not None and safe not in flush_filter:
                     continue
                 snap = tb.snapshot()
                 if snap:
                     tickers_data[ticker] = snap
 
         if not tickers_data:
-            return set()
+            return
 
         t0 = time.time()
         flushed_hourly = 0
@@ -1062,7 +1091,7 @@ class UnifiedLiveDaemon:
         print(f"[LIVE] Price flush: {flushed_hourly} hourly + {flushed_daily} daily "
               f"CSVs in {elapsed:.1f}s ({len(tickers_data)} tickers)", flush=True)
 
-        return set(tickers_data.keys())
+        # No return value needed — indicator compute is now a separate subprocess
 
     def _merge_bars_to_csv(self, csv_path, bars, trade_date):
         live_rows = []
@@ -1103,94 +1132,6 @@ class UnifiedLiveDaemon:
         keep_cols = [c for c in ["timestamp", "open", "high", "low", "close",
                                   "volume", "vwap", "n_trades"] if c in merged.columns]
         merged[keep_cols].to_csv(csv_path, index=False)
-
-    # ------------------------------------------------------------------
-    # Post-flush indicator computation
-    # ------------------------------------------------------------------
-
-    def _compute_indicators(self, flushed_tickers):
-        """Compute indicators for watchlist tickers that were just flushed to CSV.
-
-        After each price CSV flush, we intersect the flushed tickers with the
-        configured watchlists and run the full indicator pipeline (Bollingers,
-        HVC, 30WMA, etc.) for each matching ticker.  Results go straight to
-        SQLite so the dashboard picks them up on next refresh.
-        """
-        if not self._compute_watchlists or not flushed_tickers:
-            return
-
-        # Lazy imports — keeps module lightweight at import time
-        try:
-            from config import WATCHLISTS
-            from engine import compute_ticker
-        except ImportError as e:
-            print(f"[LIVE] Compute import error: {e}", flush=True)
-            return
-
-        # Build api_ticker -> display_ticker map for configured watchlists
-        api_to_display = {}
-        for wl_name in self._compute_watchlists:
-            wl_groups = WATCHLISTS.get(wl_name)
-            if not wl_groups:
-                print(f"[LIVE] Compute: watchlist '{wl_name}' not found, skipping",
-                      flush=True)
-                continue
-            for _group_name, group_tickers in wl_groups:
-                for display, api, _atype in group_tickers:
-                    api_to_display[api.upper()] = display
-
-        # Intersect with flushed tickers
-        flushed_upper = {t.upper() for t in flushed_tickers}
-        to_compute = []
-        for api_tk in flushed_upper:
-            if api_tk in api_to_display:
-                to_compute.append(api_to_display[api_tk])
-
-        if not to_compute:
-            return
-
-        t0 = time.time()
-        computed = 0
-        skipped = 0
-        total_events = 0
-        errors = 0
-
-        for i, display_ticker in enumerate(to_compute):
-            if self._stop_event.is_set():
-                break
-            try:
-                result = compute_ticker(display_ticker)
-                status = result.get("status", "unknown")
-                if status == "ok":
-                    computed += 1
-                    n_ev = result.get("events", 0)
-                    total_events += n_ev
-                    if n_ev > 0:
-                        print(f"[LIVE] Compute ⚡ {display_ticker}: "
-                              f"{n_ev} event(s) detected", flush=True)
-                elif status == "skipped":
-                    skipped += 1
-                else:
-                    # no_data or other
-                    skipped += 1
-            except Exception as e:
-                errors += 1
-                print(f"[LIVE] Compute error for {display_ticker}: {e}",
-                      flush=True)
-
-        elapsed = time.time() - t0
-
-        with self._lock:
-            self._status["compute_last_at"] = datetime.now(timezone.utc).isoformat()
-            self._status["compute_last_tickers"] = computed
-            self._status["compute_last_events"] = total_events
-            self._status["compute_last_duration_s"] = round(elapsed, 1)
-
-        print(f"[LIVE] Indicator compute: {computed} computed, {skipped} skipped"
-              f"{f', {errors} errors' if errors else ''} "
-              f"out of {len(to_compute)} tickers in {elapsed:.1f}s"
-              f"{f' ({total_events} events)' if total_events else ''}",
-              flush=True)
 
     # ------------------------------------------------------------------
     # Sweep buffer flush
@@ -1360,6 +1301,91 @@ class UnifiedLiveDaemon:
         print(f"[{now}] {summary}", flush=True)
 
     # ------------------------------------------------------------------
+    # Periodic indicator computation (subprocess)
+    # ------------------------------------------------------------------
+
+    def _indicator_compute_loop(self):
+        """Periodically run indicator computation as a subprocess.
+
+        Runs engine.py with --watchlist/--once/--workers flags in a separate
+        OS process, completely isolated from the daemon's WebSocket thread.
+        """
+        cfg = self._indicator_compute_config
+        if not cfg.get("enabled", True):
+            print("[LIVE] Indicator compute: disabled in config, thread sleeping",
+                  flush=True)
+            return
+        interval_s = max(cfg.get("interval_minutes", 30), 5) * 60
+        # Wait for first flush cycle to complete before first compute
+        initial_delay = self._flush_interval * 60 + 30
+        print(f"[LIVE] Indicator compute: will start in {initial_delay}s, "
+              f"then every {interval_s // 60}m", flush=True)
+        self._stop_event.wait(timeout=initial_delay)
+
+        while not self._stop_event.is_set():
+            try:
+                self._run_indicator_compute_subprocess()
+            except Exception as e:
+                print(f"[LIVE] Indicator compute error: {e}", flush=True)
+                traceback.print_exc()
+            self._stop_event.wait(timeout=interval_s)
+
+    def _run_indicator_compute_subprocess(self):
+        """Run engine.py as a subprocess for indicator computation."""
+        cfg = self._indicator_compute_config
+        watchlists = cfg.get("watchlists", ["Leverage"])
+        workers = cfg.get("workers", 8)
+
+        engine_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   "engine.py")
+        args = [sys.executable, engine_path, "--once", "--workers", str(workers)]
+        for wl in watchlists:
+            args.extend(["--watchlist", wl])
+
+        print(f"[LIVE] Starting indicator compute subprocess: "
+              f"{watchlists} w={workers}...", flush=True)
+        t0 = time.time()
+
+        try:
+            result = subprocess.run(
+                args, capture_output=True, timeout=600,
+                cwd=os.path.dirname(engine_path),
+                encoding="utf-8", errors="replace"
+            )
+            elapsed = time.time() - t0
+
+            with self._lock:
+                self._status["compute_last_at"] = datetime.now(timezone.utc).isoformat()
+                self._status["compute_last_duration_s"] = round(elapsed, 1)
+
+            if result.returncode == 0:
+                print(f"[LIVE] Indicator compute complete in {elapsed:.1f}s",
+                      flush=True)
+                with self._lock:
+                    self._status["compute_last_result"] = "success"
+                    self._status["compute_last_error"] = None
+                # Print last few lines of output for visibility
+                if result.stdout:
+                    for line in result.stdout.strip().split("\n")[-3:]:
+                        print(f"  [COMPUTE] {line}", flush=True)
+            else:
+                error_msg = (result.stderr or "Unknown error")[-200:]
+                print(f"[LIVE] Indicator compute FAILED (exit "
+                      f"{result.returncode}): {error_msg}", flush=True)
+                with self._lock:
+                    self._status["compute_last_result"] = "error"
+                    self._status["compute_last_error"] = error_msg
+
+        except subprocess.TimeoutExpired:
+            elapsed = time.time() - t0
+            print("[LIVE] Indicator compute timed out (600s)", flush=True)
+            with self._lock:
+                self._status["compute_last_at"] = datetime.now(timezone.utc).isoformat()
+                self._status["compute_last_duration_s"] = round(elapsed, 1)
+                self._status["compute_last_result"] = "error"
+                self._status["compute_last_error"] = "Timeout (600s)"
+
+    # ------------------------------------------------------------------
     # End of Day compute — RS + HVC after market close
     # ------------------------------------------------------------------
 
@@ -1472,7 +1498,7 @@ class UnifiedLiveDaemon:
             print(f"[LIVE] EOD: RS computation error: {e}", flush=True)
 
     def _run_eod_hvc(self, hvc_cfg):
-        """Run HVC/indicator computation for configured watchlists."""
+        """Run HVC/indicator computation as subprocess (matches RS pattern)."""
         watchlists = hvc_cfg.get("watchlists", ["Leverage"])
         workers = hvc_cfg.get("workers", 8)
         today_str = datetime.now(timezone.utc).date().isoformat()
@@ -1481,48 +1507,49 @@ class UnifiedLiveDaemon:
         t0 = time.time()
 
         try:
-            from config import WATCHLISTS
-            from engine import compute_all
-            from change_detector import init_db
+            engine_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                       "engine.py")
+            args = [sys.executable, engine_path, "--once", "--workers", str(workers)]
+            for wl in watchlists:
+                args.extend(["--watchlist", wl])
 
-            init_db()
-
-            tickers = []
-            seen = set()
-            for wl_name in watchlists:
-                wl_groups = WATCHLISTS.get(wl_name)
-                if not wl_groups:
-                    print(f"[LIVE] EOD HVC: watchlist '{wl_name}' not found, skipping", flush=True)
-                    continue
-                for _group_name, group_tickers in wl_groups:
-                    for display, _api, _atype in group_tickers:
-                        if display not in seen:
-                            seen.add(display)
-                            tickers.append(display)
-
-            if not tickers:
-                with self._lock:
-                    self._status["eod_hvc_last_at"] = datetime.now(timezone.utc).isoformat()
-                    self._status["eod_hvc_last_result"] = "skipped"
-                    self._status["eod_hvc_last_error"] = "No tickers in configured watchlists"
-                    self._status["eod_hvc_last_date"] = today_str
-                return
-
-            results = compute_all(tickers, workers=workers)
+            result = subprocess.run(
+                args, capture_output=True, timeout=600,
+                cwd=os.path.dirname(engine_path),
+                encoding="utf-8", errors="replace"
+            )
             elapsed = time.time() - t0
 
-            ok_count = sum(1 for r in results if r.get("status") == "ok")
-            total_events = sum(r.get("events", 0) for r in results if r.get("status") == "ok")
+            if result.returncode == 0:
+                with self._lock:
+                    self._status["eod_hvc_last_at"] = datetime.now(timezone.utc).isoformat()
+                    self._status["eod_hvc_last_result"] = "success"
+                    self._status["eod_hvc_last_duration_s"] = round(elapsed, 1)
+                    self._status["eod_hvc_last_error"] = None
+                    self._status["eod_hvc_last_date"] = today_str
+                print(f"[LIVE] EOD: HVC computation complete in {elapsed:.1f}s",
+                      flush=True)
+                if result.stdout:
+                    for line in result.stdout.strip().split("\n")[-5:]:
+                        print(f"  [HVC] {line}", flush=True)
+            else:
+                error_msg = (result.stderr or "Unknown error")[-200:]
+                with self._lock:
+                    self._status["eod_hvc_last_at"] = datetime.now(timezone.utc).isoformat()
+                    self._status["eod_hvc_last_result"] = "error"
+                    self._status["eod_hvc_last_duration_s"] = round(elapsed, 1)
+                    self._status["eod_hvc_last_error"] = error_msg
+                    self._status["eod_hvc_last_date"] = today_str
+                print(f"[LIVE] EOD: HVC FAILED (exit {result.returncode}): "
+                      f"{error_msg}", flush=True)
 
+        except subprocess.TimeoutExpired:
             with self._lock:
                 self._status["eod_hvc_last_at"] = datetime.now(timezone.utc).isoformat()
-                self._status["eod_hvc_last_result"] = "success"
-                self._status["eod_hvc_last_duration_s"] = round(elapsed, 1)
-                self._status["eod_hvc_last_error"] = None
+                self._status["eod_hvc_last_result"] = "error"
+                self._status["eod_hvc_last_error"] = "Timeout (600s)"
                 self._status["eod_hvc_last_date"] = today_str
-
-            print(f"[LIVE] EOD: HVC computation complete in {elapsed:.1f}s "
-                  f"({ok_count}/{len(tickers)} computed, {total_events} events)", flush=True)
+            print("[LIVE] EOD: HVC computation timed out after 600s", flush=True)
 
         except Exception as e:
             elapsed = time.time() - t0
