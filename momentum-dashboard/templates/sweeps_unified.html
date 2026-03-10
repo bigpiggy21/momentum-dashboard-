@@ -385,6 +385,7 @@ td .cb-flag,td .monster-flag{font-size:8px;padding:0px 3px;margin-left:2px;}
 <input type="date" id="dateTo" value="">
 <div class="filter-divider"></div>
 <div id="periodBtns" style="display:inline-flex;gap:2px;">
+<button class="filter-toggle" onclick="setTrackerPeriod('today',this)">Today</button>
 <button class="filter-toggle active" onclick="setTrackerPeriod('week',this)">Week</button>
 <button class="filter-toggle" onclick="setTrackerPeriod('month',this)">Month</button>
 <button class="filter-toggle" onclick="setTrackerPeriod('year',this)">YTD</button>
@@ -927,7 +928,9 @@ function pad2(n){ return n < 10 ? '0' + n : '' + n; }
 function setTrackerPeriod(label, btn){
   var now = new Date();
   var from = '';
-  if(label === 'week'){
+  if(label === 'today'){
+    from = now.getFullYear() + '-' + pad2(now.getMonth()+1) + '-' + pad2(now.getDate());
+  } else if(label === 'week'){
     // Monday of this week
     var day = now.getDay(); // 0=Sun
     var diff = (day === 0 ? 6 : day - 1);

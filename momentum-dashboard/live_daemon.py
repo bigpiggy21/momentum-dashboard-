@@ -89,9 +89,9 @@ def load_live_price_config():
     """Load live price feed config from scheduler_config.json."""
     defaults = {
         "enabled": False,
-        "auto_start": False,
+        "auto_start": True,
         "ws_url": DEFAULT_WS_URL,
-        "flush_enabled": True,
+        "flush_enabled": False,
         "flush_interval_minutes": DEFAULT_FLUSH_INTERVAL,
         "flush_on_close": True,
         "flush_watchlists": ["Priority"],
@@ -180,7 +180,7 @@ def save_eod_compute_config(config):
 def load_indicator_compute_config():
     """Load indicator computation config from scheduler_config.json."""
     defaults = {
-        "enabled": True,
+        "enabled": False,
         "interval_minutes": 30,
         "watchlists": ["Priority"],
         "workers": 8,
@@ -219,7 +219,7 @@ SWEEP_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 def load_live_config():
     """Load live scanner config from sweep_detection_config.json."""
     defaults = {
-        "auto_start": False,
+        "auto_start": True,
         "detection_interval_minutes": DEFAULT_DETECTION_INTERVAL,
         "ws_url": DEFAULT_WS_URL,
         "min_notional": MIN_SWEEP_NOTIONAL,
