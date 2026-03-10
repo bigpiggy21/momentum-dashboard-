@@ -3021,7 +3021,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         Supports: min_total, tickers, date_from, date_to, and per-type display filters.
         """
         try:
-            init_sweep_db()
             min_total_str = (query or {}).get("min_total", [None])[0]
             min_total = float(min_total_str) if min_total_str else None
 
@@ -3063,7 +3062,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         """GET /api/sweeps/diag — diagnostic: compare summary vs trades.
         Add &fix=1 to rebuild summary + delete corrupt event for that ticker+date."""
         try:
-            init_sweep_db()
             ticker = (query or {}).get("ticker", [None])[0]
             date = (query or {}).get("date", [None])[0]
             fix = (query or {}).get("fix", ["0"])[0] == "1"
@@ -3117,7 +3115,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def serve_sweep_summary(self, query=None):
         """GET /api/sweeps/summary — sweep trades grouped by ticker+date."""
         try:
-            init_sweep_db()
             ticker = (query or {}).get("ticker", [None])[0]
             date_from = (query or {}).get("date_from", [None])[0]
             date_to = (query or {}).get("date_to", [None])[0]
@@ -3131,7 +3128,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def serve_sweep_detail(self, query=None):
         """GET /api/sweeps/detail — individual sweeps for a ticker on a date."""
         try:
-            init_sweep_db()
             ticker = (query or {}).get("ticker", [None])[0]
             date_str = (query or {}).get("date", [None])[0]
             if not ticker or not date_str:
@@ -3147,7 +3143,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         Optional: min_total to filter by total_notional threshold.
         """
         try:
-            init_sweep_db()
             ticker = (query or {}).get("ticker", [None])[0]
             date_from = (query or {}).get("date_from", [None])[0]
             date_to = (query or {}).get("date_to", [None])[0]
@@ -3170,7 +3165,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         Optional: min_total to filter which clusterbombs appear on chart.
         """
         try:
-            init_sweep_db()
             ticker = (query or {}).get("ticker", [None])[0]
             date_from = (query or {}).get("date_from", [None])[0]
             date_to = (query or {}).get("date_to", [None])[0]
@@ -3212,7 +3206,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         min_sweeps, monster_min, rare_min, rare_days (per-type display filters).
         """
         try:
-            init_sweep_db()
             min_total = float((query or {}).get("min_total", ["10000000"])[0])
 
             tickers_raw = (query or {}).get("tickers", [None])[0]
@@ -3283,7 +3276,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def serve_sweep_fetch(self):
         """POST /api/sweeps/fetch — trigger sweep data fetching for tickers."""
         try:
-            init_sweep_db()
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
 
@@ -4241,9 +4233,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def serve_analysis_river(self, query=None):
         """GET /api/analysis/river — aggregated sweep data for river/stream chart."""
-        from sweep_engine import get_river_data, init_sweep_db
+        from sweep_engine import get_river_data
         try:
-            init_sweep_db()
             granularity = (query or {}).get("granularity", ["week"])[0]
             date_from = (query or {}).get("date_from", [None])[0]
             date_to = (query or {}).get("date_to", [None])[0]
@@ -4270,9 +4261,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def serve_analysis_heatmap(self, query=None):
         """GET /api/analysis/heatmap — daily aggregated data for calendar heatmap."""
-        from sweep_engine import get_heatmap_data, init_sweep_db
+        from sweep_engine import get_heatmap_data
         try:
-            init_sweep_db()
             year = int((query or {}).get("year", ["2026"])[0])
             metric = (query or {}).get("metric", ["notional"])[0]
             event_type = (query or {}).get("event_type", ["all"])[0]
@@ -4288,7 +4278,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         that have trade data but no existing events (skip already-detected).
         Only wipes and rebuilds events for the requested profile."""
         try:
-            init_sweep_db()
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
 
@@ -4392,14 +4381,19 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 etf_set = load_etf_set()
                 if profile == "both":
                     conn.execute("DELETE FROM clusterbomb_events")
+                    print(f"[Redetect] Wiped ALL events. {len(all_tickers)} tickers to process.", flush=True)
                 elif profile == "etf":
                     etf_in = ",".join(f"'{t}'" for t in all_tickers if t in etf_set)
                     if etf_in:
                         conn.execute(f"DELETE FROM clusterbomb_events WHERE ticker IN ({etf_in})")
+                    etf_count = sum(1 for t in all_tickers if t in etf_set)
+                    print(f"[Redetect] Wiped ETF events. {etf_count} ETF tickers to process.", flush=True)
                 else:  # stock
                     stock_in = ",".join(f"'{t}'" for t in all_tickers if t not in etf_set)
                     if stock_in:
                         conn.execute(f"DELETE FROM clusterbomb_events WHERE ticker IN ({stock_in})")
+                    stock_count = sum(1 for t in all_tickers if t not in etf_set)
+                    print(f"[Redetect] Wiped stock events. {stock_count} stock tickers to process.", flush=True)
                 conn.commit()
                 conn.close()
 
@@ -4414,6 +4408,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
                 # --- Stock detection ---
                 if profile in ("stock", "both"):
+                    print("[Redetect] Starting stock detection...", flush=True)
                     stock_params = body.get("stock", body) if body else cfg["stock"]
                     events = detect_clusterbombs(
                         tickers=all_tickers,
@@ -4452,23 +4447,29 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     etf_params = body.get("etf") if body else None
                     if not etf_params:
                         etf_params = cfg.get("etf", {})
+                    print(f"[Redetect] ETF daily ranked (rank_limit=100, min_sweeps=1)...", flush=True)
                     etf_daily = detect_ranked_daily(
                         rank_limit=100, min_sweeps=1,
                         tickers=all_tickers,
                         exclude_etfs=False, etf_only=True,
                     )
+                    print(f"[Redetect] ETF daily ranked done: {etf_daily}", flush=True)
                     _rare_not = float((etf_params or {}).get("rare_min_notional", 1_000_000))
                     _rare_days = int((etf_params or {}).get("rarity_days", 20))
+                    print(f"[Redetect] ETF rare sweeps (rarity_days={_rare_days}, min_notional=${_rare_not:,.0f})...", flush=True)
                     etf_rare = detect_rare_sweep_days(
                         min_notional=_rare_not, rarity_days=_rare_days,
                         tickers=all_tickers,
                         exclude_etfs=False, etf_only=True,
                     )
+                    print(f"[Redetect] ETF rare sweeps done: {len(etf_rare)} events", flush=True)
+                    print(f"[Redetect] ETF single ranked (rank_limit=100)...", flush=True)
                     etf_single = detect_ranked_sweeps(
                         rank_limit=100,
                         tickers=all_tickers,
                         exclude_etfs=False, etf_only=True,
                     )
+                    print(f"[Redetect] ETF single ranked done: {etf_single}", flush=True)
 
             _tracker_cache.clear()  # invalidate tracker cache after redetect
 
@@ -4502,7 +4503,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def serve_rebuild_cache(self):
         """POST /api/sweeps/rebuild-cache — rebuild materialised stats + daily summary."""
         try:
-            init_sweep_db()
             print("[SWEEP] Rebuilding stats cache + daily summary...", flush=True)
             rebuild_stats_cache()
             rebuild_daily_summary()

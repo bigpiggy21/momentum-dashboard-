@@ -34,7 +34,7 @@ def fetch_events(report_date, asset_class, min_total_m):
         "min_total": int(min_total_m * 1_000_000),
     }
     if asset_class in ("stock", "etf"):
-        params["asset_class"] = asset_class + "s"  # API expects 'stocks' or 'etfs'
+        params["asset_class"] = asset_class  # API expects 'stock' or 'etf'
     else:
         params["asset_class"] = "all"
 
