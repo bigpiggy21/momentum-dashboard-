@@ -223,6 +223,13 @@ def load_live_config():
         "min_notional": MIN_SWEEP_NOTIONAL,
         "buffer_flush_seconds": DEFAULT_BUFFER_FLUSH_SECONDS,
         "buffer_max_trades": DEFAULT_BUFFER_MAX_TRADES,
+        # Auto-fetch queue
+        "auto_fetch_enabled": True,
+        "auto_fetch_mode": "periodic",
+        "auto_fetch_interval_minutes": 30,
+        "auto_fetch_time": "18:00",
+        "auto_fetch_lookback_years": 10,
+        "auto_fetch_price_data": True,
     }
     try:
         with open(SWEEP_CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -428,6 +435,18 @@ class UnifiedLiveDaemon:
         self._sweep_flush_seconds = scfg.get("buffer_flush_seconds", DEFAULT_BUFFER_FLUSH_SECONDS)
         self._sweep_flush_max = scfg.get("buffer_max_trades", DEFAULT_BUFFER_MAX_TRADES)
 
+        # Auto-fetch queue settings
+        self._auto_fetch_enabled = scfg.get("auto_fetch_enabled", True)
+        self._auto_fetch_mode = scfg.get("auto_fetch_mode", "periodic")  # periodic|scheduled|manual
+        self._auto_fetch_interval = scfg.get("auto_fetch_interval_minutes", 30)
+        self._auto_fetch_time = scfg.get("auto_fetch_time", "18:00")  # HH:MM local
+        self._auto_fetch_lookback_years = scfg.get("auto_fetch_lookback_years", 10)
+        self._auto_fetch_price_data = scfg.get("auto_fetch_price_data", True)
+        self._pending_fetch_tickers = set()
+        self._pending_fetch_lock = threading.Lock()
+        self._known_fetched_tickers = set()   # tickers with ≥10 days in sweep_fetch_log
+        self._known_fetched_loaded = False
+
         # Connection state
         self._ws = None
         self._thread = None
@@ -503,11 +522,19 @@ class UnifiedLiveDaemon:
             "compute_last_result": None,
             "compute_last_duration_s": 0,
             "compute_last_error": None,
+            # Auto-fetch queue status
+            "auto_fetch_pending": 0,
+            "auto_fetch_last_at": None,
+            "auto_fetch_last_result": None,
+            "auto_fetch_last_tickers": 0,
+            "auto_fetch_last_duration_s": 0,
+            "auto_fetch_total_fetched": 0,
         }
         self._eod_compute_thread = None
         self._eod_config = load_eod_compute_config()
         self._indicator_compute_thread = None
         self._indicator_compute_config = load_indicator_compute_config()
+        self._auto_fetch_thread = None
 
     # ------------------------------------------------------------------
     # Public interface
@@ -596,6 +623,9 @@ class UnifiedLiveDaemon:
         # Expose flush config for UI
         s["flush_enabled"] = self._flush_enabled
         s["flush_watchlists"] = list(self._flush_watchlists or [])
+        # Auto-fetch pending count (live from lock, not status dict)
+        with self._pending_fetch_lock:
+            s["auto_fetch_pending"] = len(self._pending_fetch_tickers)
         return s
 
     def get_sweep_status(self):
@@ -624,6 +654,12 @@ class UnifiedLiveDaemon:
             "crash_count": full.get("crash_count", 0),
             "last_crash_at": full.get("last_crash_at"),
             "last_crash_error": full.get("last_crash_error"),
+            # Auto-fetch queue
+            "auto_fetch_pending": full.get("auto_fetch_pending", 0),
+            "auto_fetch_last_at": full.get("auto_fetch_last_at"),
+            "auto_fetch_last_result": full.get("auto_fetch_last_result"),
+            "auto_fetch_last_tickers": full.get("auto_fetch_last_tickers", 0),
+            "auto_fetch_total_fetched": full.get("auto_fetch_total_fetched", 0),
         }
 
     def get_price_status(self):
@@ -679,6 +715,20 @@ class UnifiedLiveDaemon:
             if new_di and new_di != self._detection_interval:
                 self._detection_interval = max(1, new_di)
                 changed.append(f"detection_interval={self._detection_interval}m")
+            # Auto-fetch hot-reload
+            for key, attr, transform in [
+                ("auto_fetch_enabled", "_auto_fetch_enabled", None),
+                ("auto_fetch_mode", "_auto_fetch_mode", None),
+                ("auto_fetch_interval_minutes", "_auto_fetch_interval",
+                 lambda x: max(5, x)),
+                ("auto_fetch_time", "_auto_fetch_time", None),
+                ("auto_fetch_price_data", "_auto_fetch_price_data", None),
+            ]:
+                val = sweep_cfg.get(key)
+                if val is not None and val != getattr(self, attr):
+                    setattr(self, attr,
+                            transform(val) if transform else val)
+                    changed.append(f"{key}={getattr(self, attr)}")
         if changed:
             print(f"[LIVE] Config hot-reloaded: {', '.join(changed)}", flush=True)
         return changed
@@ -734,6 +784,7 @@ class UnifiedLiveDaemon:
             ("_eod_compute_thread", self._eod_compute_loop, "live-eod-compute"),
             ("_indicator_compute_thread", self._indicator_compute_loop, "live-indicator-compute"),
             ("_heartbeat_thread", self._heartbeat_loop, "live-heartbeat"),
+            ("_auto_fetch_thread", self._auto_fetch_loop, "live-auto-fetch"),
         ]
         for attr, target, name in threads:
             t = getattr(self, attr, None)
@@ -753,6 +804,7 @@ class UnifiedLiveDaemon:
         self._start_sub_thread("_eod_compute_thread", self._eod_compute_loop, "live-eod-compute")
         self._start_sub_thread("_indicator_compute_thread", self._indicator_compute_loop, "live-indicator-compute")
         self._start_sub_thread("_heartbeat_thread", self._heartbeat_loop, "live-heartbeat")
+        self._start_sub_thread("_auto_fetch_thread", self._auto_fetch_loop, "live-auto-fetch")
 
         while not self._stop_event.is_set():
             # Revive any dead sub-threads before each connection attempt
@@ -1187,6 +1239,29 @@ class UnifiedLiveDaemon:
         merged[keep_cols].to_csv(csv_path, index=False)
 
     # ------------------------------------------------------------------
+    # Auto-fetch: known tickers loader
+    # ------------------------------------------------------------------
+
+    def _load_known_fetched_tickers(self):
+        """Load tickers with ≥10 days in sweep_fetch_log (have real history).
+        Tickers with only today's live data (1 entry) are NOT considered known."""
+        try:
+            conn = sqlite3.connect(DB_PATH, timeout=5)
+            rows = conn.execute(
+                "SELECT ticker FROM sweep_fetch_log "
+                "GROUP BY ticker HAVING COUNT(DISTINCT trade_date) >= 10"
+            ).fetchall()
+            conn.close()
+            self._known_fetched_tickers = set(r[0] for r in rows)
+            self._known_fetched_loaded = True
+            print(f"[LIVE] Auto-fetch: {len(self._known_fetched_tickers)} "
+                  f"known-fetched tickers loaded", flush=True)
+        except Exception as e:
+            print(f"[LIVE] Auto-fetch: failed to load known tickers: {e}", flush=True)
+            self._known_fetched_tickers = set()
+            self._known_fetched_loaded = True  # don't retry on every flush
+
+    # ------------------------------------------------------------------
     # Sweep buffer flush
     # ------------------------------------------------------------------
 
@@ -1230,6 +1305,25 @@ class UnifiedLiveDaemon:
                 tickers = set(t["ticker"] for t in batch)
                 print(f"[LIVE] Sweep flush: {inserted} new sweeps ({len(batch)} total, "
                       f"{len(tickers)} tickers)", flush=True)
+
+                # Auto-fetch: check for new tickers needing historical backfill
+                if self._auto_fetch_enabled:
+                    if not self._known_fetched_loaded:
+                        self._load_known_fetched_tickers()
+                    new_tickers = tickers - self._known_fetched_tickers
+                    if new_tickers:
+                        with self._pending_fetch_lock:
+                            before = len(self._pending_fetch_tickers)
+                            self._pending_fetch_tickers.update(new_tickers)
+                            added = len(self._pending_fetch_tickers) - before
+                        if added > 0:
+                            print(f"[LIVE] Auto-fetch: queued {added} new ticker(s): "
+                                  f"{sorted(new_tickers)[:10]}"
+                                  f"{'...' if len(new_tickers) > 10 else ''}",
+                                  flush=True)
+                            with self._lock:
+                                self._status["auto_fetch_pending"] = \
+                                    len(self._pending_fetch_tickers)
         except Exception as e:
             print(f"[LIVE] Sweep flush error: {e}", flush=True)
             traceback.print_exc()
@@ -1302,6 +1396,292 @@ class UnifiedLiveDaemon:
         if not parts:
             parts.append("no new events")
         print(f"[LIVE] Detection {elapsed:.1f}s — {' | '.join(parts)}", flush=True)
+
+    # ------------------------------------------------------------------
+    # Auto-fetch queue — backfill newly-discovered tickers
+    # ------------------------------------------------------------------
+
+    MAX_AUTO_FETCH_BATCH = 20  # cap per cycle to keep batches manageable
+
+    def _auto_fetch_loop(self):
+        """Dispatch to periodic, scheduled, or manual (idle) mode."""
+        if not self._auto_fetch_enabled or self._auto_fetch_mode == "manual":
+            mode = "manual" if self._auto_fetch_enabled else "disabled"
+            print(f"[LIVE] Auto-fetch: {mode} — thread idle", flush=True)
+            # Stay alive but idle (so _revive_sub_threads doesn't keep restarting)
+            while not self._stop_event.is_set():
+                self._stop_event.wait(timeout=300)
+            return
+
+        # Initial delay: wait for first detection cycle + 60s
+        wait_s = (self._detection_interval * 60) + 60
+        print(f"[LIVE] Auto-fetch: {self._auto_fetch_mode} mode, "
+              f"waiting {wait_s}s for first detection cycle...", flush=True)
+        self._stop_event.wait(timeout=wait_s)
+
+        if self._auto_fetch_mode == "scheduled":
+            self._auto_fetch_loop_scheduled()
+        else:
+            self._auto_fetch_loop_periodic()
+
+    def _auto_fetch_loop_periodic(self):
+        """Run auto-fetch every N minutes."""
+        interval_s = max(self._auto_fetch_interval, 5) * 60
+        print(f"[LIVE] Auto-fetch: periodic every {self._auto_fetch_interval}m", flush=True)
+        while not self._stop_event.is_set():
+            try:
+                self._run_auto_fetch()
+            except Exception as e:
+                print(f"[LIVE] Auto-fetch error: {e}", flush=True)
+                traceback.print_exc()
+            self._stop_event.wait(timeout=interval_s)
+
+    def _auto_fetch_loop_scheduled(self):
+        """Run auto-fetch once daily at configured local time."""
+        print(f"[LIVE] Auto-fetch: scheduled daily at {self._auto_fetch_time}", flush=True)
+        last_run_date = None
+        while not self._stop_event.is_set():
+            now = datetime.now()
+            today = now.strftime("%Y-%m-%d")
+            try:
+                target_h, target_m = map(int, self._auto_fetch_time.split(":"))
+            except ValueError:
+                target_h, target_m = 18, 0
+            target = now.replace(hour=target_h, minute=target_m, second=0, microsecond=0)
+
+            if now >= target and last_run_date != today:
+                try:
+                    self._run_auto_fetch()
+                    last_run_date = today
+                except Exception as e:
+                    print(f"[LIVE] Auto-fetch error: {e}", flush=True)
+                    traceback.print_exc()
+
+            # Check every 60s
+            self._stop_event.wait(timeout=60)
+
+    def _run_auto_fetch(self):
+        """Execute one auto-fetch cycle: drain pending tickers, fetch history,
+        run detection, optionally fetch price data."""
+        # 1. Drain pending (capped at MAX_AUTO_FETCH_BATCH)
+        with self._pending_fetch_lock:
+            if not self._pending_fetch_tickers:
+                return
+            batch = sorted(self._pending_fetch_tickers)[:self.MAX_AUTO_FETCH_BATCH]
+            self._pending_fetch_tickers -= set(batch)
+        with self._lock:
+            self._status["auto_fetch_pending"] = len(self._pending_fetch_tickers)
+
+        # 2. Check manual fetch guard (shared from app.py)
+        try:
+            from app import _sweep_fetch_lock, _sweep_fetch_progress, _sweep_fetch_cancel
+            with _sweep_fetch_lock:
+                if _sweep_fetch_progress["running"]:
+                    # Re-queue and skip this cycle
+                    with self._pending_fetch_lock:
+                        self._pending_fetch_tickers.update(batch)
+                    with self._lock:
+                        self._status["auto_fetch_pending"] = \
+                            len(self._pending_fetch_tickers)
+                        self._status["auto_fetch_last_result"] = "skipped"
+                    print(f"[LIVE] Auto-fetch: skipped (manual fetch running), "
+                          f"{len(batch)} tickers re-queued", flush=True)
+                    return
+                # Claim the shared fetch lock
+                _sweep_fetch_progress.update({
+                    "running": True, "completed": 0, "total": 0,
+                    "sweeps_found": 0, "current_ticker": "", "current_date": "",
+                    "rate": 0.0, "phase": "auto_fetch",
+                    "log_lines": [f"Auto-fetch: {len(batch)} new tickers"],
+                    "_t0": time.time(),
+                })
+            _sweep_fetch_cancel.clear()
+            cancel_event = _sweep_fetch_cancel
+        except ImportError:
+            cancel_event = threading.Event()  # standalone mode
+
+        # 3. Compute date range
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(
+            days=self._auto_fetch_lookback_years * 365
+        )).strftime("%Y-%m-%d")
+
+        print(f"[LIVE] Auto-fetch: {len(batch)} tickers "
+              f"({start_date} \u2192 {end_date})", flush=True)
+        _daemon_log("auto_fetch_start",
+                    f"{len(batch)} tickers: {batch[:5]}")
+        t0 = time.time()
+
+        try:
+            from sweep_engine import (
+                fetch_and_store_sweeps, get_detection_config,
+                detect_clusterbombs, detect_rare_sweep_days,
+                detect_monster_sweeps, detect_ranked_sweeps,
+                detect_ranked_daily,
+            )
+
+            # Progress callback \u2014 updates shared fetch progress dict
+            def _cb(ticker, date_str, n_sweeps, total_sweeps,
+                    completed, total_jobs):
+                try:
+                    from app import (_sweep_fetch_lock as lk,
+                                     _sweep_fetch_progress as fp)
+                    with lk:
+                        fp["completed"] = completed
+                        fp["total"] = total_jobs
+                        fp["sweeps_found"] = total_sweeps
+                        fp["current_ticker"] = ticker
+                        fp["current_date"] = date_str
+                        elapsed = time.time() - fp.get("_t0", time.time())
+                        fp["rate"] = round(
+                            completed / max(elapsed, 0.1), 1)
+                        lines = fp["log_lines"]
+                        lines.append(
+                            f"[{completed}/{total_jobs}] {ticker} {date_str}")
+                        if len(lines) > 50:
+                            fp["log_lines"] = lines[-50:]
+                except ImportError:
+                    pass
+                if completed == 1 or completed % 50 == 0:
+                    print(f"  [AUTO] [{completed}/{total_jobs}] "
+                          f"{ticker} {date_str} \u2014 {n_sweeps} sweeps",
+                          flush=True)
+
+            # --- Phase 1: Fetch sweep trades ---
+            stats = fetch_and_store_sweeps(
+                batch, start_date, end_date,
+                progress_callback=_cb,
+                cancel_event=cancel_event,
+            )
+            if cancel_event.is_set():
+                print("[LIVE] Auto-fetch: cancelled", flush=True)
+                with self._lock:
+                    self._status["auto_fetch_last_result"] = "cancelled"
+                return
+
+            # --- Phase 2: Detection ---
+            print(f"[LIVE] Auto-fetch: detecting for "
+                  f"{len(batch)} tickers...", flush=True)
+            try:
+                from app import (_sweep_fetch_lock as lk,
+                                 _sweep_fetch_progress as fp)
+                with lk:
+                    fp["phase"] = "detecting"
+                    fp["log_lines"].append("Detecting events...")
+            except ImportError:
+                pass
+
+            cfg = get_detection_config()
+            sc = cfg.get("stock", {})
+            # Stock detection
+            cb_keys = ("min_sweeps", "min_notional", "min_total",
+                       "rarity_days", "rare_min_notional")
+            detect_clusterbombs(
+                tickers=batch,
+                **{k: sc[k] for k in cb_keys if k in sc})
+            detect_rare_sweep_days(
+                min_notional=sc.get("rare_min_notional",
+                                    sc.get("min_notional", 1_000_000)),
+                rarity_days=sc.get("rarity_days", 60),
+                tickers=batch)
+            sm = sc.get("monster_min_notional")
+            if sm:
+                detect_monster_sweeps(
+                    monster_min_notional=float(sm), tickers=batch)
+            # Stock ranking
+            detect_ranked_daily(
+                rank_limit=100,
+                min_sweeps=sc.get("min_sweeps_daily", 1),
+                tickers=batch, exclude_etfs=True, etf_only=False)
+            detect_ranked_sweeps(
+                rank_limit=100, tickers=batch,
+                exclude_etfs=True, etf_only=False)
+            # ETF detection (some new tickers may be ETFs)
+            ec = cfg.get("etf", {})
+            detect_ranked_daily(
+                rank_limit=100, min_sweeps=1, tickers=batch,
+                exclude_etfs=False, etf_only=True)
+            detect_rare_sweep_days(
+                min_notional=float(ec.get("rare_min_notional", 1_000_000)),
+                rarity_days=int(ec.get("rarity_days", 20)),
+                tickers=batch, exclude_etfs=False, etf_only=True)
+            detect_ranked_sweeps(
+                rank_limit=100, tickers=batch,
+                exclude_etfs=False, etf_only=True)
+
+            # --- Phase 3: Price data (OHLCV candles \u2192 CSV cache) ---
+            if self._auto_fetch_price_data:
+                print(f"[LIVE] Auto-fetch: fetching price data for "
+                      f"{len(batch)} tickers...", flush=True)
+                try:
+                    from app import (_sweep_fetch_lock as lk,
+                                     _sweep_fetch_progress as fp)
+                    with lk:
+                        fp["phase"] = "price_fetch"
+                        fp["log_lines"].append(
+                            "Fetching price candles...")
+                except ImportError:
+                    pass
+                from data_fetcher import fetch_with_cache
+                for i, ticker in enumerate(batch):
+                    if cancel_event.is_set():
+                        break
+                    try:
+                        for ts in ("day", "hour", "week"):
+                            fetch_with_cache(
+                                ticker, ts, asset_type="stock")
+                        print(f"  [AUTO] Price: {ticker} "
+                              f"({i+1}/{len(batch)})", flush=True)
+                    except Exception as pe:
+                        print(f"  [AUTO] Price fetch failed for "
+                              f"{ticker}: {pe}", flush=True)
+
+            # --- Done ---
+            elapsed = time.time() - t0
+            self._known_fetched_tickers.update(batch)
+
+            with self._lock:
+                self._status["auto_fetch_last_at"] = \
+                    datetime.now(timezone.utc).isoformat()
+                self._status["auto_fetch_last_result"] = "success"
+                self._status["auto_fetch_last_tickers"] = len(batch)
+                self._status["auto_fetch_last_duration_s"] = \
+                    round(elapsed, 1)
+                self._status["auto_fetch_total_fetched"] += len(batch)
+
+            print(f"[LIVE] Auto-fetch: done \u2014 {len(batch)} tickers, "
+                  f"{stats.get('sweeps_found', 0)} sweeps, "
+                  f"{elapsed:.0f}s", flush=True)
+            _daemon_log("auto_fetch_done",
+                        f"{len(batch)} tickers, {elapsed:.0f}s")
+
+        except Exception as e:
+            elapsed = time.time() - t0
+            with self._lock:
+                self._status["auto_fetch_last_at"] = \
+                    datetime.now(timezone.utc).isoformat()
+                self._status["auto_fetch_last_result"] = "error"
+                self._status["auto_fetch_last_duration_s"] = \
+                    round(elapsed, 1)
+            # Re-queue failed tickers for retry next cycle
+            with self._pending_fetch_lock:
+                self._pending_fetch_tickers.update(batch)
+            with self._lock:
+                self._status["auto_fetch_pending"] = \
+                    len(self._pending_fetch_tickers)
+            print(f"[LIVE] Auto-fetch ERROR: {e}", flush=True)
+            _daemon_log("auto_fetch_error", str(e)[:200])
+            traceback.print_exc()
+        finally:
+            # Always release the shared fetch lock
+            try:
+                from app import (_sweep_fetch_lock as lk,
+                                 _sweep_fetch_progress as fp)
+                with lk:
+                    fp["running"] = False
+                    fp["phase"] = "done"
+            except ImportError:
+                pass
 
     # ------------------------------------------------------------------
     # Heartbeat — periodic one-line status summary
@@ -1377,9 +1757,15 @@ class UnifiedLiveDaemon:
         # Format
         stock_str = f"{stock_total}" if not stock_total else f"{s_cb}cb {s_rare}r {s_mon}m"
         etf_str = f"{etf_total}" if not etf_total else f"{e_daily}d {e_rare}r {e_ranked}rk"
+        # Auto-fetch status
+        with self._pending_fetch_lock:
+            af_pending = len(self._pending_fetch_tickers)
+        af_total = s.get("auto_fetch_total_fetched", 0)
+        af_str = f"{af_pending}q {af_total}done"
         now = datetime.now().strftime("%H:%M")
         summary = (f"Up {uptime} {conn} | Prices: {prices:,} | "
-                   f"Sweeps: {sweeps:,} | Stock: {stock_str} | ETF: {etf_str}")
+                   f"Sweeps: {sweeps:,} | Stock: {stock_str} | "
+                   f"ETF: {etf_str} | AF: {af_str}")
         _daemon_log("heartbeat", summary)
         print(f"[{now}] {summary}", flush=True)
 

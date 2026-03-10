@@ -22,6 +22,12 @@
     "ws_url": "wss://delayed.polygon.io/stocks",
     "min_notional": 500000,
     "buffer_flush_seconds": 30,
-    "buffer_max_trades": 200
+    "buffer_max_trades": 200,
+    "auto_fetch_enabled": true,
+    "auto_fetch_mode": "periodic",
+    "auto_fetch_interval_minutes": 30,
+    "auto_fetch_time": "18:00",
+    "auto_fetch_lookback_years": 10,
+    "auto_fetch_price_data": true
   }
 }
