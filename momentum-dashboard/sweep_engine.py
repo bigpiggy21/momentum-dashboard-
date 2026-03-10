@@ -630,7 +630,7 @@ def init_sweep_db():
             is_sweep INTEGER DEFAULT 0,       -- 1 if intermarket sweep (condition 14)
             is_darkpool INTEGER DEFAULT 0,    -- 1 if exchange==4 + trf_id present
             fetched_at TEXT NOT NULL,         -- when we fetched this
-            UNIQUE(ticker, sip_timestamp, price, size)
+            UNIQUE(ticker, trade_date, trade_time, price, size)
         )
     """)
 
