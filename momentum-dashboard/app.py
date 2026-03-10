@@ -4332,7 +4332,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         # Stock ranking (same model as ETFs)
                         stock_daily = detect_ranked_daily(
                             rank_limit=100,
-                            min_sweeps=int(stock_params.get("min_sweeps", 3)),
+                            min_sweeps=int(stock_params.get("min_sweeps_daily", 1)),
                             tickers=stock_tickers,
                             exclude_etfs=True, etf_only=False,
                         )
@@ -4430,7 +4430,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     # Stock ranking (same model as ETFs)
                     stock_daily = detect_ranked_daily(
                         rank_limit=100,
-                        min_sweeps=int(stock_params.get("min_sweeps", 3)),
+                        min_sweeps=int(stock_params.get("min_sweeps_daily", 1)),
                         tickers=all_tickers,
                         exclude_etfs=True, etf_only=False,
                     )

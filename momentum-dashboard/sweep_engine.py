@@ -2470,7 +2470,7 @@ def detect_today():
     print("[SWEEP] ── Stock ranking ──", flush=True)
     stock_daily = detect_ranked_daily(
         rank_limit=100,
-        min_sweeps=cfg.get("min_sweeps", DEFAULT_CB_MIN_SWEEPS),
+        min_sweeps=cfg.get("min_sweeps_daily", 1),
         date_from=today, date_to=today,
         exclude_etfs=True, etf_only=False,
     )
