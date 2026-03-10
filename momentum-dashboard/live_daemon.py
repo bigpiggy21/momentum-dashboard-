@@ -27,6 +27,8 @@ from datetime import datetime, timezone, timedelta
 
 import pandas as pd
 
+PENDING_QUEUE_PATH = os.path.join(os.path.dirname(__file__), "pending_fetch_queue.json")
+
 try:
     import websocket
 except ImportError:
@@ -446,6 +448,7 @@ class UnifiedLiveDaemon:
         self._pending_fetch_lock = threading.Lock()
         self._known_fetched_tickers = set()   # tickers with ≥10 days in sweep_fetch_log
         self._known_fetched_loaded = False
+        self._load_pending_queue()  # restore queue from disk (survives restart)
 
         # Connection state
         self._ws = None
@@ -1239,6 +1242,33 @@ class UnifiedLiveDaemon:
         merged[keep_cols].to_csv(csv_path, index=False)
 
     # ------------------------------------------------------------------
+    # Auto-fetch: persistent queue (survives server restart)
+    # ------------------------------------------------------------------
+
+    def _save_pending_queue(self):
+        """Persist pending fetch tickers to disk."""
+        with self._pending_fetch_lock:
+            data = sorted(self._pending_fetch_tickers)
+        try:
+            with open(PENDING_QUEUE_PATH, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+        except Exception as e:
+            print(f"[LIVE] Warning: could not save pending queue: {e}", flush=True)
+
+    def _load_pending_queue(self):
+        """Load persisted pending fetch tickers from disk."""
+        try:
+            with open(PENDING_QUEUE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list) and data:
+                with self._pending_fetch_lock:
+                    self._pending_fetch_tickers.update(data)
+                print(f"[LIVE] Auto-fetch: restored {len(data)} pending ticker(s) from disk",
+                      flush=True)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+
+    # ------------------------------------------------------------------
     # Auto-fetch: known tickers loader
     # ------------------------------------------------------------------
 
@@ -1317,6 +1347,7 @@ class UnifiedLiveDaemon:
                             self._pending_fetch_tickers.update(new_tickers)
                             added = len(self._pending_fetch_tickers) - before
                         if added > 0:
+                            self._save_pending_queue()
                             print(f"[LIVE] Auto-fetch: queued {added} new ticker(s): "
                                   f"{sorted(new_tickers)[:10]}"
                                   f"{'...' if len(new_tickers) > 10 else ''}",
@@ -1469,6 +1500,7 @@ class UnifiedLiveDaemon:
                 return
             batch = sorted(self._pending_fetch_tickers)[:self.MAX_AUTO_FETCH_BATCH]
             self._pending_fetch_tickers -= set(batch)
+        self._save_pending_queue()
         with self._lock:
             self._status["auto_fetch_pending"] = len(self._pending_fetch_tickers)
 
@@ -1480,6 +1512,7 @@ class UnifiedLiveDaemon:
                     # Re-queue and skip this cycle
                     with self._pending_fetch_lock:
                         self._pending_fetch_tickers.update(batch)
+                    self._save_pending_queue()
                     with self._lock:
                         self._status["auto_fetch_pending"] = \
                             len(self._pending_fetch_tickers)
@@ -1666,6 +1699,7 @@ class UnifiedLiveDaemon:
             # Re-queue failed tickers for retry next cycle
             with self._pending_fetch_lock:
                 self._pending_fetch_tickers.update(batch)
+            self._save_pending_queue()
             with self._lock:
                 self._status["auto_fetch_pending"] = \
                     len(self._pending_fetch_tickers)
