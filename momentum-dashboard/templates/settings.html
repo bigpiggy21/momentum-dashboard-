@@ -180,6 +180,29 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
       <label>Detection interval: <input type="number" id="swDetectionInterval" min="1" max="60" value="5" style="width:44px;"> min</label>
       <label>Min notional: <input type="text" id="swMinNotional" value="500K" style="width:56px;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;"></label>
     </div>
+    <!-- Auto-fetch queue -->
+    <div class="daemon-sub-label" style="margin-top:10px;">Auto-Fetch Queue</div>
+    <div class="s-stats" id="afStats" style="display:none;">
+      <span>Pending: <span class="val" id="afPending">0</span></span>
+      <span>Fetched: <span class="val" id="afTotal">0</span></span>
+      <span>Last: <span class="val" id="afLast">--</span></span>
+    </div>
+    <div class="s-form-row" style="margin-top:4px;">
+      <label style="display:flex;align-items:center;gap:4px;"><input type="checkbox" id="afEnabled" checked> Enabled</label>
+      <label>Mode:
+        <select id="afMode" style="background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;">
+          <option value="periodic">Periodic</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="manual">Manual</option>
+        </select>
+      </label>
+    </div>
+    <div class="s-form-row" style="margin-top:4px;">
+      <label id="afIntervalLabel">Interval: <input type="number" id="afInterval" min="5" max="1440" value="30" style="width:50px;"> min</label>
+      <label id="afTimeLabel" style="display:none;">Time: <input type="text" id="afTime" value="18:00" style="width:50px;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;"></label>
+      <label>Lookback: <input type="number" id="afLookback" min="1" max="20" value="10" style="width:40px;"> yr</label>
+      <label style="display:flex;align-items:center;gap:4px;"><input type="checkbox" id="afPriceData" checked> + Price data</label>
+    </div>
   </div>
 
   <!-- Save button -->
@@ -731,6 +754,22 @@ function updateDaemonUI(s){
     document.getElementById('swRare').textContent=ev.rare_sweep||0;
     document.getElementById('swMonster').textContent=ev.monster_sweep||0;
     document.getElementById('swLastDetect').textContent=_timeAgo(sw.last_detection_at);
+    // Auto-fetch status
+    var afEl=document.getElementById('afStats');
+    if(sw.auto_fetch_pending!=null||sw.auto_fetch_total_fetched){
+      afEl.style.display='';
+      document.getElementById('afPending').textContent=sw.auto_fetch_pending||0;
+      document.getElementById('afTotal').textContent=sw.auto_fetch_total_fetched||0;
+      var lastRes=sw.auto_fetch_last_result;
+      var lastAt=sw.auto_fetch_last_at;
+      if(lastRes&&lastAt){
+        var ago=_timeAgo(lastAt);
+        var clr=lastRes==='success'?'#22c55e':lastRes==='error'?'#ef4444':'#888';
+        document.getElementById('afLast').innerHTML='<span style="color:'+clr+'">'+lastRes+'</span> '+ago;
+      }else{
+        document.getElementById('afLast').textContent='--';
+      }
+    }
     // Recent sweeps
     var rsList=sw.recent_sweeps||[];
     var rsEl=document.getElementById('swRecentSweeps');
@@ -782,6 +821,14 @@ function loadDaemonConfig(){
     // Format min notional
     var mn=scfg.min_notional||500000;
     document.getElementById('swMinNotional').value=mn>=1000000?(mn/1000000)+'M':(mn/1000)+'K';
+    // Auto-fetch config
+    document.getElementById('afEnabled').checked=scfg.auto_fetch_enabled!==false;
+    document.getElementById('afMode').value=scfg.auto_fetch_mode||'periodic';
+    document.getElementById('afInterval').value=scfg.auto_fetch_interval_minutes||30;
+    document.getElementById('afTime').value=scfg.auto_fetch_time||'18:00';
+    document.getElementById('afLookback').value=scfg.auto_fetch_lookback_years||10;
+    document.getElementById('afPriceData').checked=scfg.auto_fetch_price_data!==false;
+    _updateAfModeUI();
     // Populate flush watchlist chips
     var activeFlush=pcfg.flush_watchlists||['Priority'];
     var container=document.getElementById('flushWatchlistChips');
@@ -800,6 +847,14 @@ function loadDaemonConfig(){
     });
   }).catch(function(){});
 }
+
+// Auto-fetch: toggle interval/time fields based on mode
+function _updateAfModeUI(){
+  var mode=document.getElementById('afMode').value;
+  document.getElementById('afIntervalLabel').style.display=mode==='periodic'?'':'none';
+  document.getElementById('afTimeLabel').style.display=mode==='scheduled'?'':'none';
+}
+document.getElementById('afMode').addEventListener('change',_updateAfModeUI);
 
 function _parseNotional(str){
   str=(str||'').trim().toUpperCase();
@@ -823,7 +878,13 @@ function saveDaemonConfig(){
     },
     sweep:{
       detection_interval_minutes:parseInt(document.getElementById('swDetectionInterval').value)||5,
-      min_notional:_parseNotional(document.getElementById('swMinNotional').value)
+      min_notional:_parseNotional(document.getElementById('swMinNotional').value),
+      auto_fetch_enabled:document.getElementById('afEnabled').checked,
+      auto_fetch_mode:document.getElementById('afMode').value,
+      auto_fetch_interval_minutes:parseInt(document.getElementById('afInterval').value)||30,
+      auto_fetch_time:document.getElementById('afTime').value||'18:00',
+      auto_fetch_lookback_years:parseInt(document.getElementById('afLookback').value)||10,
+      auto_fetch_price_data:document.getElementById('afPriceData').checked
     }
   };
   fetch('/api/daemon/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
