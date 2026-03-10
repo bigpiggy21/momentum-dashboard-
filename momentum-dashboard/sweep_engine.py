@@ -3324,11 +3324,20 @@ def get_tracker_data(min_total=10_000_000, tickers=None,
         where.append("(daily_rank IS NULL OR sweep_count >= ?)")
         params.append(min_sweeps)
 
-    # CB/Monster sub-filters (stock-only, additive constraints)
+    # CB/Monster sub-filters (stock-only quality thresholds — narrow ranked results)
+    if cb_only or monster_only:
+        _cfg = get_detection_config().get("stock", {})
     if cb_only:
-        where.append("event_type = 'clusterbomb'")
+        # CB = meets clusterbomb criteria: total >= $38M AND sweeps >= 3
+        _cb_total = _cfg.get("min_total", DEFAULT_CB_MIN_TOTAL)
+        _cb_sweeps = _cfg.get("min_sweeps", DEFAULT_CB_MIN_SWEEPS)
+        where.append("total_notional >= ? AND sweep_count >= ?")
+        params.extend([_cb_total, _cb_sweeps])
     if monster_only:
-        where.append("COALESCE(is_monster, 0) = 1")
+        # Monster = any single sweep >= $100M
+        _m_min = _cfg.get("monster_min_notional", DEFAULT_MONSTER_MIN_NOTIONAL)
+        where.append("COALESCE(max_notional, total_notional) >= ?")
+        params.append(_m_min)
 
     # Legacy stock display filters (kept for backward compat)
     if monster_min:
