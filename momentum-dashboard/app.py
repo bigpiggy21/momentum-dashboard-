@@ -65,6 +65,25 @@ _daemon_intentionally_stopped = True  # True until user starts or auto-start fir
 _tracker_cache = {}       # {cache_key: {"data": response_dict, "ts": float}}
 _TRACKER_CACHE_TTL = 60   # seconds
 
+def _parse_asset_class(query):
+    """Parse asset_class param from query string.
+    Returns 'stock', 'etf', or 'all'. Backward-compat: etf_only=1 → 'etf'."""
+    ac = (query or {}).get("asset_class", [None])[0]
+    if ac in ("stock", "etf", "all"):
+        return ac
+    if (query or {}).get("etf_only", ["0"])[0] == "1":
+        return "etf"
+    return "stock"
+
+def _asset_class_flags(ac):
+    """Convert asset_class string to (exclude_etfs, etf_only) booleans."""
+    if ac == "etf":
+        return False, True
+    elif ac == "all":
+        return False, False
+    else:  # "stock"
+        return True, False
+
 _portfolio_cache = {"data": None, "ts": 0}
 _PORTFOLIO_CACHE_TTL = 300        # 5 minutes for positions/cash
 _portfolio_prices_cache = {"prices": {}, "open_raw": set(), "ts": 0}
@@ -747,9 +766,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         elif path == "/hvc":
             self.serve_page("hvc.html")
         elif path == "/sweeps":
-            self.serve_page("sweeps.html")
+            self.serve_page("sweeps_unified.html")
         elif path == "/etf-sweeps":
-            self.serve_page("etf_sweeps.html")
+            self.send_response(302)
+            self.send_header("Location", "/sweeps?asset=etf")
+            self.end_headers()
         elif path == "/analysis":
             self.serve_page("analysis.html")
         elif path == "/rs":
@@ -2523,6 +2544,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         include_types = set(t.strip().lower() for t in types_param.split(","))
         tickers_param = q.get("tickers", [None])[0]  # comma-separated ticker list
         watchlist_param = q.get("watchlist", [None])[0]  # watchlist name
+        asset_class = _parse_asset_class(q)
+        exclude_etfs, etf_only = _asset_class_flags(asset_class)
         try:
             import sqlite3
             from sweep_engine import get_ticker_day_ranks
@@ -3021,7 +3044,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             daily_from = int(daily_from_str) if daily_from_str else None
             daily_to = int(daily_to_str) if daily_to_str else None
             full_db = (query or {}).get("full_db", ["0"])[0] == "1"
-            etf_only = (query or {}).get("etf_only", ["0"])[0] == "1"
+            asset_class = _parse_asset_class(query)
+            exclude_etfs, etf_only = _asset_class_flags(asset_class)
 
             stats = get_sweep_stats(min_total=min_total, tickers=tickers,
                                     date_from=date_from, date_to=date_to,
@@ -3030,7 +3054,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                                     rank_from=rank_from, rank_to=rank_to,
                                     daily_from=daily_from, daily_to=daily_to,
                                     full_db=full_db,
-                                    exclude_etfs=not etf_only, etf_only=etf_only)
+                                    exclude_etfs=exclude_etfs, etf_only=etf_only)
             self.send_json(stats)
         except Exception as e:
             self.send_json({"error": str(e)})
@@ -3131,11 +3155,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             limit = int((query or {}).get("limit", [200])[0])
             min_total_str = (query or {}).get("min_total", [None])[0]
             min_total = float(min_total_str) if min_total_str else None
-            etf_only = (query or {}).get("etf_only", ["0"])[0] == "1"
+            asset_class = _parse_asset_class(query)
+            exclude_etfs, etf_only = _asset_class_flags(asset_class)
             data = get_clusterbombs(ticker=ticker, date_from=date_from,
                                     date_to=date_to, rare_only=rare_only,
                                     limit=limit, min_total=min_total,
-                                    exclude_etfs=not etf_only, etf_only=etf_only)
+                                    exclude_etfs=exclude_etfs, etf_only=etf_only)
             self.send_json({"events": data, "count": len(data)})
         except Exception as e:
             self.send_json({"events": [], "count": 0, "error": str(e)})
@@ -3168,7 +3193,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             daily_to_str = (query or {}).get("daily_to", [None])[0]
             daily_from = int(daily_from_str) if daily_from_str else None
             daily_to = int(daily_to_str) if daily_to_str else None
-            etf_only = (query or {}).get("etf_only", ["0"])[0] == "1"
+            asset_class = _parse_asset_class(query)
+            exclude_etfs, etf_only = _asset_class_flags(asset_class)
             data = get_sweep_chart_data(ticker, date_from=date_from, date_to=date_to,
                                         timeframe=timeframe, min_total=min_total,
                                         monster_min=monster_min, min_sweeps=min_sweeps,
@@ -3209,7 +3235,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             daily_to_str = (query or {}).get("daily_to", [None])[0]
             daily_from = int(daily_from_str) if daily_from_str else None
             daily_to = int(daily_to_str) if daily_to_str else None
-            etf_only = (query or {}).get("etf_only", ["0"])[0] == "1"
+            asset_class = _parse_asset_class(query)
+            exclude_etfs, etf_only = _asset_class_flags(asset_class)
+
+            # Sub-filters (stock-only: CB/Monster)
+            cb_only = (query or {}).get("cb_only", ["0"])[0] == "1"
+            monster_only = (query or {}).get("monster_only", ["0"])[0] == "1"
 
             # Check server-side cache
             cache_key = (min_total, tuple(tickers) if tickers else None,
@@ -3217,7 +3248,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                          min_sweeps, monster_min, rare_min, rare_days,
                          rank_from, rank_to,
                          daily_from, daily_to,
-                         etf_only)
+                         asset_class, cb_only, monster_only)
             now = time.time()
             cached = _tracker_cache.get(cache_key)
             if cached and (now - cached["ts"]) < _TRACKER_CACHE_TTL:
@@ -3236,8 +3267,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                                              rank_to=rank_to,
                                              daily_from=daily_from,
                                              daily_to=daily_to,
-                                             exclude_etfs=not etf_only,
-                                             etf_only=etf_only)
+                                             exclude_etfs=exclude_etfs,
+                                             etf_only=etf_only,
+                                             cb_only=cb_only,
+                                             monster_only=monster_only)
             response = {"events": events, "total": total, "offset": offset}
 
             # Cache the response
@@ -4266,6 +4299,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 events = []
                 rare_sweep_events = []
                 monster_events = []
+                stock_daily = {"updated": 0, "inserted": 0}
+                stock_ranked = {"updated": 0, "inserted": 0}
                 etf_rare = []
                 etf_daily = {"updated": 0, "inserted": 0}
                 etf_single = {"updated": 0, "inserted": 0}
@@ -4294,6 +4329,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                                 monster_min_notional=float(_sm),
                                 tickers=stock_tickers,
                             )
+                        # Stock ranking (same model as ETFs)
+                        stock_daily = detect_ranked_daily(
+                            rank_limit=100,
+                            min_sweeps=int(stock_params.get("min_sweeps", 3)),
+                            tickers=stock_tickers,
+                            exclude_etfs=True, etf_only=False,
+                        )
+                        stock_ranked = detect_ranked_sweeps(
+                            rank_limit=100,
+                            tickers=stock_tickers,
+                            exclude_etfs=True, etf_only=False,
+                        )
                     else:
                         print("[Redetect] No new stock tickers to detect.", flush=True)
 
@@ -4352,6 +4399,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 events = []
                 rare_sweep_events = []
                 monster_events = []
+                stock_daily = {"updated": 0, "inserted": 0}
+                stock_ranked = {"updated": 0, "inserted": 0}
                 etf_rare = []
                 etf_daily = {"updated": 0, "inserted": 0}
                 etf_single = {"updated": 0, "inserted": 0}
@@ -4378,6 +4427,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                             monster_min_notional=float(_sm),
                             tickers=all_tickers,
                         )
+                    # Stock ranking (same model as ETFs)
+                    stock_daily = detect_ranked_daily(
+                        rank_limit=100,
+                        min_sweeps=int(stock_params.get("min_sweeps", 3)),
+                        tickers=all_tickers,
+                        exclude_etfs=True, etf_only=False,
+                    )
+                    stock_ranked = detect_ranked_sweeps(
+                        rank_limit=100,
+                        tickers=all_tickers,
+                        exclude_etfs=True, etf_only=False,
+                    )
 
                 # --- ETF detection ---
                 if profile in ("etf", "both"):
@@ -4406,6 +4467,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
             rare_cb_count = sum(1 for e in events if e.get("is_rare"))
             total_rare = len(rare_sweep_events) + len(etf_rare)
+            stock_daily_total = (stock_daily.get("updated", 0) + stock_daily.get("inserted", 0))
+            stock_ranked_total = (stock_ranked.get("updated", 0) + stock_ranked.get("inserted", 0))
             etf_daily_total = (etf_daily.get("updated", 0) + etf_daily.get("inserted", 0))
             etf_single_total = (etf_single.get("updated", 0) + etf_single.get("inserted", 0))
             self.send_json({
@@ -4416,11 +4479,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "rare_cb_count": rare_cb_count,
                 "rare_sweep_days": total_rare,
                 "monster_sweeps": len(monster_events),
+                "stock_daily": stock_daily_total,
+                "stock_ranked": stock_ranked_total,
                 "etf_rare": len(etf_rare),
                 "etf_daily": etf_daily_total,
                 "etf_single": etf_single_total,
                 "message": f"Re-detected ({profile}, {mode_label}): {len(events)} stock CBs, "
                            f"{total_rare} rare sweep days, {len(monster_events)} stock monsters, "
+                           f"Stock ranked: {stock_daily_total} daily + {stock_ranked_total} single, "
                            f"ETF: {etf_daily_total} daily + {etf_single_total} single ranked",
             })
         except Exception as e:

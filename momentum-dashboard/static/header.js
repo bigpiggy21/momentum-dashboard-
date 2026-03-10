@@ -6,7 +6,7 @@
      <script src="/static/header.js"></script>
 
    Set window._activePage before including to highlight the current page.
-   Valid values: 'settings','watchlists','log','search','bollingers','rs','hvc','sweeps','etf-sweeps','analysis','report','backtest','portfolio','home'
+   Valid values: 'settings','watchlists','log','search','bollingers','rs','hvc','sweeps','analysis','report','backtest','portfolio','home'
    ==================================================================== */
 
 (function(){
@@ -43,8 +43,7 @@
     + '<div class="header-section">'
     + '<div class="section-label">DARKPOOL INTELLIGENCE</div>'
     + '<div class="section-controls">'
-    + btn('/sweeps', 'Stock Sweeps', '&#x1F4A3; Stock Sweeps', 'sweeps')
-    + btn('/etf-sweeps', 'ETF Sweeps', '&#x1F4C8; ETF Sweeps', 'etf-sweeps')
+    + btn('/sweeps', 'Sweep Tracker', '&#x1F4A3; Sweeps', 'sweeps')
     + btn('/analysis', 'Sweep Analysis', '&#x1F4CA; Analysis', 'analysis')
     + '</div></div>'
 
