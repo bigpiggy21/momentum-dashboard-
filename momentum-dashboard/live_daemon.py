@@ -1582,7 +1582,7 @@ class UnifiedLiveDaemon:
             detect_rare_sweep_days(
                 min_notional=sc.get("rare_min_notional",
                                     sc.get("min_notional", 1_000_000)),
-                rarity_days=sc.get("rarity_days", 60),
+                rarity_days=sc.get("rarity_days", 20),
                 tickers=batch)
             sm = sc.get("monster_min_notional")
             if sm:

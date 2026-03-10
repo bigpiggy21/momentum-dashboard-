@@ -70,7 +70,7 @@ MIN_SWEEP_NOTIONAL = 500_000         # $500K — sweeps below this are ignored
 DEFAULT_CB_MIN_SWEEPS = 3          # minimum sweeps in a day to qualify
 DEFAULT_CB_MIN_NOTIONAL = 1_000_000  # $1M minimum per individual sweep
 DEFAULT_CB_MIN_TOTAL = 38_000_000    # $38M total notional in the day
-DEFAULT_CB_RARITY_DAYS = 60         # no qualifying sweeps for N trading days before = "rare" CB
+DEFAULT_CB_RARITY_DAYS = 20         # no qualifying sweeps for N trading days before = "rare"
 DEFAULT_CB_RARE_MIN_NOTIONAL = 1_000_000  # min notional to "break" dormancy (independent of CB min_notional)
 DEFAULT_MONSTER_MIN_NOTIONAL = 100_000_000  # $100M — single sweep monster threshold
 
@@ -532,10 +532,11 @@ def get_detection_config():
     Maintains backward compat with old flat config files on disk.
     """
     stock_defaults = {
-        "min_sweeps": DEFAULT_CB_MIN_SWEEPS,       # 3
+        "min_sweeps": DEFAULT_CB_MIN_SWEEPS,       # 3 (for clusterbomb detection)
+        "min_sweeps_daily": 1,                      # 1 (for daily ranking — any sweep qualifies)
         "min_notional": DEFAULT_CB_MIN_NOTIONAL,    # $1M
-        "min_total": DEFAULT_CB_MIN_TOTAL,          # $10M
-        "rarity_days": DEFAULT_CB_RARITY_DAYS,      # 60
+        "min_total": DEFAULT_CB_MIN_TOTAL,          # $38M
+        "rarity_days": DEFAULT_CB_RARITY_DAYS,      # 20
         "rare_min_notional": DEFAULT_CB_RARE_MIN_NOTIONAL,  # $1M — independent dormancy-break threshold
         "monster_min_notional": DEFAULT_MONSTER_MIN_NOTIONAL,  # $100M — single monster sweep
     }
@@ -1790,7 +1791,7 @@ def get_undetected_tickers(etf_only=False, exclude_etfs=True):
     return tickers
 
 
-def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=60, tickers=None,
+def detect_rare_sweep_days(min_notional=1_000_000, rarity_days=20, tickers=None,
                            date_from=None, date_to=None, exclude_etfs=True,
                            etf_only=False):
     """

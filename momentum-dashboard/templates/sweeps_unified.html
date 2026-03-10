@@ -2983,8 +2983,9 @@ function loadDetectionConfig(){
   fetch('/api/sweeps/detection-config')
     .then(function(r){return r.json();})
     .then(function(cfg){
-      var s = cfg.etf || cfg.stock || {};
-      document.getElementById('settMinSweepsStock').value = s.min_sweeps || 1;
+      // Load stock config (primary) — ETF config only if ETF-only mode
+      var s = (_assetClass === 'etf') ? (cfg.etf || {}) : (cfg.stock || {});
+      document.getElementById('settMinSweepsStock').value = s.min_sweeps_daily || s.min_sweeps || 1;
       document.getElementById('settRarityDaysStock').value = s.rarity_days || 20;
       if(document.getElementById('settRareNotionalStock'))
         document.getElementById('settRareNotionalStock').value = fmtSettingVal(s.rare_min_notional || 1000000);
@@ -3005,13 +3006,15 @@ function fmtSettingVal(n){
 
 function getDetectionParams(){
   var profile = _assetClass === 'all' ? 'both' : _assetClass;
+  var vals = {
+    min_sweeps_daily: parseInt(document.getElementById('settMinSweepsStock').value) || 1,
+    rarity_days: parseInt(document.getElementById('settRarityDaysStock').value) || 20,
+    rare_min_notional: parseMinInput(document.getElementById('settRareNotionalStock').value) || 1000000,
+  };
   return {
     profile: profile,
-    etf: {
-      min_sweeps: parseInt(document.getElementById('settMinSweepsStock').value) || 1,
-      rarity_days: parseInt(document.getElementById('settRarityDaysStock').value) || 20,
-      rare_min_notional: parseMinInput(document.getElementById('settRareNotionalStock').value) || 1000000,
-    },
+    stock: vals,
+    etf: vals,
   };
 }
 

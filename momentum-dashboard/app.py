@@ -3359,6 +3359,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     _sm = cfg["stock"].get("monster_min_notional")
                     if _sm:
                         detect_monster_sweeps(monster_min_notional=float(_sm), tickers=tickers)
+                    # Stock ranking (daily + single)
+                    detect_ranked_daily(rank_limit=100,
+                                        min_sweeps=int(cfg["stock"].get("min_sweeps_daily", 1)),
+                                        tickers=tickers,
+                                        exclude_etfs=True, etf_only=False)
+                    detect_ranked_sweeps(rank_limit=100, tickers=tickers,
+                                         exclude_etfs=True, etf_only=False)
                     # ETF detection pass — daily ranked + rare + single ranked
                     ecfg = cfg.get("etf", {})
                     detect_ranked_daily(rank_limit=100, min_sweeps=1,
@@ -4315,12 +4322,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                             min_sweeps=int(stock_params.get("min_sweeps", 3)),
                             min_notional=float(stock_params.get("min_notional", 1_000_000)),
                             min_total=float(stock_params.get("min_total", 10_000_000)),
-                            rarity_days=int(stock_params.get("rarity_days", 60)),
+                            rarity_days=int(stock_params.get("rarity_days", 20)),
                             rare_min_notional=float(stock_params.get("rare_min_notional", 1_000_000)),
                         )
                         rare_sweep_events = detect_rare_sweep_days(
                             min_notional=float(stock_params.get("rare_min_notional", 1_000_000)),
-                            rarity_days=int(stock_params.get("rarity_days", 60)),
+                            rarity_days=int(stock_params.get("rarity_days", 20)),
                             tickers=stock_tickers,
                         )
                         _sm = stock_params.get("monster_min_notional")
@@ -4413,12 +4420,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         min_sweeps=int(stock_params.get("min_sweeps", 3)),
                         min_notional=float(stock_params.get("min_notional", 1_000_000)),
                         min_total=float(stock_params.get("min_total", 10_000_000)),
-                        rarity_days=int(stock_params.get("rarity_days", 60)),
+                        rarity_days=int(stock_params.get("rarity_days", 20)),
                         rare_min_notional=float(stock_params.get("rare_min_notional", 1_000_000)),
                     )
                     rare_sweep_events = detect_rare_sweep_days(
                         min_notional=float(stock_params.get("rare_min_notional", 1_000_000)),
-                        rarity_days=int(stock_params.get("rarity_days", 60)),
+                        rarity_days=int(stock_params.get("rarity_days", 20)),
                         tickers=all_tickers,
                     )
                     _sm = stock_params.get("monster_min_notional")
