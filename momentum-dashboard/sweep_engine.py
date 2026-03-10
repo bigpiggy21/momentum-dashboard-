@@ -574,8 +574,8 @@ def save_detection_config(params):
       {"min_sweeps": 3, ...}          — legacy flat (treated as stock)
     """
     config = get_detection_config()
-    _all_keys = ("min_sweeps", "min_notional", "min_total", "rarity_days",
-                 "rare_min_notional", "monster_min_notional")
+    _all_keys = ("min_sweeps", "min_sweeps_daily", "min_notional", "min_total",
+                 "rarity_days", "rare_min_notional", "monster_min_notional")
     if "stock" in params and isinstance(params["stock"], dict):
         for key in _all_keys:
             if key in params["stock"]:
