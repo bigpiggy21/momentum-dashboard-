@@ -43,7 +43,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 
 /* Layout */
 .main{display:flex;height:calc(100vh - 48px);}
-.left-panel{width:280px;min-width:280px;background:#0a0a12;border-right:1px solid #1e1e2e;padding:12px;overflow-y:hidden;display:flex;flex-direction:column;transition:width 0.2s,min-width 0.2s,padding 0.2s;}
+.left-panel{width:280px;min-width:280px;background:#0a0a12;border-right:1px solid #1e1e2e;padding:12px;overflow-y:auto;display:flex;flex-direction:column;transition:width 0.2s,min-width 0.2s,padding 0.2s;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;}
 .left-panel.collapsed{width:0;min-width:0;padding:0;overflow:hidden;border-right:none;}
 .chart-area{flex:1;position:relative;overflow:hidden;}
 #chartContainer{width:100%;height:100%;position:relative;}
@@ -72,11 +72,8 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .tl-change.pos{color:#10b981;}
 .tl-change.neg{color:#ef4444;}
 
-/* Overlay checkboxes section — two-column layout */
-.overlay-section{margin-top:8px;margin-bottom:8px;max-height:200px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;}
-.overlay-section::-webkit-scrollbar{width:6px;}
-.overlay-section::-webkit-scrollbar-track{background:#0a0a12;}
-.overlay-section::-webkit-scrollbar-thumb{background:#333;border-radius:3px;}
+/* Overlay checkboxes section — never scrolls, always full height */
+.overlay-section{margin-top:8px;margin-bottom:8px;flex-shrink:0;}
 .overlay-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 8px;}
 .ticker-group-hdr{display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer;margin-top:6px;grid-column:1/-1;}
 .ticker-group-hdr:first-child{margin-top:0;}
