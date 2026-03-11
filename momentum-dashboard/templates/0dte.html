@@ -47,7 +47,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 #watchlistSelect{width:100%;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:6px 10px;border-radius:4px;font-size:12px;font-family:inherit;margin-bottom:12px;}
 
 /* Ticker list — fills available space, scrollable */
-.ticker-list{flex:1;min-height:80px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;}
+.ticker-list{min-height:80px;max-height:calc(50vh - 48px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;}
 .ticker-list::-webkit-scrollbar{width:6px;}
 .ticker-list::-webkit-scrollbar-track{background:#0a0a12;}
 .ticker-list::-webkit-scrollbar-thumb{background:#333;border-radius:3px;}
@@ -149,7 +149,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 
 <div class="main">
   <div class="left-panel" id="leftPanel">
-    <div class="panel-section" style="flex:1;display:flex;flex-direction:column;min-height:0;">
+    <div class="panel-section">
       <select id="watchlistSelect" onchange="onWatchlistChange()">
         <option value="">-- Select Watchlist --</option>
       </select>
@@ -540,22 +540,22 @@ function buildOverlayForTicker(ticker){
   _overlayTickers = [];
 
   var map = OVERLAY_MAP[ticker];
-  if(!map){
-    overlaySection.style.display = 'none';
-    return;
-  }
 
-  // Build groups from overlay map
-  var gi = 0;
-  if(map.underlying && map.underlying.length > 0){
-    var uGroup = {name: 'Underlying', on: true, tickers: []};
+  // Always build Underlying group — at minimum contains the active ticker itself
+  var uGroup = {name: 'Underlying', on: true, tickers: []};
+  // Active ticker is always first, with a distinct amber color
+  uGroup.tickers.push({ticker: ticker, label: ticker, color: 'rgba(245,158,11,0.55)', stroke: '#f59e0b', on: true, group: 'Underlying'});
+  // Add additional underlying tickers from overlay map (e.g. SPX components)
+  if(map && map.underlying && map.underlying.length > 0){
     map.underlying.forEach(function(tk, i){
       var col = _COLORS[i % _COLORS.length];
       uGroup.tickers.push({ticker: tk, label: tk, color: col.c, stroke: col.s, on: true, group: 'Underlying'});
     });
-    _overlayGroups.push(uGroup);
   }
-  if(map.leveraged && map.leveraged.length > 0){
+  _overlayGroups.push(uGroup);
+
+  // Leveraged group (only if overlay map exists)
+  if(map && map.leveraged && map.leveraged.length > 0){
     var lGroup = {name: 'Leveraged', on: true, tickers: []};
     map.leveraged.forEach(function(tk, i){
       var col = _COLORS[(i + 3) % _COLORS.length];
