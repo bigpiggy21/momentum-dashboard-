@@ -44,10 +44,15 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 /* Left panel sections */
 .panel-section{margin-bottom:16px;}
 .panel-label{font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600;}
-.ticker-row{display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;}
+.ticker-group-hdr{display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer;margin-top:6px;}
+.ticker-group-hdr:first-child{margin-top:0;}
+.ticker-group-hdr input{accent-color:#f59e0b;}
+.ticker-group-hdr span{font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;}
+.ticker-group-hdr:hover span{color:#ccc;}
+.ticker-row{display:flex;align-items:center;gap:8px;padding:4px 0 4px 8px;cursor:pointer;}
 .ticker-row:hover{background:#14141e;border-radius:4px;}
 .ticker-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
-.ticker-label{font-size:13px;font-weight:600;}
+.ticker-label{font-size:12px;font-weight:600;}
 .ticker-check{accent-color:#f59e0b;}
 .stat-row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px;}
 .stat-val{color:#f59e0b;font-weight:600;}
@@ -142,12 +147,25 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 // ====================================================================
 // CONFIG
 // ====================================================================
-var TICKERS = [
-  {ticker: 'SPY', color: 'rgba(59,130,246,0.55)', stroke: '#3b82f6', label: 'SPY', on: true, isRef: true},
-  {ticker: 'VOO', color: 'rgba(234,179,8,0.55)', stroke: '#eab308', label: 'VOO', on: true},
-  {ticker: 'IVV', color: 'rgba(16,185,129,0.55)', stroke: '#10b981', label: 'IVV', on: true},
-  {ticker: 'UPRO', color: 'rgba(239,68,68,0.55)', stroke: '#ef4444', label: 'UPRO', on: true},
+var TICKER_GROUPS = [
+  {name: 'Underlying', on: true, tickers: [
+    {ticker: 'SPY',  color: 'rgba(59,130,246,0.55)',  stroke: '#3b82f6', label: 'SPY',  on: true, isRef: true},
+    {ticker: 'VOO',  color: 'rgba(234,179,8,0.55)',   stroke: '#eab308', label: 'VOO',  on: true},
+    {ticker: 'IVV',  color: 'rgba(16,185,129,0.55)',   stroke: '#10b981', label: 'IVV',  on: true},
+    {ticker: 'SPLG', color: 'rgba(139,92,246,0.55)',   stroke: '#8b5cf6', label: 'SPLG', on: false},
+  ]},
+  {name: 'Leveraged', on: true, tickers: [
+    {ticker: 'UPRO', color: 'rgba(239,68,68,0.55)',   stroke: '#ef4444', label: 'UPRO', on: true},
+    {ticker: 'SPXL', color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'SPXL', on: false},
+    {ticker: 'SSO',  color: 'rgba(236,72,153,0.55)',   stroke: '#ec4899', label: 'SSO',  on: false},
+    {ticker: 'SH',   color: 'rgba(107,114,128,0.55)',  stroke: '#6b7280', label: 'SH',   on: false},
+    {ticker: 'SPXS', color: 'rgba(156,163,175,0.55)',  stroke: '#9ca3af', label: 'SPXS', on: false},
+    {ticker: 'SPXU', color: 'rgba(75,85,99,0.55)',     stroke: '#4b5563', label: 'SPXU', on: false},
+  ]},
 ];
+// Flat list for compatibility with existing code
+var TICKERS = [];
+TICKER_GROUPS.forEach(function(g){ g.tickers.forEach(function(t){ t.group = g.name; TICKERS.push(t); }); });
 var REF_TICKER = 'SPY';
 
 // ====================================================================
@@ -176,15 +194,25 @@ var _candles = [];       // raw candle array
   var iso = today.toISOString().slice(0,10);
   document.getElementById('dateInput').value = iso;
 
-  // Build ticker checkboxes
+  // Build ticker checkboxes grouped by category
   var list = document.getElementById('tickerList');
-  TICKERS.forEach(function(t){
-    var row = document.createElement('div');
-    row.className = 'ticker-row';
-    row.innerHTML = '<input type="checkbox" class="ticker-check" data-ticker="'+t.ticker+'" '+(t.on?'checked':'')+' onchange="onTickerToggle(this)">'
-      + '<div class="ticker-dot" style="background:'+t.stroke+';"></div>'
-      + '<span class="ticker-label">'+t.label+'</span>';
-    list.appendChild(row);
+  TICKER_GROUPS.forEach(function(g, gi){
+    // Category header with group checkbox
+    var hdr = document.createElement('div');
+    hdr.className = 'ticker-group-hdr';
+    hdr.innerHTML = '<input type="checkbox" '+(g.on?'checked':'')+' onchange="onGroupToggle('+gi+',this)">'
+      + '<span>'+g.name+'</span>';
+    list.appendChild(hdr);
+    // Individual ticker rows
+    g.tickers.forEach(function(t){
+      var row = document.createElement('div');
+      row.className = 'ticker-row';
+      row.setAttribute('data-group', gi);
+      row.innerHTML = '<input type="checkbox" class="ticker-check" data-ticker="'+t.ticker+'" '+(t.on?'checked':'')+' onchange="onTickerToggle(this)">'
+        + '<div class="ticker-dot" style="background:'+t.stroke+';"></div>'
+        + '<span class="ticker-label">'+t.label+'</span>';
+      list.appendChild(row);
+    });
   });
 
   // Auto-load on date/filter change
@@ -483,10 +511,33 @@ function onMouseMove(e){
 function onTickerToggle(el){
   var ticker = el.getAttribute('data-ticker');
   TICKERS.forEach(function(t){ if(t.ticker === ticker) t.on = el.checked; });
-  // Just redraw — don't refetch, data for all tickers is already loaded
+  // Update group checkbox state (indeterminate if mixed)
+  syncGroupCheckboxes();
   drawBubbles();
   updateStats();
   updateFeed();
+}
+
+function onGroupToggle(gi, el){
+  var g = TICKER_GROUPS[gi];
+  g.on = el.checked;
+  g.tickers.forEach(function(t){ t.on = el.checked; });
+  // Update individual checkboxes in DOM
+  var rows = document.querySelectorAll('[data-group="'+gi+'"] .ticker-check');
+  rows.forEach(function(cb){ cb.checked = el.checked; });
+  drawBubbles();
+  updateStats();
+  updateFeed();
+}
+
+function syncGroupCheckboxes(){
+  var hdrs = document.querySelectorAll('.ticker-group-hdr input');
+  TICKER_GROUPS.forEach(function(g, gi){
+    var allOn = g.tickers.every(function(t){ return t.on; });
+    var anyOn = g.tickers.some(function(t){ return t.on; });
+    hdrs[gi].checked = allOn;
+    hdrs[gi].indeterminate = !allOn && anyOn;
+  });
 }
 
 function togglePanel(){
