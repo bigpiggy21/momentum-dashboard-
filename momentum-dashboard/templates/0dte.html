@@ -900,7 +900,8 @@ function drawBubbles(){
 
       var timeUnix;
       if(s.time && s.time.length >= 5){
-        var dt = new Date(s.date + 'T' + s.time + '-04:00');
+        // trade_time is stored as UTC in the DB — parse as UTC
+        var dt = new Date(s.date + 'T' + s.time + 'Z');
         timeUnix = Math.floor(dt.getTime() / 1000);
       } else {
         timeUnix = dateToUnix(s.date);
@@ -1077,7 +1078,7 @@ function onMouseMove(e){
       var s = _chartSweeps[j];
       var timeUnix;
       if(s.time && s.time.length >= 5){
-        var dt = new Date(s.date + 'T' + s.time + '-04:00');
+        var dt = new Date(s.date + 'T' + s.time + 'Z');
         timeUnix = Math.floor(dt.getTime() / 1000);
       } else {
         timeUnix = Math.floor(new Date(s.date + 'T20:00:00Z').getTime() / 1000);
