@@ -5234,11 +5234,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     # ====================================================================
 
     def serve_0dte_candles(self, query=None):
-        """GET /api/0dte/candles — fetch 1-min candles from Polygon for a ticker."""
+        """GET /api/0dte/candles — fetch candles from Polygon for a ticker."""
         query = query or {}
         ticker = query.get("ticker", ["SPY"])[0]
         date_str = query.get("date", [None])[0]
         days = int(query.get("days", ["1"])[0])
+        interval = int(query.get("interval", ["1"])[0])
+        if interval not in (1, 5):
+            interval = 1
 
         if not date_str:
             from datetime import date as dt_date
@@ -5250,7 +5253,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         start_date = end_date - timedelta(days=max(0, days - 1) + 2)  # +2 for weekends
         from_str = start_date.strftime("%Y-%m-%d")
 
-        url = f"{MASSIVE_BASE_URL}/aggs/ticker/{ticker}/range/1/minute/{from_str}/{date_str}"
+        url = f"{MASSIVE_BASE_URL}/aggs/ticker/{ticker}/range/{interval}/minute/{from_str}/{date_str}"
         headers = {"Authorization": f"Bearer {MASSIVE_API_KEY}"}
         params = {"adjusted": "true", "sort": "asc", "limit": 50000}
 

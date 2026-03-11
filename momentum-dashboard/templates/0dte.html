@@ -20,7 +20,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 
 /* Layout */
 .main{display:flex;height:calc(100vh - 48px);}
-.left-panel{width:280px;min-width:280px;background:#0a0a12;border-right:1px solid #1e1e2e;padding:16px;overflow-y:auto;transition:width 0.2s,min-width 0.2s,padding 0.2s;}
+.left-panel{width:280px;min-width:280px;background:#0a0a12;border-right:1px solid #1e1e2e;padding:16px;overflow-y:hidden;display:flex;flex-direction:column;transition:width 0.2s,min-width 0.2s,padding 0.2s;}
 .left-panel.collapsed{width:0;min-width:0;padding:0;overflow:hidden;border-right:none;}
 .chart-area{flex:1;position:relative;overflow:hidden;}
 #chartContainer{width:100%;height:100%;position:relative;}
@@ -53,7 +53,11 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .collapse-btn:hover{color:#f59e0b;}
 
 /* Sweep feed */
-.feed{margin-top:8px;max-height:300px;overflow-y:auto;}
+.feed{margin-top:8px;flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;}
+.feed::-webkit-scrollbar{width:6px;}
+.feed::-webkit-scrollbar-track{background:#0a0a12;}
+.feed::-webkit-scrollbar-thumb{background:#333;border-radius:3px;}
+.feed::-webkit-scrollbar-thumb:hover{background:#555;}
 .feed-item{font-size:11px;padding:4px 0;border-bottom:1px solid #1a1a26;display:flex;gap:6px;}
 .feed-time{color:#555;min-width:55px;}
 .feed-ticker{font-weight:600;min-width:32px;}
@@ -68,6 +72,11 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
   <div class="header-right">
     <label>Date</label>
     <input type="date" id="dateInput">
+    <label>Candles</label>
+    <div class="seg-ctrl" id="candleIntervalCtrl">
+      <button class="active" onclick="setCandleInterval(1,this)">1m</button>
+      <button onclick="setCandleInterval(5,this)">5m</button>
+    </div>
     <label>Days</label>
     <select id="daysSelect">
       <option value="1" selected>1</option>
@@ -101,7 +110,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
         <div class="stat-row"><span>Largest</span><span class="stat-val" id="statLargest">$0</span></div>
       </div>
     </div>
-    <div class="panel-section">
+    <div class="panel-section" style="flex:1;display:flex;flex-direction:column;min-height:0;">
       <div class="panel-label">Recent Sweeps</div>
       <div class="feed" id="sweepFeed">
         <div style="color:#555;font-size:11px;">No data yet</div>
@@ -123,12 +132,15 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 var TICKERS = [
   {ticker: 'SPY', color: 'rgba(59,130,246,0.55)', stroke: '#3b82f6', label: 'SPY', on: true, isRef: true},
   {ticker: 'VOO', color: 'rgba(234,179,8,0.55)', stroke: '#eab308', label: 'VOO', on: true},
+  {ticker: 'IVV', color: 'rgba(16,185,129,0.55)', stroke: '#10b981', label: 'IVV', on: true},
+  {ticker: 'UPRO', color: 'rgba(239,68,68,0.55)', stroke: '#ef4444', label: 'UPRO', on: true},
 ];
 var REF_TICKER = 'SPY';
 
 // ====================================================================
 // STATE
 // ====================================================================
+var _candleInterval = 1; // 1 or 5 minutes
 var _chart = null;
 var _candleSeries = null;
 var _canvas = null;
@@ -243,7 +255,7 @@ function fetchCandles(){
   var date = getDate();
   var days = getDays();
   _setLoading(true);
-  fetch('/api/0dte/candles?ticker='+REF_TICKER+'&date='+date+'&days='+days)
+  fetch('/api/0dte/candles?ticker='+REF_TICKER+'&date='+date+'&days='+days+'&interval='+_candleInterval)
     .then(function(r){return r.json();})
     .then(function(d){
       _candles = d.candles || [];
@@ -452,6 +464,15 @@ function togglePanel(){
     resizeCanvas();
     drawBubbles();
   }, 250);
+}
+
+function setCandleInterval(mins, btn){
+  if(_candleInterval === mins) return;
+  _candleInterval = mins;
+  var btns = document.getElementById('candleIntervalCtrl').querySelectorAll('button');
+  btns.forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  fetchCandles();
 }
 
 function setFilterMode(mode, btn){
