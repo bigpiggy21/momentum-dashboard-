@@ -5240,7 +5240,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         date_str = query.get("date", [None])[0]
         days = int(query.get("days", ["1"])[0])
         interval = int(query.get("interval", ["1"])[0])
-        if interval not in (1, 5, 60, 1440):
+        VALID_INTERVALS = {
+            1: ("minute", 1),      # 1m
+            5: ("minute", 5),      # 5m
+            60: ("hour", 1),       # 1h
+            240: ("hour", 4),      # 4h
+            1440: ("day", 1),      # 1D
+            2880: ("day", 2),      # 2D
+            10080: ("week", 1),    # W
+            43200: ("month", 1),   # M
+            129600: ("month", 3),  # 3M
+        }
+        if interval not in VALID_INTERVALS:
             interval = 1
 
         if not date_str:
@@ -5256,15 +5267,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         from_str = start_date.strftime("%Y-%m-%d")
 
         # Map interval to Polygon aggregation unit
-        if interval == 1440:
-            agg_unit = "day"
-            agg_mult = 1
-        elif interval == 60:
-            agg_unit = "hour"
-            agg_mult = 1
-        else:
-            agg_unit = "minute"
-            agg_mult = interval
+        agg_unit, agg_mult = VALID_INTERVALS.get(interval, ("minute", 1))
 
         url = f"{MASSIVE_BASE_URL}/aggs/ticker/{ticker}/range/{agg_mult}/{agg_unit}/{from_str}/{date_str}"
         headers = {"Authorization": f"Bearer {MASSIVE_API_KEY}"}

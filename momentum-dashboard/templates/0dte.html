@@ -3,23 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TBD Technologies — 0DTE Flow</title>
+<title>TBD Technologies — Chart</title>
 <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden;height:100vh;}
 
 /* Header */
-.header{background:#0c0c14;padding:8px 0;border-bottom:1px solid #1e1e2e;display:flex;align-items:center;gap:10px;height:48px;z-index:10;}
-.header-title{font-size:17px;font-weight:700;color:#f59e0b;white-space:nowrap;width:280px;min-width:280px;padding-left:20px;box-sizing:border-box;}
+.header{background:#0c0c14;padding:8px 12px;border-bottom:1px solid #1e1e2e;display:flex;align-items:center;gap:8px;height:48px;z-index:10;}
+.header-title{font-size:17px;font-weight:700;color:#f59e0b;white-space:nowrap;padding-left:8px;}
+.header input[type="text"]{background:#14141e;border:1px solid #2a2a3a;color:#e0e0e8;padding:5px 10px;border-radius:4px;font-size:13px;font-family:inherit;width:100px;font-weight:600;}
+.header input[type="text"]:focus{border-color:#f59e0b;outline:none;}
 .header input[type="date"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:5px 8px;border-radius:4px;font-size:12px;font-family:inherit;}
 .header select,.header input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:5px 8px;border-radius:4px;font-size:12px;font-family:inherit;}
 .header select{width:52px;}
 .header input[type="number"]{width:82px;}
-/* Index tabs — standalone buttons with gaps */
-.idx-tab{background:#1e293b;color:#888;border:1px solid #334155;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;border-radius:4px;}
-.idx-tab:hover{color:#ccc;}
-.idx-tab.active{background:#f59e0b22;color:#f59e0b;border-color:#f59e0b66;}
 /* Divider */
 .hdr-sep{width:1px;height:24px;background:#334155;flex-shrink:0;}
 /* Filter group: label + input pair */
@@ -29,12 +27,12 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .filter-group .flbl.active{background:#f59e0b22;color:#f59e0b;border-color:#f59e0b66;}
 .filter-group input[type="number"]{opacity:0.4;pointer-events:none;}
 .filter-group.on input[type="number"]{opacity:1;pointer-events:auto;}
-/* Spacer to push controls right */
-.hdr-spacer{flex:1;}
+.sweep-controls{display:flex;align-items:center;gap:8px;}
+.sweep-controls.off .filter-group{opacity:0.3;pointer-events:none;}
 
 /* Layout */
 .main{display:flex;height:calc(100vh - 48px);}
-.left-panel{width:280px;min-width:280px;background:#0a0a12;border-right:1px solid #1e1e2e;padding:16px;overflow-y:hidden;display:flex;flex-direction:column;transition:width 0.2s,min-width 0.2s,padding 0.2s;}
+.left-panel{width:280px;min-width:280px;background:#0a0a12;border-right:1px solid #1e1e2e;padding:12px;overflow-y:hidden;display:flex;flex-direction:column;transition:width 0.2s,min-width 0.2s,padding 0.2s;}
 .left-panel.collapsed{width:0;min-width:0;padding:0;overflow:hidden;border-right:none;}
 .chart-area{flex:1;position:relative;overflow:hidden;}
 #chartContainer{width:100%;height:100%;position:relative;}
@@ -42,8 +40,29 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 #tooltipDiv{position:absolute;display:none;background:rgba(0,0,0,0.85);border:1px solid #334155;border-radius:4px;padding:6px 10px;font-size:11px;color:#e0e0e8;pointer-events:none;z-index:10;white-space:nowrap;}
 
 /* Left panel sections */
-.panel-section{margin-bottom:16px;}
-.panel-label{font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600;}
+.panel-section{margin-bottom:12px;}
+.panel-label{font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-weight:600;}
+
+/* Watchlist dropdown */
+#watchlistSelect{width:100%;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:6px 10px;border-radius:4px;font-size:12px;font-family:inherit;margin-bottom:12px;}
+
+/* Ticker list */
+.ticker-list{max-height:280px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;}
+.ticker-list::-webkit-scrollbar{width:6px;}
+.ticker-list::-webkit-scrollbar-track{background:#0a0a12;}
+.ticker-list::-webkit-scrollbar-thumb{background:#333;border-radius:3px;}
+.ticker-list-item{display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;border-radius:4px;font-size:12px;}
+.ticker-list-item:hover{background:#14141e;}
+.ticker-list-item.active{background:#f59e0b15;border-left:2px solid #f59e0b;}
+.ticker-list-item .tl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.ticker-list-item .tl-ticker{font-weight:600;min-width:48px;}
+.ticker-list-item .tl-price{color:#888;margin-left:auto;font-size:11px;font-family:'SF Mono',monospace;}
+.ticker-list-item .tl-change{font-size:11px;font-weight:600;min-width:52px;text-align:right;font-family:'SF Mono',monospace;}
+.tl-change.pos{color:#10b981;}
+.tl-change.neg{color:#ef4444;}
+
+/* Overlay checkboxes section */
+.overlay-section{margin-top:8px;margin-bottom:8px;}
 .ticker-group-hdr{display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer;margin-top:6px;}
 .ticker-group-hdr:first-child{margin-top:0;}
 .ticker-group-hdr input{accent-color:#f59e0b;}
@@ -64,7 +83,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 
 /* Segmented control */
 .seg-ctrl{display:inline-flex;border:1px solid #334155;border-radius:4px;overflow:hidden;}
-.seg-ctrl button{background:#1e293b;color:#888;border:none;padding:6px 14px;cursor:pointer;font-size:12px;font-family:inherit;border-right:1px solid #334155;font-weight:600;}
+.seg-ctrl button{background:#1e293b;color:#888;border:none;padding:5px 10px;cursor:pointer;font-size:11px;font-family:inherit;border-right:1px solid #334155;font-weight:600;}
 .seg-ctrl button:last-child{border-right:none;}
 .seg-ctrl button:hover{color:#ccc;}
 .seg-ctrl button.active{background:#f59e0b22;color:#f59e0b;}
@@ -86,31 +105,35 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 <body>
 
 <div class="header">
-  <div class="header-title">Darkpool Flow</div>
-  <span id="indexTabs" style="display:inline-flex;gap:6px;">
-    <button class="idx-tab active" onclick="setIndex('SPX',this)">SPX</button>
-    <button class="idx-tab" onclick="setIndex('NDX',this)">NDX</button>
-    <button class="idx-tab" onclick="setIndex('RTY',this)">RTY</button>
-  </span>
+  <div class="header-title">Chart</div>
+  <input type="text" id="tickerInput" placeholder="Ticker..." spellcheck="false">
   <div class="hdr-sep"></div>
-  <button class="ctrl-btn" id="btnAutoRefresh" onclick="toggleAutoRefresh()" style="width:auto;padding:5px 12px;font-size:12px;">Live</button>
+  <button class="ctrl-btn" id="btnAutoRefresh" onclick="toggleAutoRefresh()" style="width:auto;padding:5px 10px;font-size:11px;">Live</button>
   <div class="hdr-sep"></div>
   <div class="seg-ctrl" id="candleIntervalCtrl">
     <button class="active" onclick="setCandleInterval(1,this)">1m</button>
     <button onclick="setCandleInterval(5,this)">5m</button>
     <button onclick="setCandleInterval(60,this)">1h</button>
+    <button onclick="setCandleInterval(240,this)">4h</button>
     <button onclick="setCandleInterval(1440,this)">1D</button>
+    <button onclick="setCandleInterval(2880,this)">2D</button>
+    <button onclick="setCandleInterval(10080,this)">W</button>
+    <button onclick="setCandleInterval(43200,this)">M</button>
+    <button onclick="setCandleInterval(129600,this)">3M</button>
   </div>
   <div class="hdr-sep"></div>
   <input type="date" id="dateInput">
   <div class="hdr-sep"></div>
-  <div class="filter-group" id="fgNotional">
-    <button class="flbl" onclick="toggleFilter('notional')">Min $</button>
-    <input type="number" id="minNotional" value="500000" step="100000" min="0">
-  </div>
-  <div class="filter-group on" id="fgPercentile">
-    <button class="flbl active" onclick="toggleFilter('percentile')">Percentile</button>
-    <input type="number" id="minPercentile" value="85" step="5" min="0" max="99">
+  <div class="sweep-controls" id="sweepControls">
+    <button class="ctrl-btn active" id="btnSweepToggle" onclick="toggleSweepOverlay()" style="width:auto;padding:5px 10px;font-size:11px;">DP Sweeps</button>
+    <div class="filter-group" id="fgNotional">
+      <button class="flbl" onclick="toggleFilter('notional')">Min $</button>
+      <input type="number" id="minNotional" value="500000" step="100000" min="0">
+    </div>
+    <div class="filter-group on" id="fgPercentile">
+      <button class="flbl active" onclick="toggleFilter('percentile')">Percentile</button>
+      <input type="number" id="minPercentile" value="85" step="5" min="0" max="99">
+    </div>
   </div>
   <div class="hdr-sep"></div>
   <select id="presetSelect" style="width:120px;" onchange="loadPreset()">
@@ -123,9 +146,17 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 <div class="main">
   <div class="left-panel" id="leftPanel">
     <div class="panel-section">
-      <div class="panel-label">Tickers</div>
-      <div id="tickerList">
+      <select id="watchlistSelect" onchange="onWatchlistChange()">
+        <option value="">-- Select Watchlist --</option>
+      </select>
+      <div class="ticker-list" id="tickerListBox">
         <!-- Populated by JS -->
+      </div>
+    </div>
+    <div class="overlay-section" id="overlaySection" style="display:none;">
+      <div class="panel-label">Overlay Tickers</div>
+      <div id="overlayList">
+        <!-- Group checkboxes for index watchlists -->
       </div>
     </div>
     <div class="panel-section">
@@ -153,9 +184,9 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 
 <script>
 // ====================================================================
-// CONFIG
+// WATCHLIST CONFIG
 // ====================================================================
-var INDEX_CONFIG = {
+var WATCHLIST_CONFIG = {
   SPX: {
     ref: 'SPY',
     groups: [
@@ -209,95 +240,110 @@ var INDEX_CONFIG = {
         {ticker: 'SRTY', color: 'rgba(75,85,99,0.55)',    stroke: '#4b5563', label: 'SRTY', on: true},
       ]},
     ]
+  },
+  Priority: {
+    ref: null,
+    tickers: [
+      {ticker: 'AAPL', color: 'rgba(59,130,246,0.55)',  stroke: '#3b82f6', label: 'AAPL', on: true},
+      {ticker: 'NVDA', color: 'rgba(16,185,129,0.55)',  stroke: '#10b981', label: 'NVDA', on: true},
+      {ticker: 'TSLA', color: 'rgba(239,68,68,0.55)',   stroke: '#ef4444', label: 'TSLA', on: true},
+      {ticker: 'AMZN', color: 'rgba(234,179,8,0.55)',   stroke: '#eab308', label: 'AMZN', on: true},
+      {ticker: 'MSFT', color: 'rgba(139,92,246,0.55)',  stroke: '#8b5cf6', label: 'MSFT', on: true},
+      {ticker: 'META', color: 'rgba(6,182,212,0.55)',   stroke: '#06b6d4', label: 'META', on: true},
+      {ticker: 'GOOG', color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'GOOG', on: true},
+      {ticker: 'AMD',  color: 'rgba(236,72,153,0.55)',  stroke: '#ec4899', label: 'AMD',  on: true},
+      {ticker: 'UBER', color: 'rgba(168,85,247,0.55)',  stroke: '#a855f7', label: 'UBER', on: true},
+      {ticker: 'COIN', color: 'rgba(20,184,166,0.55)',  stroke: '#14b8a6', label: 'COIN', on: true},
+    ]
   }
 };
-
-var _activeIndex = 'SPX';
-var TICKER_GROUPS = INDEX_CONFIG[_activeIndex].groups;
-var TICKERS = [];
-TICKER_GROUPS.forEach(function(g){ g.tickers.forEach(function(t){ t.group = g.name; TICKERS.push(t); }); });
-var REF_TICKER = INDEX_CONFIG[_activeIndex].ref;
 
 // ====================================================================
 // STATE
 // ====================================================================
-var _candleInterval = 1; // 1, 5, 60, or 1440
-// Each interval has a fixed lookback in trading days
-var INTERVAL_DAYS = {1: 10, 5: 60, 60: 504, 1440: 1260};
+var _mode = 'watchlist';          // 'single' | 'watchlist'
+var _activeTicker = 'SPY';       // ticker whose candles are displayed
+var _activeWatchlist = 'SPX';    // current watchlist key
+var _sweepOverlayOn = true;      // DP Sweeps toggle
+
+// Overlay state (for index watchlists)
+var _overlayGroups = [];         // current groups array (from WATCHLIST_CONFIG)
+var _overlayTickers = [];        // flat array of overlay ticker objects
+
+var _candleInterval = 1;
+var INTERVAL_DAYS = {1:10, 5:60, 60:504, 240:504, 1440:1260, 2880:2520, 10080:2520, 43200:3780, 129600:3780};
+
 var _chart = null;
 var _candleSeries = null;
 var _canvas = null;
 var _ctx = null;
-var _sweeps = [];       // all fetched sweeps
-// Price normalisation: non-ref sweeps placed at SPY's price at same timestamp
+var _sweeps = [];
+var _allSweeps = [];
 var _autoRefresh = false;
 var _sweepTimer = null;
 var _candleTimer = null;
-var _candles = [];       // raw candle array
-var _initialLoad = true; // first load fitContent, subsequent preserve viewport
+var _candles = [];
+var _initialLoad = true;
+var _loading = false;
+var _tickerPrices = {};  // {ticker: {price, change, changePct}}
 
 // ====================================================================
 // INIT
 // ====================================================================
 (function init(){
-  // Set date to today
   var today = new Date();
-  var iso = today.toISOString().slice(0,10);
-  document.getElementById('dateInput').value = iso;
+  document.getElementById('dateInput').value = today.toISOString().slice(0,10);
 
-  // Build ticker checkboxes grouped by category
-  var list = document.getElementById('tickerList');
-  TICKER_GROUPS.forEach(function(g, gi){
-    // Category header with group checkbox
-    var hdr = document.createElement('div');
-    hdr.className = 'ticker-group-hdr';
-    hdr.innerHTML = '<input type="checkbox" '+(g.on?'checked':'')+' onchange="onGroupToggle('+gi+',this)">'
-      + '<span>'+g.name+'</span>';
-    list.appendChild(hdr);
-    // Individual ticker rows
-    g.tickers.forEach(function(t){
-      var row = document.createElement('div');
-      row.className = 'ticker-row';
-      row.setAttribute('data-group', gi);
-      row.innerHTML = '<input type="checkbox" class="ticker-check" data-ticker="'+t.ticker+'" '+(t.on?'checked':'')+' onchange="onTickerToggle(this)">'
-        + '<div class="ticker-dot" style="background:'+t.stroke+';"></div>'
-        + '<span class="ticker-label">'+t.label+'</span>';
-      list.appendChild(row);
-    });
+  // Populate watchlist dropdown
+  var sel = document.getElementById('watchlistSelect');
+  Object.keys(WATCHLIST_CONFIG).forEach(function(key){
+    var opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = key;
+    sel.appendChild(opt);
+  });
+  sel.value = _activeWatchlist;
+
+  // Ticker input — Enter key
+  var tickerInput = document.getElementById('tickerInput');
+  tickerInput.addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){
+      var val = tickerInput.value.trim().toUpperCase();
+      if(val){
+        setActiveTicker(val, 'input');
+      }
+    }
   });
 
-  // Auto-load on date/filter change
+  // Date change — smart interval selection
   document.getElementById('dateInput').addEventListener('change', function(){
-    // Smart interval: if date is far in the past, auto-switch to higher timeframe
     var picked = new Date(document.getElementById('dateInput').value);
     var now = new Date();
     var diffDays = Math.round((now - picked) / 86400000);
-    var bestInterval = 1;
-    if(diffDays > 60) bestInterval = 60;      // >60 days ago → 1h
-    else if(diffDays > 10) bestInterval = 5;   // >10 days ago → 5m
-    if(diffDays > 504) bestInterval = 1440;    // >2 years ago → 1D
+    var bestInterval = _candleInterval;
+    if(diffDays > 504) bestInterval = 1440;
+    else if(diffDays > 60) bestInterval = 60;
+    else if(diffDays > 10) bestInterval = 5;
     if(bestInterval !== _candleInterval){
       _candleInterval = bestInterval;
-      var btns = document.getElementById('candleIntervalCtrl').querySelectorAll('button');
-      btns.forEach(function(b){ b.classList.remove('active'); });
-      // Find the matching button
-      btns.forEach(function(b){
-        var mins = {
-          '1m':1,'5m':5,'1h':60,'1D':1440
-        }[b.textContent];
-        if(mins === bestInterval) b.classList.add('active');
-      });
+      _syncIntervalButtons();
     }
     loadAll(true);
   });
   document.getElementById('minNotional').addEventListener('change', function(){ applyClientFilter(); });
   document.getElementById('minPercentile').addEventListener('change', function(){ applyClientFilter(); });
 
+  // Build initial watchlist view
+  buildWatchlistView();
+
   // Init chart
   initChart();
-  loadAll();
+  loadAll(true);
 })();
 
+// ====================================================================
+// CHART
+// ====================================================================
 function initChart(){
   var container = document.getElementById('chartContainer');
   _chart = LightweightCharts.createChart(container, {
@@ -320,22 +366,18 @@ function initChart(){
     wickUpColor:'#056656', wickDownColor:'#b22833',
   });
 
-  // Canvas overlay
   _canvas = document.getElementById('bubbleCanvas');
   _ctx = _canvas.getContext('2d');
   resizeCanvas();
 
-  // Redraw bubbles on scroll/zoom
   _chart.timeScale().subscribeVisibleTimeRangeChange(drawBubbles);
 
-  // Resize handler
   window.addEventListener('resize', function(){
     _chart.resize(container.clientWidth, container.clientHeight);
     resizeCanvas();
     drawBubbles();
   });
 
-  // Mouse move for tooltip
   container.addEventListener('mousemove', onMouseMove);
   container.addEventListener('mouseleave', function(){
     document.getElementById('tooltipDiv').style.display = 'none';
@@ -349,57 +391,219 @@ function resizeCanvas(){
 }
 
 // ====================================================================
+// MODE & TICKER MANAGEMENT
+// ====================================================================
+function setActiveTicker(ticker, source){
+  _activeTicker = ticker;
+
+  if(source === 'input'){
+    // Single ticker mode — clear watchlist selection
+    _mode = 'single';
+    _activeWatchlist = null;
+    _overlayGroups = [];
+    _overlayTickers = [];
+    document.getElementById('watchlistSelect').value = '';
+    document.getElementById('overlaySection').style.display = 'none';
+    // Update ticker input display
+    document.getElementById('tickerInput').value = ticker;
+    // Clear ticker list highlight
+    highlightTickerList(null);
+  } else if(source === 'watchlist-click'){
+    // Clicked a ticker in a flat watchlist — stay in watchlist mode but change active ticker
+    document.getElementById('tickerInput').value = ticker;
+    highlightTickerList(ticker);
+  }
+
+  loadAll(true);
+}
+
+function buildWatchlistView(){
+  var key = _activeWatchlist;
+  var cfg = key ? WATCHLIST_CONFIG[key] : null;
+  var listBox = document.getElementById('tickerListBox');
+  var overlaySection = document.getElementById('overlaySection');
+  var overlayList = document.getElementById('overlayList');
+  listBox.innerHTML = '';
+  overlayList.innerHTML = '';
+
+  if(!cfg){
+    overlaySection.style.display = 'none';
+    return;
+  }
+
+  if(cfg.groups){
+    // Index watchlist (SPX/NDX/RTY) — has groups with ref ticker
+    _activeTicker = cfg.ref;
+    document.getElementById('tickerInput').value = cfg.ref;
+
+    // Build flat ticker list from all groups for the list display
+    var allTickers = [];
+    cfg.groups.forEach(function(g){ g.tickers.forEach(function(t){ allTickers.push(t); }); });
+
+    allTickers.forEach(function(t){
+      var item = document.createElement('div');
+      item.className = 'ticker-list-item' + (t.ticker === _activeTicker ? ' active' : '');
+      item.setAttribute('data-ticker', t.ticker);
+      item.innerHTML = '<div class="tl-dot" style="background:'+t.stroke+';"></div>'
+        + '<span class="tl-ticker">'+t.label+'</span>'
+        + '<span class="tl-price" id="price_'+t.ticker+'">—</span>'
+        + '<span class="tl-change" id="change_'+t.ticker+'">—</span>';
+      listBox.appendChild(item);
+    });
+
+    // Build overlay checkboxes
+    _overlayGroups = cfg.groups;
+    _overlayTickers = [];
+    cfg.groups.forEach(function(g){ g.tickers.forEach(function(t){ t.group = g.name; _overlayTickers.push(t); }); });
+
+    cfg.groups.forEach(function(g, gi){
+      var hdr = document.createElement('div');
+      hdr.className = 'ticker-group-hdr';
+      hdr.innerHTML = '<input type="checkbox" '+(g.on?'checked':'')+' onchange="onGroupToggle('+gi+',this)">'
+        + '<span>'+g.name+'</span>';
+      overlayList.appendChild(hdr);
+      g.tickers.forEach(function(t){
+        var row = document.createElement('div');
+        row.className = 'ticker-row';
+        row.setAttribute('data-group', gi);
+        row.innerHTML = '<input type="checkbox" class="ticker-check" data-ticker="'+t.ticker+'" '+(t.on?'checked':'')+' onchange="onTickerToggle(this)">'
+          + '<div class="ticker-dot" style="background:'+t.stroke+';"></div>'
+          + '<span class="ticker-label">'+t.label+'</span>';
+        overlayList.appendChild(row);
+      });
+    });
+    overlaySection.style.display = '';
+
+    // Fetch prices for all tickers
+    fetchTickerPrices(allTickers.map(function(t){ return t.ticker; }));
+
+  } else if(cfg.tickers){
+    // Flat watchlist (Priority) — no ref ticker, no overlay
+    _activeTicker = cfg.tickers[0].ticker;
+    document.getElementById('tickerInput').value = _activeTicker;
+    _overlayGroups = [];
+    _overlayTickers = [];
+
+    cfg.tickers.forEach(function(t){
+      var item = document.createElement('div');
+      item.className = 'ticker-list-item' + (t.ticker === _activeTicker ? ' active' : '');
+      item.setAttribute('data-ticker', t.ticker);
+      item.onclick = function(){ setActiveTicker(t.ticker, 'watchlist-click'); };
+      item.innerHTML = '<div class="tl-dot" style="background:'+t.stroke+';"></div>'
+        + '<span class="tl-ticker">'+t.label+'</span>'
+        + '<span class="tl-price" id="price_'+t.ticker+'">—</span>'
+        + '<span class="tl-change" id="change_'+t.ticker+'">—</span>';
+      listBox.appendChild(item);
+    });
+    overlaySection.style.display = 'none';
+
+    // Fetch prices
+    fetchTickerPrices(cfg.tickers.map(function(t){ return t.ticker; }));
+  }
+}
+
+function highlightTickerList(ticker){
+  var items = document.querySelectorAll('.ticker-list-item');
+  items.forEach(function(el){
+    el.classList.toggle('active', el.getAttribute('data-ticker') === ticker);
+  });
+}
+
+function onWatchlistChange(){
+  var sel = document.getElementById('watchlistSelect');
+  var key = sel.value;
+  if(!key){
+    _activeWatchlist = null;
+    _mode = 'single';
+    return;
+  }
+  _activeWatchlist = key;
+  _mode = 'watchlist';
+  buildWatchlistView();
+  loadAll(true);
+}
+
+// ====================================================================
+// TICKER PRICES (for left panel list)
+// ====================================================================
+function fetchTickerPrices(tickers){
+  // Fetch last daily candle for each ticker to get price + change
+  tickers.forEach(function(ticker){
+    fetch('/api/0dte/candles?ticker='+ticker+'&date='+getDate()+'&days=2&interval=1440')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var candles = d.candles || [];
+        if(candles.length === 0) return;
+        var last = candles[candles.length - 1];
+        var prev = candles.length > 1 ? candles[candles.length - 2] : null;
+        var price = last.close;
+        var change = prev ? (price - prev.close) : 0;
+        var changePct = prev ? ((change / prev.close) * 100) : 0;
+        _tickerPrices[ticker] = {price: price, change: change, changePct: changePct};
+        // Update DOM
+        var priceEl = document.getElementById('price_'+ticker);
+        var changeEl = document.getElementById('change_'+ticker);
+        if(priceEl) priceEl.textContent = '$' + price.toFixed(2);
+        if(changeEl){
+          var sign = changePct >= 0 ? '+' : '';
+          changeEl.textContent = sign + changePct.toFixed(2) + '%';
+          changeEl.className = 'tl-change ' + (changePct >= 0 ? 'pos' : 'neg');
+        }
+      })
+      .catch(function(){});
+  });
+}
+
+// ====================================================================
 // DATA LOADING
 // ====================================================================
 function getDate(){ return document.getElementById('dateInput').value; }
 function getDays(){ return INTERVAL_DAYS[_candleInterval] || 10; }
 function getMinNotional(){ return parseFloat(document.getElementById('minNotional').value) || 500000; }
 function getMinPercentile(){ return parseInt(document.getElementById('minPercentile').value) || 0; }
-function getAllTickers(){ return TICKERS.map(function(t){return t.ticker;}); }
 
-var _allSweeps = [];  // unfiltered sweeps from API
-var _loading = false;
+function getSweepTickers(){
+  if(_mode === 'single') return [_activeTicker];
+  // Watchlist mode — return all overlay tickers if index, or just active ticker if flat
+  if(_overlayTickers.length > 0) return _overlayTickers.map(function(t){ return t.ticker; });
+  return [_activeTicker];
+}
 
 function loadAll(resetView){
   if(resetView) _initialLoad = true;
   fetchCandles();
-  fetchSweeps();
+  if(_sweepOverlayOn) fetchSweeps();
 }
 
 function fetchCandles(){
   var date = getDate();
   var days = getDays();
   _setLoading(true);
-  fetch('/api/0dte/candles?ticker='+REF_TICKER+'&date='+date+'&days='+days+'&interval='+_candleInterval)
+  fetch('/api/0dte/candles?ticker='+_activeTicker+'&date='+date+'&days='+days+'&interval='+_candleInterval)
     .then(function(r){return r.json();})
     .then(function(d){
       var newCandles = d.candles || [];
       if(newCandles.length === 0){ _setLoading(false); return; }
 
       if(_initialLoad || _candles.length === 0){
-        // First load or empty: full setData + fit
         _candles = newCandles;
         _candleSeries.setData(_candles);
         _chart.timeScale().fitContent();
         _initialLoad = false;
       } else {
-        // Live update: merge new/updated candles without resetting viewport
         var oldLast = _candles.length > 0 ? _candles[_candles.length - 1].time : 0;
         var updated = false;
         newCandles.forEach(function(c){
           if(c.time > oldLast){
-            // Brand new candle
             _candleSeries.update(c);
             _candles.push(c);
             updated = true;
           } else if(c.time === oldLast){
-            // Update the current (last) candle in-place
             _candleSeries.update(c);
             _candles[_candles.length - 1] = c;
             updated = true;
           }
         });
-        // If the server returned a completely different range (e.g. date change), do full reset
         if(!updated && newCandles.length > 0 && newCandles[0].time !== (_candles[0] || {}).time){
           _candles = newCandles;
           _candleSeries.setData(_candles);
@@ -413,14 +617,13 @@ function fetchCandles(){
 }
 
 function fetchSweeps(){
+  if(!_sweepOverlayOn) return;
   var date = getDate();
   var days = getDays();
-  // Always fetch ALL tickers + all sweeps — filtering is client-side
-  var tickers = getAllTickers();
-  var minN = 0;
+  var tickers = getSweepTickers();
 
   _setLoading(true);
-  fetch('/api/0dte/sweeps?tickers='+tickers.join(',')+'&date='+date+'&days='+days+'&min_notional='+minN)
+  fetch('/api/0dte/sweeps?tickers='+tickers.join(',')+'&date='+date+'&days='+days+'&min_notional=0')
     .then(function(r){return r.json();})
     .then(function(d){
       _allSweeps = d.sweeps || [];
@@ -433,9 +636,10 @@ function fetchSweeps(){
 function applyClientFilter(){
   var notionalOn = document.getElementById('fgNotional').classList.contains('on');
   var pctOn = document.getElementById('fgPercentile').classList.contains('on');
+  var minN = getMinNotional();
   var minPct = getMinPercentile();
   _sweeps = _allSweeps.filter(function(s){
-    if(notionalOn && s.notional < getMinNotional()) return false;
+    if(notionalOn && s.notional < minN) return false;
     if(pctOn && s.percentile < minPct) return false;
     return true;
   });
@@ -446,31 +650,41 @@ function applyClientFilter(){
 
 function _setLoading(on){
   _loading = on;
-  var el = document.getElementById('dateInput');
-  el.style.borderColor = on ? '#f59e0b' : '#2a2a3a';
+  document.getElementById('dateInput').style.borderColor = on ? '#f59e0b' : '#2a2a3a';
 }
 
 // ====================================================================
 // BUBBLE DRAWING (Canvas overlay)
 // ====================================================================
 function drawBubbles(){
-  if(!_ctx || !_chart || !_candleSeries) return;
+  if(!_ctx || !_chart || !_candleSeries || !_sweepOverlayOn) {
+    if(_ctx) _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
+    return;
+  }
   _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
 
+  // Build active ticker color lookup
   var activeTickers = {};
-  TICKERS.forEach(function(t){ if(t.on) activeTickers[t.ticker] = t; });
+  if(_mode === 'single'){
+    // Single mode — use a default color for the active ticker
+    activeTickers[_activeTicker] = {color: 'rgba(59,130,246,0.55)', stroke: '#3b82f6'};
+  } else {
+    // Watchlist mode — use overlay tickers
+    _overlayTickers.forEach(function(t){ if(t.on) activeTickers[t.ticker] = t; });
+    // Also check flat watchlist tickers
+    if(_overlayTickers.length === 0 && _activeWatchlist){
+      var cfg = WATCHLIST_CONFIG[_activeWatchlist];
+      if(cfg && cfg.tickers){
+        cfg.tickers.forEach(function(t){ if(t.ticker === _activeTicker) activeTickers[t.ticker] = t; });
+      }
+    }
+  }
 
   var ts = _chart.timeScale();
-
-  // Build candle close lookup: time -> close price (for mapping non-ref tickers to SPY axis)
   var candleCloseMap = {};
   _candles.forEach(function(c){ candleCloseMap[c.time] = c.close; });
-
-  // Build sorted candle time array for nearest-match lookup
-  // LC timeToCoordinate only works for exact candle timestamps
   var candleTimes = _candles.map(function(c){ return c.time; });
 
-  // Binary search: find nearest candle time for a given unix timestamp
   function nearestCandleTime(t){
     if(candleTimes.length === 0) return null;
     var lo = 0, hi = candleTimes.length - 1;
@@ -479,7 +693,6 @@ function drawBubbles(){
       if(candleTimes[mid] < t) lo = mid + 1;
       else hi = mid;
     }
-    // Check both lo and lo-1 for closest
     var best = candleTimes[lo];
     if(lo > 0 && Math.abs(candleTimes[lo-1] - t) < Math.abs(best - t)){
       best = candleTimes[lo-1];
@@ -487,38 +700,38 @@ function drawBubbles(){
     return best;
   }
 
+  // Determine if we need ref-ticker price snapping
+  var refTicker = null;
+  if(_mode === 'watchlist' && _activeWatchlist){
+    var wCfg = WATCHLIST_CONFIG[_activeWatchlist];
+    if(wCfg && wCfg.ref) refTicker = wCfg.ref;
+  }
+
   _sweeps.forEach(function(s){
     var tConf = activeTickers[s.ticker];
     if(!tConf) return;
 
-    // Find nearest candle time for this sweep
     var candleT = nearestCandleTime(s.time_unix);
     if(candleT === null) return;
 
-    // Map time to x coordinate using matched candle time
     var x = ts.timeToCoordinate(candleT);
     if(x === null || x < 0 || x > _canvas.width) return;
 
-    // For non-ref tickers, place bubble at SPY's price at this timestamp
-    // (they track the same index, so the Y position = where SPY was trading)
+    // Price mapping: single mode or same-as-ref → use sweep price. Otherwise snap to ref candle close.
     var plotPrice;
-    if(s.ticker === REF_TICKER){
+    if(_mode === 'single' || !refTicker || s.ticker === refTicker){
       plotPrice = s.price;
     } else {
       plotPrice = candleCloseMap[candleT];
-      if(!plotPrice) return; // no matching SPY candle
+      if(!plotPrice) return;
     }
 
-    // Map price to y coordinate
     var y = _candleSeries.priceToCoordinate(plotPrice);
     if(y === null || y < 0 || y > _canvas.height) return;
 
-    // Radius: exponential curve so low percentiles are tiny, high are big
-    // p^2.5 curve: 20th→~4px, 50th→~9px, 80th→~19px, 99th→~30px
     var p = s.percentile / 100;
     var radius = 3 + Math.pow(p, 2.5) * 27;
 
-    // Draw bubble
     _ctx.beginPath();
     _ctx.arc(x, y, radius, 0, Math.PI * 2);
     _ctx.fillStyle = tConf.color;
@@ -538,16 +751,30 @@ function onMouseMove(e){
   var my = e.clientY - rect.top;
   var tooltip = document.getElementById('tooltipDiv');
 
-  // Find nearest bubble
-  var closest = null;
-  var closestDist = 30; // max hover distance
-  var activeTickers = {};
-  TICKERS.forEach(function(t){ if(t.on) activeTickers[t.ticker] = t; });
-  var ts = _chart.timeScale();
+  if(!_sweepOverlayOn || _sweeps.length === 0){
+    tooltip.style.display = 'none';
+    return;
+  }
 
+  var activeTickers = {};
+  if(_mode === 'single'){
+    activeTickers[_activeTicker] = true;
+  } else {
+    _overlayTickers.forEach(function(t){ if(t.on) activeTickers[t.ticker] = true; });
+    if(Object.keys(activeTickers).length === 0) activeTickers[_activeTicker] = true;
+  }
+
+  var ts = _chart.timeScale();
   var candleTimes2 = _candles.map(function(c){ return c.time; });
   var candleCloseMap2 = {};
   _candles.forEach(function(c){ candleCloseMap2[c.time] = c.close; });
+
+  var refTicker = null;
+  if(_mode === 'watchlist' && _activeWatchlist){
+    var wCfg = WATCHLIST_CONFIG[_activeWatchlist];
+    if(wCfg && wCfg.ref) refTicker = wCfg.ref;
+  }
+
   function nearest2(t){
     if(candleTimes2.length === 0) return null;
     var lo = 0, hi = candleTimes2.length - 1;
@@ -557,6 +784,9 @@ function onMouseMove(e){
     return best;
   }
 
+  var closest = null;
+  var closestDist = 30;
+
   for(var i = 0; i < _sweeps.length; i++){
     var s = _sweeps[i];
     if(!activeTickers[s.ticker]) continue;
@@ -564,7 +794,12 @@ function onMouseMove(e){
     if(ct === null) continue;
     var x = ts.timeToCoordinate(ct);
     if(x === null) continue;
-    var plotPrice2 = (s.ticker === REF_TICKER) ? s.price : candleCloseMap2[ct];
+    var plotPrice2;
+    if(_mode === 'single' || !refTicker || s.ticker === refTicker){
+      plotPrice2 = s.price;
+    } else {
+      plotPrice2 = candleCloseMap2[ct];
+    }
     if(!plotPrice2) continue;
     var y = _candleSeries.priceToCoordinate(plotPrice2);
     if(y === null) continue;
@@ -592,8 +827,7 @@ function onMouseMove(e){
 // ====================================================================
 function onTickerToggle(el){
   var ticker = el.getAttribute('data-ticker');
-  TICKERS.forEach(function(t){ if(t.ticker === ticker) t.on = el.checked; });
-  // Update group checkbox state (indeterminate if mixed)
+  _overlayTickers.forEach(function(t){ if(t.ticker === ticker) t.on = el.checked; });
   syncGroupCheckboxes();
   drawBubbles();
   updateStats();
@@ -601,10 +835,9 @@ function onTickerToggle(el){
 }
 
 function onGroupToggle(gi, el){
-  var g = TICKER_GROUPS[gi];
+  var g = _overlayGroups[gi];
   g.on = el.checked;
   g.tickers.forEach(function(t){ t.on = el.checked; });
-  // Update individual checkboxes in DOM
   var rows = document.querySelectorAll('[data-group="'+gi+'"] .ticker-check');
   rows.forEach(function(cb){ cb.checked = el.checked; });
   drawBubbles();
@@ -614,7 +847,8 @@ function onGroupToggle(gi, el){
 
 function syncGroupCheckboxes(){
   var hdrs = document.querySelectorAll('.ticker-group-hdr input');
-  TICKER_GROUPS.forEach(function(g, gi){
+  _overlayGroups.forEach(function(g, gi){
+    if(!hdrs[gi]) return;
     var allOn = g.tickers.every(function(t){ return t.on; });
     var anyOn = g.tickers.some(function(t){ return t.on; });
     hdrs[gi].checked = allOn;
@@ -627,7 +861,6 @@ function togglePanel(){
   var btn = document.getElementById('collapseBtn');
   panel.classList.toggle('collapsed');
   btn.innerHTML = panel.classList.contains('collapsed') ? '&#x25B6;' : '&#x25C0;';
-  // Resize chart after transition
   setTimeout(function(){
     var container = document.getElementById('chartContainer');
     _chart.resize(container.clientWidth, container.clientHeight);
@@ -636,51 +869,21 @@ function togglePanel(){
   }, 250);
 }
 
-function setIndex(idx, btn){
-  if(idx === _activeIndex) return;
-  _activeIndex = idx;
-  var btns = document.getElementById('indexTabs').querySelectorAll('.idx-tab');
-  btns.forEach(function(b){ b.classList.remove('active'); });
-  btn.classList.add('active');
-
-  // Swap ticker config
-  TICKER_GROUPS = INDEX_CONFIG[idx].groups;
-  TICKERS = [];
-  TICKER_GROUPS.forEach(function(g){ g.tickers.forEach(function(t){ t.group = g.name; TICKERS.push(t); }); });
-  REF_TICKER = INDEX_CONFIG[idx].ref;
-
-  // Rebuild left panel ticker list
-  var list = document.getElementById('tickerList');
-  list.innerHTML = '';
-  TICKER_GROUPS.forEach(function(g, gi){
-    var hdr = document.createElement('div');
-    hdr.className = 'ticker-group-hdr';
-    hdr.innerHTML = '<input type="checkbox" '+(g.on?'checked':'')+' onchange="onGroupToggle('+gi+',this)">'
-      + '<span>'+g.name+'</span>';
-    list.appendChild(hdr);
-    g.tickers.forEach(function(t){
-      var row = document.createElement('div');
-      row.className = 'ticker-row';
-      row.setAttribute('data-group', gi);
-      row.innerHTML = '<input type="checkbox" class="ticker-check" data-ticker="'+t.ticker+'" '+(t.on?'checked':'')+' onchange="onTickerToggle(this)">'
-        + '<div class="ticker-dot" style="background:'+t.stroke+';"></div>'
-        + '<span class="ticker-label">'+t.label+'</span>';
-      list.appendChild(row);
-    });
-  });
-
-  // Reload everything for new index
-  loadAll(true);
-}
-
 function setCandleInterval(mins, btn){
   if(_candleInterval === mins) return;
   _candleInterval = mins;
   var btns = document.getElementById('candleIntervalCtrl').querySelectorAll('button');
   btns.forEach(function(b){ b.classList.remove('active'); });
   btn.classList.add('active');
-  // Both candles and sweeps need refetch since lookback changes
   loadAll(true);
+}
+
+function _syncIntervalButtons(){
+  var btns = document.getElementById('candleIntervalCtrl').querySelectorAll('button');
+  var intervalMap = {'1m':1,'5m':5,'1h':60,'4h':240,'1D':1440,'2D':2880,'W':10080,'M':43200,'3M':129600};
+  btns.forEach(function(b){
+    b.classList.toggle('active', intervalMap[b.textContent] === _candleInterval);
+  });
 }
 
 function toggleFilter(which){
@@ -697,10 +900,25 @@ function toggleFilter(which){
   applyClientFilter();
 }
 
+function toggleSweepOverlay(){
+  _sweepOverlayOn = !_sweepOverlayOn;
+  var btn = document.getElementById('btnSweepToggle');
+  btn.classList.toggle('active', _sweepOverlayOn);
+  document.getElementById('sweepControls').classList.toggle('off', !_sweepOverlayOn);
+  if(_sweepOverlayOn){
+    fetchSweeps();
+  } else {
+    _sweeps = [];
+    _allSweeps = [];
+    drawBubbles();
+    updateStats();
+    updateFeed();
+  }
+}
+
 function toggleAutoRefresh(){
   _autoRefresh = !_autoRefresh;
   var btn = document.getElementById('btnAutoRefresh');
-  btn.textContent = 'Live';
   btn.classList.toggle('active', _autoRefresh);
   _startStopTimers();
 }
@@ -711,13 +929,11 @@ function _startStopTimers(){
   if(_autoRefresh){
     _sweepTimer = setInterval(fetchSweeps, 15000);
     _candleTimer = setInterval(fetchCandles, 60000);
-    // Immediate refresh when resuming
     fetchCandles();
     fetchSweeps();
   }
 }
 
-// Re-start live timers when tab becomes visible again (browser throttles background tabs)
 document.addEventListener('visibilitychange', function(){
   if(!document.hidden && _autoRefresh){
     _startStopTimers();
@@ -729,10 +945,13 @@ document.addEventListener('visibilitychange', function(){
 // ====================================================================
 function updateStats(){
   var activeTickers = {};
-  TICKERS.forEach(function(t){ if(t.on) activeTickers[t.ticker] = true; });
-  var total = 0;
-  var totalN = 0;
-  var largest = 0;
+  if(_mode === 'single'){
+    activeTickers[_activeTicker] = true;
+  } else {
+    _overlayTickers.forEach(function(t){ if(t.on) activeTickers[t.ticker] = true; });
+    if(Object.keys(activeTickers).length === 0) activeTickers[_activeTicker] = true;
+  }
+  var total = 0, totalN = 0, largest = 0;
   _sweeps.forEach(function(s){
     if(!activeTickers[s.ticker]) return;
     total++;
@@ -747,8 +966,12 @@ function updateStats(){
 function updateFeed(){
   var feed = document.getElementById('sweepFeed');
   var activeTickers = {};
-  TICKERS.forEach(function(t){ if(t.on) activeTickers[t.ticker] = true; });
-  // Show last 50 visible sweeps, most recent first
+  if(_mode === 'single'){
+    activeTickers[_activeTicker] = true;
+  } else {
+    _overlayTickers.forEach(function(t){ if(t.on) activeTickers[t.ticker] = true; });
+    if(Object.keys(activeTickers).length === 0) activeTickers[_activeTicker] = true;
+  }
   var recent = _sweeps.filter(function(s){ return activeTickers[s.ticker]; }).slice(-50).reverse();
   if(recent.length === 0){
     feed.innerHTML = '<div style="color:#555;font-size:11px;">No sweeps found</div>';
@@ -756,8 +979,8 @@ function updateFeed(){
   }
   var html = '';
   recent.forEach(function(s){
-    var tConf = TICKERS.find(function(t){return t.ticker === s.ticker;});
-    var color = tConf ? tConf.stroke : '#888';
+    var tConf = _overlayTickers.find(function(t){return t.ticker === s.ticker;});
+    var color = tConf ? tConf.stroke : '#3b82f6';
     html += '<div class="feed-item">'
       + '<span class="feed-time">' + s.time + '</span>'
       + '<span class="feed-ticker" style="color:'+color+'">' + s.ticker + '</span>'
@@ -781,7 +1004,7 @@ function fmt$(v){
 // ====================================================================
 // PRESETS (localStorage)
 // ====================================================================
-var PRESET_KEY = '0dte_presets';
+var PRESET_KEY = '0dte_presets_v2';
 
 function _getPresets(){
   try { return JSON.parse(localStorage.getItem(PRESET_KEY)) || {}; } catch(e){ return {}; }
@@ -803,24 +1026,29 @@ function savePreset(){
   var name = prompt('Preset name:');
   if(!name || !name.trim()) return;
   name = name.trim();
-  // Capture current state
   var cfg = {
-    index: _activeIndex,
+    mode: _mode,
+    ticker: _activeTicker,
+    watchlist: _activeWatchlist,
     interval: _candleInterval,
+    sweepOverlayOn: _sweepOverlayOn,
     notionalOn: document.getElementById('fgNotional').classList.contains('on'),
     percentileOn: document.getElementById('fgPercentile').classList.contains('on'),
     minNotional: parseFloat(document.getElementById('minNotional').value) || 500000,
     minPercentile: parseInt(document.getElementById('minPercentile').value) || 85,
     tickers: {}
   };
-  // Save per-index ticker on/off state
-  Object.keys(INDEX_CONFIG).forEach(function(idx){
-    cfg.tickers[idx] = {};
-    INDEX_CONFIG[idx].groups.forEach(function(g){
-      g.tickers.forEach(function(t){
-        cfg.tickers[idx][t.ticker] = t.on;
+  // Save per-watchlist ticker on/off state for index watchlists
+  Object.keys(WATCHLIST_CONFIG).forEach(function(key){
+    var wCfg = WATCHLIST_CONFIG[key];
+    if(wCfg.groups){
+      cfg.tickers[key] = {};
+      wCfg.groups.forEach(function(g){
+        g.tickers.forEach(function(t){
+          cfg.tickers[key][t.ticker] = t.on;
+        });
       });
-    });
+    }
   });
   var presets = _getPresets();
   presets[name] = cfg;
@@ -847,26 +1075,27 @@ function loadPreset(){
   document.getElementById('minNotional').value = cfg.minNotional || 500000;
   document.getElementById('minPercentile').value = cfg.minPercentile || 85;
 
-  // Restore candle interval
-  if(cfg.interval && cfg.interval !== _candleInterval){
+  // Restore sweep overlay
+  _sweepOverlayOn = cfg.sweepOverlayOn !== false;
+  document.getElementById('btnSweepToggle').classList.toggle('active', _sweepOverlayOn);
+  document.getElementById('sweepControls').classList.toggle('off', !_sweepOverlayOn);
+
+  // Restore interval
+  if(cfg.interval){
     _candleInterval = cfg.interval;
-    var btns = document.getElementById('candleIntervalCtrl').querySelectorAll('button');
-    btns.forEach(function(b){ b.classList.remove('active'); });
-    btns.forEach(function(b){
-      var mins = {'1m':1,'5m':5,'1h':60,'1D':1440}[b.textContent];
-      if(mins === _candleInterval) b.classList.add('active');
-    });
+    _syncIntervalButtons();
   }
 
-  // Restore per-index ticker states
+  // Restore per-watchlist ticker states
   if(cfg.tickers){
-    Object.keys(INDEX_CONFIG).forEach(function(idx){
-      if(!cfg.tickers[idx]) return;
-      INDEX_CONFIG[idx].groups.forEach(function(g){
+    Object.keys(WATCHLIST_CONFIG).forEach(function(key){
+      var wCfg = WATCHLIST_CONFIG[key];
+      if(!wCfg.groups || !cfg.tickers[key]) return;
+      wCfg.groups.forEach(function(g){
         var allOn = true;
         g.tickers.forEach(function(t){
-          if(cfg.tickers[idx].hasOwnProperty(t.ticker)){
-            t.on = cfg.tickers[idx][t.ticker];
+          if(cfg.tickers[key].hasOwnProperty(t.ticker)){
+            t.on = cfg.tickers[key][t.ticker];
           }
           if(!t.on) allOn = false;
         });
@@ -875,32 +1104,18 @@ function loadPreset(){
     });
   }
 
-  // Switch index if different
-  if(cfg.index && cfg.index !== _activeIndex){
-    var idxBtn = document.querySelector('#indexTabs .idx-tab[onclick*="'+cfg.index+'"]');
-    if(idxBtn) setIndex(cfg.index, idxBtn);
-    else { _activeIndex = cfg.index; loadAll(); }
-  } else {
-    // Just rebuild left panel + reload
-    var list = document.getElementById('tickerList');
-    list.innerHTML = '';
-    TICKER_GROUPS.forEach(function(g, gi){
-      var hdr = document.createElement('div');
-      hdr.className = 'ticker-group-hdr';
-      hdr.innerHTML = '<input type="checkbox" '+(g.on?'checked':'')+' onchange="onGroupToggle('+gi+',this)">'
-        + '<span>'+g.name+'</span>';
-      list.appendChild(hdr);
-      g.tickers.forEach(function(t){
-        var row = document.createElement('div');
-        row.className = 'ticker-row';
-        row.setAttribute('data-group', gi);
-        row.innerHTML = '<input type="checkbox" class="ticker-check" data-ticker="'+t.ticker+'" '+(t.on?'checked':'')+' onchange="onTickerToggle(this)">'
-          + '<div class="ticker-dot" style="background:'+t.stroke+';"></div>'
-          + '<span class="ticker-label">'+t.label+'</span>';
-        list.appendChild(row);
-      });
-    });
-    applyClientFilter();
+  // Restore mode
+  if(cfg.mode === 'single' && cfg.ticker){
+    _mode = 'single';
+    _activeWatchlist = null;
+    document.getElementById('watchlistSelect').value = '';
+    setActiveTicker(cfg.ticker, 'input');
+  } else if(cfg.watchlist){
+    _mode = 'watchlist';
+    _activeWatchlist = cfg.watchlist;
+    document.getElementById('watchlistSelect').value = cfg.watchlist;
+    buildWatchlistView();
+    loadAll(true);
   }
 }
 
@@ -915,7 +1130,6 @@ function deletePreset(){
   _populatePresetSelect();
 }
 
-// Init presets dropdown on load
 _populatePresetSelect();
 </script>
 </body>
