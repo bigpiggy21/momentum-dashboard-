@@ -61,18 +61,22 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .tl-change.pos{color:#10b981;}
 .tl-change.neg{color:#ef4444;}
 
-/* Overlay checkboxes section */
-.overlay-section{margin-top:8px;margin-bottom:8px;}
-.ticker-group-hdr{display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer;margin-top:6px;}
+/* Overlay checkboxes section — two-column layout */
+.overlay-section{margin-top:8px;margin-bottom:8px;max-height:200px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;}
+.overlay-section::-webkit-scrollbar{width:6px;}
+.overlay-section::-webkit-scrollbar-track{background:#0a0a12;}
+.overlay-section::-webkit-scrollbar-thumb{background:#333;border-radius:3px;}
+.overlay-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 8px;}
+.ticker-group-hdr{display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer;margin-top:6px;grid-column:1/-1;}
 .ticker-group-hdr:first-child{margin-top:0;}
 .ticker-group-hdr input{accent-color:#f59e0b;}
 .ticker-group-hdr span{font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;}
 .ticker-group-hdr:hover span{color:#ccc;}
-.ticker-row{display:flex;align-items:center;gap:8px;padding:4px 0 4px 8px;cursor:pointer;}
+.ticker-row{display:flex;align-items:center;gap:6px;padding:3px 0 3px 4px;cursor:pointer;font-size:11px;}
 .ticker-row:hover{background:#14141e;border-radius:4px;}
-.ticker-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
-.ticker-label{font-size:12px;font-weight:600;}
-.ticker-check{accent-color:#f59e0b;}
+.ticker-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.ticker-label{font-size:11px;font-weight:600;}
+.ticker-check{accent-color:#f59e0b;width:13px;height:13px;}
 .stat-row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px;}
 .stat-val{color:#f59e0b;font-weight:600;}
 
@@ -155,8 +159,8 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
     </div>
     <div class="overlay-section" id="overlaySection" style="display:none;">
       <div class="panel-label">Overlay Tickers</div>
-      <div id="overlayList">
-        <!-- Group checkboxes for index watchlists -->
+      <div class="overlay-grid" id="overlayList">
+        <!-- Group checkboxes populated by JS -->
       </div>
     </div>
     <div class="panel-section">
@@ -184,78 +188,183 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 
 <script>
 // ====================================================================
-// WATCHLIST CONFIG
+// WATCHLIST & OVERLAY CONFIG
 // ====================================================================
-var WATCHLIST_CONFIG = {
-  SPX: {
-    ref: 'SPY',
-    groups: [
-      {name: 'Underlying', on: true, tickers: [
-        {ticker: 'SPY',  color: 'rgba(59,130,246,0.55)',  stroke: '#3b82f6', label: 'SPY',  on: true, isRef: true},
-        {ticker: 'VOO',  color: 'rgba(234,179,8,0.55)',   stroke: '#eab308', label: 'VOO',  on: true},
-        {ticker: 'IVV',  color: 'rgba(16,185,129,0.55)',  stroke: '#10b981', label: 'IVV',  on: true},
-        {ticker: 'SPLG', color: 'rgba(139,92,246,0.55)',  stroke: '#8b5cf6', label: 'SPLG', on: true},
-        {ticker: 'RSP',  color: 'rgba(6,182,212,0.55)',   stroke: '#06b6d4', label: 'RSP',  on: true},
-      ]},
-      {name: 'Leveraged', on: true, tickers: [
-        {ticker: 'UPRO', color: 'rgba(239,68,68,0.55)',   stroke: '#ef4444', label: 'UPRO', on: true},
-        {ticker: 'SPXL', color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'SPXL', on: true},
-        {ticker: 'SSO',  color: 'rgba(236,72,153,0.55)',  stroke: '#ec4899', label: 'SSO',  on: true},
-        {ticker: 'SDS',  color: 'rgba(220,38,38,0.55)',   stroke: '#dc2626', label: 'SDS',  on: true},
-        {ticker: 'SH',   color: 'rgba(107,114,128,0.55)', stroke: '#6b7280', label: 'SH',   on: true},
-        {ticker: 'SPDN', color: 'rgba(148,163,184,0.55)', stroke: '#94a3b8', label: 'SPDN', on: true},
-        {ticker: 'SPXS', color: 'rgba(156,163,175,0.55)', stroke: '#9ca3af', label: 'SPXS', on: true},
-        {ticker: 'SPXU', color: 'rgba(75,85,99,0.55)',    stroke: '#4b5563', label: 'SPXU', on: true},
-      ]},
-    ]
+// Color palette for auto-assigning overlay tickers
+var _COLORS = [
+  {c:'rgba(59,130,246,0.55)',s:'#3b82f6'},{c:'rgba(234,179,8,0.55)',s:'#eab308'},
+  {c:'rgba(16,185,129,0.55)',s:'#10b981'},{c:'rgba(239,68,68,0.55)',s:'#ef4444'},
+  {c:'rgba(139,92,246,0.55)',s:'#8b5cf6'},{c:'rgba(249,115,22,0.55)',s:'#f97316'},
+  {c:'rgba(236,72,153,0.55)',s:'#ec4899'},{c:'rgba(6,182,212,0.55)',s:'#06b6d4'},
+  {c:'rgba(168,85,247,0.55)',s:'#a855f7'},{c:'rgba(20,184,166,0.55)',s:'#14b8a6'},
+  {c:'rgba(220,38,38,0.55)',s:'#dc2626'},{c:'rgba(107,114,128,0.55)',s:'#6b7280'},
+  {c:'rgba(148,163,184,0.55)',s:'#94a3b8'},{c:'rgba(156,163,175,0.55)',s:'#9ca3af'},
+  {c:'rgba(75,85,99,0.55)',s:'#4b5563'},
+];
+
+// Priority watchlist — the ~80 parent tickers (from priority_watchlist.py)
+var WATCHLISTS = {
+  Priority: [
+    // S&P 500
+    {ticker:'SPY', label:'SPY', group:'S&P 500'},
+    // NDX 100
+    {ticker:'QQQ', label:'QQQ', group:'NDX 100'},
+    // Sectors
+    {ticker:'TLT', label:'TLT', group:'Sectors'},
+    {ticker:'IEF', label:'IEF', group:'Sectors'},
+    {ticker:'SMH', label:'SMH', group:'Sectors'},
+    {ticker:'XLE', label:'XLE', group:'Sectors'},
+    {ticker:'XLF', label:'XLF', group:'Sectors'},
+    // Semis
+    {ticker:'NVDA', label:'NVDA', group:'Semis'},
+    {ticker:'AVGO', label:'AVGO', group:'Semis'},
+    {ticker:'TSM',  label:'TSM',  group:'Semis'},
+    {ticker:'AMD',  label:'AMD',  group:'Semis'},
+    {ticker:'MU',   label:'MU',   group:'Semis'},
+    {ticker:'SMCI', label:'SMCI', group:'Semis'},
+    {ticker:'ASML', label:'ASML', group:'Semis'},
+    {ticker:'INTC', label:'INTC', group:'Semis'},
+    // Mags
+    {ticker:'AAPL', label:'AAPL', group:'Mags'},
+    {ticker:'AMZN', label:'AMZN', group:'Mags'},
+    {ticker:'GOOG', label:'GOOG', group:'Mags'},
+    {ticker:'NFLX', label:'NFLX', group:'Mags'},
+    {ticker:'MSFT', label:'MSFT', group:'Mags'},
+    {ticker:'META', label:'META', group:'Mags'},
+    {ticker:'TSLA', label:'TSLA', group:'Mags'},
+    {ticker:'PLTR', label:'PLTR', group:'Mags'},
+    {ticker:'ARKK', label:'ARKK', group:'Mags'},
+    // Crypto
+    {ticker:'COIN', label:'COIN', group:'Crypto'},
+    {ticker:'MSTR', label:'MSTR', group:'Crypto'},
+    {ticker:'XYZ',  label:'XYZ',  group:'Crypto'},
+    // Tech and Other
+    {ticker:'ABNB', label:'ABNB', group:'Tech'},
+    {ticker:'BA',   label:'BA',   group:'Tech'},
+    {ticker:'CRM',  label:'CRM',  group:'Tech'},
+    {ticker:'DIS',  label:'DIS',  group:'Tech'},
+    {ticker:'SPOT', label:'SPOT', group:'Tech'},
+    {ticker:'PYPL', label:'PYPL', group:'Tech'},
+    {ticker:'RACE', label:'RACE', group:'Tech'},
+    {ticker:'UBER', label:'UBER', group:'Tech'},
+    // Healthcare
+    {ticker:'LLY',  label:'LLY',  group:'Healthcare'},
+    {ticker:'HIMS', label:'HIMS', group:'Healthcare'},
+    {ticker:'MRNA', label:'MRNA', group:'Healthcare'},
+    {ticker:'UNH',  label:'UNH',  group:'Healthcare'},
+    // Banks
+    {ticker:'BCS',  label:'BCS',  group:'Banks'},
+    {ticker:'BRK.B',label:'BRK.B',group:'Banks'},
+    {ticker:'FUTU', label:'FUTU', group:'Banks'},
+    {ticker:'GS',   label:'GS',   group:'Banks'},
+    {ticker:'HOOD', label:'HOOD', group:'Banks'},
+    {ticker:'LYG',  label:'LYG',  group:'Banks'},
+    {ticker:'UBS',  label:'UBS',  group:'Banks'},
+    {ticker:'V',    label:'V',    group:'Banks'},
+    // EM/DMs
+    {ticker:'EWU', label:'UKX',  group:'EM/DMs'},
+    {ticker:'EWQ', label:'CAC40',group:'EM/DMs'},
+    {ticker:'EWG', label:'DAX',  group:'EM/DMs'},
+    {ticker:'EWI', label:'IT40', group:'EM/DMs'},
+    {ticker:'VT',  label:'VT',   group:'EM/DMs'},
+    // Bonds
+    {ticker:'SHY', label:'SHY', group:'Bonds'},
+    {ticker:'HYG', label:'HYG', group:'Bonds'},
+    // Asia
+    {ticker:'KWEB', label:'KWEB', group:'Asia'},
+    {ticker:'EWT',  label:'EWT',  group:'Asia'},
+    {ticker:'EWJ',  label:'EWJ',  group:'Asia'},
+    {ticker:'EWY',  label:'EWY',  group:'Asia'},
+    {ticker:'BABA', label:'BABA', group:'Asia'},
+    {ticker:'JD',   label:'JD',   group:'Asia'},
+    {ticker:'BIDU', label:'BIDU', group:'Asia'},
+    {ticker:'NIO',  label:'NIO',  group:'Asia'},
+    // EU
+    {ticker:'AZN',  label:'AZN',  group:'EU'},
+    {ticker:'DEO',  label:'DEO',  group:'EU'},
+    {ticker:'VOD',  label:'VOD',  group:'EU'},
+    // Commodities
+    {ticker:'GLD',  label:'GOLD',   group:'Commodities'},
+    {ticker:'SLV',  label:'SILVER', group:'Commodities'},
+    {ticker:'GDX',  label:'GDX',    group:'Commodities'},
+    {ticker:'CPER', label:'COPPER', group:'Commodities'},
+    {ticker:'PALL', label:'PALL',   group:'Commodities'},
+    {ticker:'CORN', label:'CORN',   group:'Commodities'},
+    {ticker:'WEAT', label:'WEAT',   group:'Commodities'},
+    {ticker:'CANE', label:'CANE',   group:'Commodities'},
+    // Energy
+    {ticker:'USO',  label:'USO',  group:'Energy'},
+    {ticker:'UNG',  label:'UNG',  group:'Energy'},
+    {ticker:'SHEL', label:'SHEL', group:'Energy'},
+    {ticker:'RIO',  label:'RIO',  group:'Energy'},
+    {ticker:'BP',   label:'BP',   group:'Energy'},
+    {ticker:'XOM',  label:'XOM',  group:'Energy'},
+  ]
+};
+
+// Overlay map: parent ticker → {underlying: [...], leveraged: [...]}
+// Each overlay ticker shows as a checkbox when that parent is selected
+var OVERLAY_MAP = {
+  SPY: {
+    underlying: ['VOO','IVV','SPLG','RSP'],
+    leveraged:  ['SDS','SPDN','SPUU','SPXL','SPXS','SPXU','SPYQ','SSO','UPRO'],
   },
-  NDX: {
-    ref: 'QQQ',
-    groups: [
-      {name: 'Underlying', on: true, tickers: [
-        {ticker: 'QQQ',  color: 'rgba(59,130,246,0.55)',  stroke: '#3b82f6', label: 'QQQ',  on: true, isRef: true},
-        {ticker: 'QQQM', color: 'rgba(234,179,8,0.55)',   stroke: '#eab308', label: 'QQQM', on: true},
-      ]},
-      {name: 'Leveraged', on: true, tickers: [
-        {ticker: 'TQQQ', color: 'rgba(239,68,68,0.55)',   stroke: '#ef4444', label: 'TQQQ', on: true},
-        {ticker: 'QLD',  color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'QLD',  on: true},
-        {ticker: 'SQQQ', color: 'rgba(107,114,128,0.55)', stroke: '#6b7280', label: 'SQQQ', on: true},
-        {ticker: 'PSQ',  color: 'rgba(156,163,175,0.55)', stroke: '#9ca3af', label: 'PSQ',  on: true},
-        {ticker: 'QID',  color: 'rgba(75,85,99,0.55)',    stroke: '#4b5563', label: 'QID',  on: true},
-      ]},
-    ]
+  QQQ: {
+    underlying: ['QQQM'],
+    leveraged:  ['MQQQ','QID','QLD','QQDN','QQQP','QQUP','SQQQ','TQQQ'],
   },
-  RTY: {
-    ref: 'IWM',
-    groups: [
-      {name: 'Underlying', on: true, tickers: [
-        {ticker: 'IWM',  color: 'rgba(59,130,246,0.55)',  stroke: '#3b82f6', label: 'IWM',  on: true, isRef: true},
-        {ticker: 'VTWO', color: 'rgba(234,179,8,0.55)',   stroke: '#eab308', label: 'VTWO', on: true},
-      ]},
-      {name: 'Leveraged', on: true, tickers: [
-        {ticker: 'TNA',  color: 'rgba(239,68,68,0.55)',   stroke: '#ef4444', label: 'TNA',  on: true},
-        {ticker: 'UWM',  color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'UWM',  on: true},
-        {ticker: 'TZA',  color: 'rgba(107,114,128,0.55)', stroke: '#6b7280', label: 'TZA',  on: true},
-        {ticker: 'RWM',  color: 'rgba(156,163,175,0.55)', stroke: '#9ca3af', label: 'RWM',  on: true},
-        {ticker: 'SRTY', color: 'rgba(75,85,99,0.55)',    stroke: '#4b5563', label: 'SRTY', on: true},
-      ]},
-    ]
-  },
-  Priority: {
-    ref: null,
-    tickers: [
-      {ticker: 'AAPL', color: 'rgba(59,130,246,0.55)',  stroke: '#3b82f6', label: 'AAPL', on: true},
-      {ticker: 'NVDA', color: 'rgba(16,185,129,0.55)',  stroke: '#10b981', label: 'NVDA', on: true},
-      {ticker: 'TSLA', color: 'rgba(239,68,68,0.55)',   stroke: '#ef4444', label: 'TSLA', on: true},
-      {ticker: 'AMZN', color: 'rgba(234,179,8,0.55)',   stroke: '#eab308', label: 'AMZN', on: true},
-      {ticker: 'MSFT', color: 'rgba(139,92,246,0.55)',  stroke: '#8b5cf6', label: 'MSFT', on: true},
-      {ticker: 'META', color: 'rgba(6,182,212,0.55)',   stroke: '#06b6d4', label: 'META', on: true},
-      {ticker: 'GOOG', color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'GOOG', on: true},
-      {ticker: 'AMD',  color: 'rgba(236,72,153,0.55)',  stroke: '#ec4899', label: 'AMD',  on: true},
-      {ticker: 'UBER', color: 'rgba(168,85,247,0.55)',  stroke: '#a855f7', label: 'UBER', on: true},
-      {ticker: 'COIN', color: 'rgba(20,184,166,0.55)',  stroke: '#14b8a6', label: 'COIN', on: true},
-    ]
-  }
+  TLT: { leveraged: ['TBT','TMF','TMV','TTT','UBT'] },
+  IEF: { leveraged: ['PST','TYD','TYO','UST'] },
+  SMH: { leveraged: ['SOXL','SOXS','SSG','TSXD','TSXU','USD'] },
+  XLE: { leveraged: ['DRIP','ERX','ERY','GUSH'] },
+  XLF: { leveraged: ['FAS','FAZ','SKF','UYG'] },
+  NVDA:{ leveraged: ['NVD','NVDD','NVDG','NVDL','NVDO','NVDQ','NVDS','NVDU','NVDX'] },
+  AVGO:{ leveraged: ['AVGG','AVGU','AVGX','AVL','AVS'] },
+  TSM: { leveraged: ['TSMG','TSMU','TSMX','TSMZ'] },
+  AMD: { leveraged: ['AMDD','AMDG','AMDL','AMUU'] },
+  MU:  { leveraged: ['MUD','MULL','MUU'] },
+  SMCI:{ leveraged: ['SMCL','SMCX','SMCZ'] },
+  ASML:{ leveraged: ['ASMG','ASMU'] },
+  INTC:{ leveraged: ['INTW','LINT'] },
+  AAPL:{ leveraged: ['AAPB','AAPD','AAPU','AAPX'] },
+  AMZN:{ leveraged: ['AMZD','AMZU','AMZZ'] },
+  GOOG:{ leveraged: ['GGLL','GGLS','GOOX','GOU'] },
+  NFLX:{ leveraged: ['NFLU','NFXL','NFXS'] },
+  MSFT:{ leveraged: ['MSFD','MSFL','MSFU','MSFX'] },
+  META:{ leveraged: ['FBL','METD','METU'] },
+  TSLA:{ leveraged: ['TSDD','TSL','TSLG','TSLL','TSLO','TSLQ','TSLR','TSLS','TSLT','TSLZ'] },
+  PLTR:{ leveraged: ['PLOO','PLTD','PLTG','PLTU','PLTZ','PTIR'] },
+  COIN:{ leveraged: ['COIG','COIO','CONI','CONL','CONX'] },
+  MSTR:{ leveraged: ['MSDD','MSOO','MST','MSTP','MSTU','MSTX','MSTZ','SMST'] },
+  XYZ: { leveraged: ['XYZG'] },
+  ABNB:{ leveraged: ['ABNG'] },
+  BA:  { leveraged: ['BOED','BOEG','BOEU'] },
+  CRM: { leveraged: ['CRMG'] },
+  SPOT:{ leveraged: ['SPOG'] },
+  PYPL:{ leveraged: ['PYPG'] },
+  UBER:{ leveraged: ['UBRL'] },
+  LLY: { leveraged: ['ELIL','ELIS'] },
+  HIMS:{ leveraged: ['HIMZ'] },
+  UNH: { leveraged: ['UNHG'] },
+  'BRK.B':{ leveraged: ['BRKD','BRKU'] },
+  FUTU:{ leveraged: ['FUTG'] },
+  HOOD:{ leveraged: ['HODU','HOOG','HOOX','ROBN'] },
+  KWEB:{ leveraged: ['CWEB'] },
+  EWJ: { leveraged: ['EWV','EZJ'] },
+  EWY: { leveraged: ['KORU'] },
+  BABA:{ leveraged: ['BABU','BABX','KBAB'] },
+  JD:  { leveraged: ['KJD'] },
+  BIDU:{ leveraged: ['BIDG','KBDU'] },
+  NIO: { leveraged: ['NIOG'] },
+  SLV: { leveraged: ['AGQ','ZSL'] },
+  GDX: { leveraged: ['DUST','JDST','JNUG','NUGT'] },
+  CPER:{ leveraged: ['COPZ','CPXR'] },
+  CORN:{ leveraged: ['CXRN'] },
+  WEAT:{ leveraged: ['WXET'] },
+  USO: { leveraged: ['SCO','UCO'] },
+  UNG: { leveraged: ['BOIL','KOLD'] },
+  XOM: { leveraged: ['XOMX','XOMZ'] },
+  HYG: { leveraged: ['UJB'] },
 };
 
 // ====================================================================
@@ -263,11 +372,11 @@ var WATCHLIST_CONFIG = {
 // ====================================================================
 var _mode = 'watchlist';          // 'single' | 'watchlist'
 var _activeTicker = 'SPY';       // ticker whose candles are displayed
-var _activeWatchlist = 'SPX';    // current watchlist key
+var _activeWatchlist = 'Priority';// current watchlist key
 var _sweepOverlayOn = true;      // DP Sweeps toggle
 
-// Overlay state (for index watchlists)
-var _overlayGroups = [];         // current groups array (from WATCHLIST_CONFIG)
+// Overlay state — per-ticker overlay tickers
+var _overlayGroups = [];         // [{name, on, tickers}] for current active ticker
 var _overlayTickers = [];        // flat array of overlay ticker objects
 
 var _candleInterval = 1;
@@ -296,7 +405,7 @@ var _tickerPrices = {};  // {ticker: {price, change, changePct}}
 
   // Populate watchlist dropdown
   var sel = document.getElementById('watchlistSelect');
-  Object.keys(WATCHLIST_CONFIG).forEach(function(key){
+  Object.keys(WATCHLISTS).forEach(function(key){
     var opt = document.createElement('option');
     opt.value = key;
     opt.textContent = key;
@@ -396,21 +505,20 @@ function resizeCanvas(){
 function setActiveTicker(ticker, source){
   var tickerChanged = (_activeTicker !== ticker);
   _activeTicker = ticker;
+  document.getElementById('tickerInput').value = ticker;
 
   if(source === 'input'){
-    // Single ticker mode — clear watchlist selection
     _mode = 'single';
     _activeWatchlist = null;
-    _overlayGroups = [];
-    _overlayTickers = [];
     document.getElementById('watchlistSelect').value = '';
-    document.getElementById('overlaySection').style.display = 'none';
-    document.getElementById('tickerInput').value = ticker;
-    highlightTickerList(null);
+    // Clear ticker list
+    document.getElementById('tickerListBox').innerHTML = '';
   } else if(source === 'watchlist-click'){
-    document.getElementById('tickerInput').value = ticker;
     highlightTickerList(ticker);
   }
+
+  // Build overlay for this ticker
+  buildOverlayForTicker(ticker);
 
   // Clear old candles so chart resets price scale to new ticker's range
   if(tickerChanged){
@@ -424,89 +532,91 @@ function setActiveTicker(ticker, source){
   loadAll(true);
 }
 
-function buildWatchlistView(){
-  var key = _activeWatchlist;
-  var cfg = key ? WATCHLIST_CONFIG[key] : null;
-  var listBox = document.getElementById('tickerListBox');
+function buildOverlayForTicker(ticker){
   var overlaySection = document.getElementById('overlaySection');
   var overlayList = document.getElementById('overlayList');
-  listBox.innerHTML = '';
   overlayList.innerHTML = '';
+  _overlayGroups = [];
+  _overlayTickers = [];
 
-  if(!cfg){
+  var map = OVERLAY_MAP[ticker];
+  if(!map){
     overlaySection.style.display = 'none';
     return;
   }
 
-  if(cfg.groups){
-    // Index watchlist (SPX/NDX/RTY) — has groups with ref ticker
-    _activeTicker = cfg.ref;
-    document.getElementById('tickerInput').value = cfg.ref;
-
-    // Build flat ticker list from all groups for the list display
-    var allTickers = [];
-    cfg.groups.forEach(function(g){ g.tickers.forEach(function(t){ allTickers.push(t); }); });
-
-    allTickers.forEach(function(t){
-      var item = document.createElement('div');
-      item.className = 'ticker-list-item' + (t.ticker === _activeTicker ? ' active' : '');
-      item.setAttribute('data-ticker', t.ticker);
-      item.innerHTML = '<div class="tl-dot" style="background:'+t.stroke+';"></div>'
-        + '<span class="tl-ticker">'+t.label+'</span>'
-        + '<span class="tl-price" id="price_'+t.ticker+'">—</span>'
-        + '<span class="tl-change" id="change_'+t.ticker+'">—</span>';
-      listBox.appendChild(item);
+  // Build groups from overlay map
+  var gi = 0;
+  if(map.underlying && map.underlying.length > 0){
+    var uGroup = {name: 'Underlying', on: true, tickers: []};
+    map.underlying.forEach(function(tk, i){
+      var col = _COLORS[i % _COLORS.length];
+      uGroup.tickers.push({ticker: tk, label: tk, color: col.c, stroke: col.s, on: true, group: 'Underlying'});
     });
-
-    // Build overlay checkboxes
-    _overlayGroups = cfg.groups;
-    _overlayTickers = [];
-    cfg.groups.forEach(function(g){ g.tickers.forEach(function(t){ t.group = g.name; _overlayTickers.push(t); }); });
-
-    cfg.groups.forEach(function(g, gi){
-      var hdr = document.createElement('div');
-      hdr.className = 'ticker-group-hdr';
-      hdr.innerHTML = '<input type="checkbox" '+(g.on?'checked':'')+' onchange="onGroupToggle('+gi+',this)">'
-        + '<span>'+g.name+'</span>';
-      overlayList.appendChild(hdr);
-      g.tickers.forEach(function(t){
-        var row = document.createElement('div');
-        row.className = 'ticker-row';
-        row.setAttribute('data-group', gi);
-        row.innerHTML = '<input type="checkbox" class="ticker-check" data-ticker="'+t.ticker+'" '+(t.on?'checked':'')+' onchange="onTickerToggle(this)">'
-          + '<div class="ticker-dot" style="background:'+t.stroke+';"></div>'
-          + '<span class="ticker-label">'+t.label+'</span>';
-        overlayList.appendChild(row);
-      });
-    });
-    overlaySection.style.display = '';
-
-    // Fetch prices for all tickers
-    fetchTickerPrices(allTickers.map(function(t){ return t.ticker; }));
-
-  } else if(cfg.tickers){
-    // Flat watchlist (Priority) — no ref ticker, no overlay
-    _activeTicker = cfg.tickers[0].ticker;
-    document.getElementById('tickerInput').value = _activeTicker;
-    _overlayGroups = [];
-    _overlayTickers = [];
-
-    cfg.tickers.forEach(function(t){
-      var item = document.createElement('div');
-      item.className = 'ticker-list-item' + (t.ticker === _activeTicker ? ' active' : '');
-      item.setAttribute('data-ticker', t.ticker);
-      item.onclick = function(){ setActiveTicker(t.ticker, 'watchlist-click'); };
-      item.innerHTML = '<div class="tl-dot" style="background:'+t.stroke+';"></div>'
-        + '<span class="tl-ticker">'+t.label+'</span>'
-        + '<span class="tl-price" id="price_'+t.ticker+'">—</span>'
-        + '<span class="tl-change" id="change_'+t.ticker+'">—</span>';
-      listBox.appendChild(item);
-    });
-    overlaySection.style.display = 'none';
-
-    // Fetch prices
-    fetchTickerPrices(cfg.tickers.map(function(t){ return t.ticker; }));
+    _overlayGroups.push(uGroup);
   }
+  if(map.leveraged && map.leveraged.length > 0){
+    var lGroup = {name: 'Leveraged', on: true, tickers: []};
+    map.leveraged.forEach(function(tk, i){
+      var col = _COLORS[(i + 3) % _COLORS.length];
+      lGroup.tickers.push({ticker: tk, label: tk, color: col.c, stroke: col.s, on: true, group: 'Leveraged'});
+    });
+    _overlayGroups.push(lGroup);
+  }
+
+  // Flatten
+  _overlayGroups.forEach(function(g){ g.tickers.forEach(function(t){ _overlayTickers.push(t); }); });
+
+  // Render checkboxes in two-column grid
+  _overlayGroups.forEach(function(g, gIdx){
+    var hdr = document.createElement('div');
+    hdr.className = 'ticker-group-hdr';
+    hdr.innerHTML = '<input type="checkbox" '+(g.on?'checked':'')+' onchange="onGroupToggle('+gIdx+',this)">'
+      + '<span>'+g.name+' ('+g.tickers.length+')</span>';
+    overlayList.appendChild(hdr);
+    g.tickers.forEach(function(t){
+      var row = document.createElement('div');
+      row.className = 'ticker-row';
+      row.setAttribute('data-group', gIdx);
+      row.innerHTML = '<input type="checkbox" class="ticker-check" data-ticker="'+t.ticker+'" '+(t.on?'checked':'')+' onchange="onTickerToggle(this)">'
+        + '<div class="ticker-dot" style="background:'+t.stroke+';"></div>'
+        + '<span class="ticker-label">'+t.label+'</span>';
+      overlayList.appendChild(row);
+    });
+  });
+
+  overlaySection.style.display = _overlayGroups.length > 0 ? '' : 'none';
+}
+
+function buildWatchlistView(){
+  var key = _activeWatchlist;
+  var tickers = key ? WATCHLISTS[key] : null;
+  var listBox = document.getElementById('tickerListBox');
+  listBox.innerHTML = '';
+
+  if(!tickers || tickers.length === 0) return;
+
+  _activeTicker = tickers[0].ticker;
+  document.getElementById('tickerInput').value = _activeTicker;
+
+  tickers.forEach(function(t, i){
+    var col = _COLORS[i % _COLORS.length];
+    var item = document.createElement('div');
+    item.className = 'ticker-list-item' + (t.ticker === _activeTicker ? ' active' : '');
+    item.setAttribute('data-ticker', t.ticker);
+    item.onclick = function(){ setActiveTicker(t.ticker, 'watchlist-click'); };
+    item.innerHTML = '<div class="tl-dot" style="background:'+col.s+';"></div>'
+      + '<span class="tl-ticker">'+t.label+'</span>'
+      + '<span class="tl-price" id="price_'+t.ticker+'">—</span>'
+      + '<span class="tl-change" id="change_'+t.ticker+'">—</span>';
+    listBox.appendChild(item);
+  });
+
+  // Build overlay for initial ticker
+  buildOverlayForTicker(_activeTicker);
+
+  // Fetch prices for visible tickers
+  fetchTickerPrices(tickers.map(function(t){ return t.ticker; }));
 }
 
 function highlightTickerList(ticker){
@@ -678,12 +788,9 @@ function drawBubbles(){
   } else {
     // Watchlist mode — use overlay tickers
     _overlayTickers.forEach(function(t){ if(t.on) activeTickers[t.ticker] = t; });
-    // Also check flat watchlist tickers
-    if(_overlayTickers.length === 0 && _activeWatchlist){
-      var cfg = WATCHLIST_CONFIG[_activeWatchlist];
-      if(cfg && cfg.tickers){
-        cfg.tickers.forEach(function(t){ if(t.ticker === _activeTicker) activeTickers[t.ticker] = t; });
-      }
+    // No overlays active — at minimum include the active ticker itself
+    if(Object.keys(activeTickers).length === 0){
+      activeTickers[_activeTicker] = {color: 'rgba(59,130,246,0.55)', stroke: '#3b82f6'};
     }
   }
 
@@ -1024,17 +1131,9 @@ function savePreset(){
     minPercentile: parseInt(document.getElementById('minPercentile').value) || 85,
     tickers: {}
   };
-  // Save per-watchlist ticker on/off state for index watchlists
-  Object.keys(WATCHLIST_CONFIG).forEach(function(key){
-    var wCfg = WATCHLIST_CONFIG[key];
-    if(wCfg.groups){
-      cfg.tickers[key] = {};
-      wCfg.groups.forEach(function(g){
-        g.tickers.forEach(function(t){
-          cfg.tickers[key][t.ticker] = t.on;
-        });
-      });
-    }
+  // Save overlay ticker on/off state
+  _overlayTickers.forEach(function(t){
+    cfg.tickers[t.ticker] = t.on;
   });
   var presets = _getPresets();
   presets[name] = cfg;
@@ -1072,21 +1171,12 @@ function loadPreset(){
     _syncIntervalButtons();
   }
 
-  // Restore per-watchlist ticker states
+  // Restore overlay ticker on/off states
   if(cfg.tickers){
-    Object.keys(WATCHLIST_CONFIG).forEach(function(key){
-      var wCfg = WATCHLIST_CONFIG[key];
-      if(!wCfg.groups || !cfg.tickers[key]) return;
-      wCfg.groups.forEach(function(g){
-        var allOn = true;
-        g.tickers.forEach(function(t){
-          if(cfg.tickers[key].hasOwnProperty(t.ticker)){
-            t.on = cfg.tickers[key][t.ticker];
-          }
-          if(!t.on) allOn = false;
-        });
-        g.on = allOn;
-      });
+    _overlayTickers.forEach(function(t){
+      if(cfg.tickers.hasOwnProperty(t.ticker)){
+        t.on = cfg.tickers[t.ticker];
+      }
     });
   }
 
