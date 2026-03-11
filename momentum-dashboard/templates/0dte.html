@@ -48,7 +48,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .chart-area{flex:1;position:relative;overflow:hidden;}
 #chartContainer{width:100%;height:100%;position:relative;}
 #bubbleCanvas{position:absolute;top:0;left:0;pointer-events:none;z-index:5;}
-#tooltipDiv{position:absolute;display:none;background:rgba(0,0,0,0.90);border:1px solid #334155;border-radius:4px;padding:6px 10px;font-size:11px;color:#e0e0e8;pointer-events:none;z-index:10;white-space:nowrap;max-height:400px;overflow-y:auto;}
+#tooltipDiv{position:absolute;display:none;background:rgba(0,0,0,0.92);border:1px solid #334155;border-radius:4px;padding:5px 8px;font-size:11px;color:#c8c8d4;pointer-events:none;z-index:10;white-space:nowrap;line-height:1.5;}
 
 /* Left panel sections */
 .panel-section{margin-bottom:12px;}
@@ -1099,50 +1099,59 @@ function onMouseMove(e){
   }
 
   if(hits.length > 0){
-    // Sort by distance (closest first)
-    hits.sort(function(a,b){ return a.dist - b.dist; });
-    // Cap at 15 to keep tooltip manageable
-    if(hits.length > 15) hits = hits.slice(0, 15);
+    // Sort by time (newest first), then distance
+    hits.sort(function(a,b){
+      var aDate = a.data.date || '', bDate = b.data.date || '';
+      var aTime = a.data.time || '99:99', bTime = b.data.time || '99:99';
+      var cmp = (bDate + bTime).localeCompare(aDate + aTime);
+      return cmp !== 0 ? cmp : a.dist - b.dist;
+    });
+    // Cap at 20 rows
+    if(hits.length > 20) hits = hits.slice(0, 20);
 
     tooltip.style.display = 'block';
     tooltip.style.left = (mx + 12) + 'px';
     tooltip.style.top = (my - 10) + 'px';
-    var lines = [];
+    var rows = [];
 
-    if(hits.length > 1){
-      lines.push('<b style="color:#94a3b8">' + hits.length + ' items</b>');
-      lines.push('<hr style="border:0;border-top:1px solid #475569;margin:3px 0">');
-    }
-
-    hits.forEach(function(hit, idx){
-      if(idx > 0) lines.push('<hr style="border:0;border-top:1px solid #334155;margin:2px 0">');
+    hits.forEach(function(hit){
       if(hit.type === 'sweep'){
         var sw = hit.data;
         var tkr = sw.ticker || _activeTicker;
         var tc = _tickerColorMap[tkr];
         var clr = tc ? tc.stroke : '#60a5fa';
-        lines.push('<b style="color:'+clr+'">' + tkr + '</b> ' + sw.date + (sw.time ? ' ' + sw.time : ''));
-        if(sw.price) lines.push('Price: $' + Number(sw.price).toFixed(2));
-        if(sw.notional) lines.push('Notional: $' + fmt$(sw.notional));
-        if(sw.size) lines.push('Size: ' + sw.size.toLocaleString());
-        if(sw.condition) lines.push('Type: ' + sw.condition);
+        var parts = [];
+        parts.push('<span style="color:'+clr+';font-weight:bold">' + tkr + '</span>');
+        parts.push(sw.date.slice(5)); // MM-DD
+        if(sw.time) parts.push(sw.time);
+        if(sw.size) parts.push(sw.size.toLocaleString() + ' shares');
+        if(sw.price) parts.push('@ $' + Number(sw.price).toFixed(2));
+        if(sw.notional) parts.push('= <b>$' + fmt$(sw.notional) + '</b>');
+        if(sw.condition) parts.push(sw.condition);
+        rows.push(parts.join('; '));
       } else {
         var ev2 = hit.data;
         var tkr2 = ev2.ticker || _activeTicker;
         var tc2 = _tickerColorMap[tkr2];
         var clr2 = tc2 ? tc2.stroke : '#60a5fa';
-        lines.push('<b style="color:'+clr2+'">' + tkr2 + '</b> ' + ev2.date);
-        if(ev2.daily_rank) lines.push('Daily Rank: #' + ev2.daily_rank);
-        if(ev2.sweep_rank) lines.push('Single Rank: #' + ev2.sweep_rank);
-        if(ev2.total_notional) lines.push('Total: $' + fmt$(ev2.total_notional));
-        if(ev2.sweep_count) lines.push('Sweeps: ' + ev2.sweep_count);
-        if(ev2.is_rare) lines.push('<span style="color:#c4b5fd">[Rare]</span>');
-        if(ev2.is_monster) lines.push('<span style="color:#f97316">[Monster]</span>');
-        if(ev2.event_type === 'clusterbomb') lines.push('<span style="color:#eab308">[Clusterbomb]</span>');
-        if(ev2.direction) lines.push('Direction: ' + ev2.direction);
+        var parts2 = [];
+        parts2.push('<span style="color:'+clr2+';font-weight:bold">' + tkr2 + '</span>');
+        parts2.push(ev2.date.slice(5));
+        // Type tags
+        var tags = [];
+        if(ev2.event_type === 'clusterbomb') tags.push('<span style="color:#eab308">CB</span>');
+        if(ev2.is_rare) tags.push('<span style="color:#c4b5fd">Rare</span>');
+        if(ev2.is_monster || ev2.event_type === 'monster_sweep') tags.push('<span style="color:#f97316">Monster</span>');
+        if(tags.length) parts2.push(tags.join(' '));
+        if(ev2.daily_rank) parts2.push('D#' + ev2.daily_rank);
+        if(ev2.sweep_rank) parts2.push('S#' + ev2.sweep_rank);
+        if(ev2.total_notional) parts2.push('<b>$' + fmt$(ev2.total_notional) + '</b>');
+        if(ev2.sweep_count) parts2.push(ev2.sweep_count + ' sweeps');
+        if(ev2.direction) parts2.push(ev2.direction);
+        rows.push(parts2.join('; '));
       }
     });
-    tooltip.innerHTML = lines.join('<br>');
+    tooltip.innerHTML = rows.join('<br>');
   } else {
     tooltip.style.display = 'none';
   }
