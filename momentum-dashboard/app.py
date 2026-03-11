@@ -2543,13 +2543,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         Optional params:
           ?details=1   — include tip arrays for detail labels (~90KB extra)
           ?months=6    — only events from last N months (default: 6, max: 36)
-          ?types=cb,monster,rare — comma-separated types to include (default: all)
+          ?types=cb,monster,rare,ranked — comma-separated types to include
+          ?top_n=10    — for ranked: top N days per ticker (10 or 20)
         """
         q = query or {}
         include_tips = q.get("details", ["0"])[0] == "1"
         months = min(int(q.get("months", ["6"])[0] or 6), 120)
         types_param = q.get("types", ["cb,monster,rare"])[0]
         include_types = set(t.strip().lower() for t in types_param.split(","))
+        top_n = min(int(q.get("top_n", ["10"])[0] or 10), 20)
         tickers_param = q.get("tickers", [None])[0]  # comma-separated ticker list
         watchlist_param = q.get("watchlist", [None])[0]  # watchlist name
         asset_class = _parse_asset_class(q)
@@ -2561,7 +2563,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
             cutoff = (datetime.now() - timedelta(days=months * 30)).strftime("%Y-%m-%d")
 
-            # Build ticker filter set if watchlist or tickers specified
+            # Build ticker filter set if watchlist, tickers, or sector specified
+            sector_param = q.get("sector", [None])[0]
             ticker_filter = None
             if tickers_param:
                 ticker_filter = set(t.strip().upper() for t in tickers_param.split(",") if t.strip())
@@ -2570,6 +2573,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 for _, tickers in WATCHLISTS[watchlist_param]:
                     for display, api, atype in tickers:
                         ticker_filter.add(display)
+
+            # Sector filter — intersect with or replace ticker_filter
+            if sector_param:
+                from sweep_engine import SECTOR_GROUPS
+                sector_tickers = set(SECTOR_GROUPS.get(sector_param, []))
+                if ticker_filter is not None:
+                    ticker_filter = ticker_filter & sector_tickers
+                else:
+                    ticker_filter = sector_tickers
 
             # Load detection config thresholds for filtering
             from sweep_engine import get_detection_config
@@ -2685,6 +2697,91 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         cb_ratios.append(ratio_str)
                     stats["clusterbombs"] += 1
 
+            # ── Ranked daily events (top N per ticker, all-time) ──
+            ranked_keys, ranked_labels, ranked_ratios = [], [], []
+            stats["ranked"] = 0
+            if "ranked" in include_types:
+                # Query all events with daily_rank, no date cutoff (all-time)
+                ranked_sql = (
+                    "SELECT ticker, event_date, daily_rank, total_notional, avg_price "
+                    "FROM clusterbomb_events "
+                    "WHERE daily_rank IS NOT NULL AND daily_rank <= ? "
+                )
+                ranked_params = [top_n]
+
+                if ticker_filter:
+                    placeholders = ",".join("?" for _ in ticker_filter)
+                    ranked_sql += f"AND ticker IN ({placeholders}) "
+                    ranked_params.extend(sorted(ticker_filter))
+
+                # ETF filtering
+                if exclude_etfs:
+                    from sweep_engine import _load_etf_set
+                    etf_set = _load_etf_set()
+                    if etf_set:
+                        etf_ph = ",".join("?" for _ in etf_set)
+                        ranked_sql += f"AND ticker NOT IN ({etf_ph}) "
+                        ranked_params.extend(sorted(etf_set))
+                elif etf_only:
+                    from sweep_engine import _load_etf_set
+                    etf_set = _load_etf_set()
+                    if etf_set:
+                        etf_ph = ",".join("?" for _ in etf_set)
+                        ranked_sql += f"AND ticker IN ({etf_ph}) "
+                        ranked_params.extend(sorted(etf_set))
+
+                ranked_sql += "ORDER BY ticker, daily_rank"
+
+                conn2 = sqlite3.connect(DB_PATH, timeout=10)
+                conn2.row_factory = sqlite3.Row
+                ranked_rows = conn2.execute(ranked_sql, ranked_params).fetchall()
+                conn2.close()
+
+                # Add ranked tickers to the ticker index if not already present
+                for rr in ranked_rows:
+                    if rr["ticker"] not in ticker_idx:
+                        idx = len(all_tickers)
+                        all_tickers.append(rr["ticker"])
+                        ticker_idx[rr["ticker"]] = idx
+
+                # Load daily closes for any new tickers
+                new_tickers = [t for t in all_tickers if t not in daily_closes]
+                if new_tickers:
+                    daily_closes.update(self._load_daily_closes(new_tickers))
+
+                # Cap at 500 labels total
+                max_labels = 500
+                for rr in ranked_rows:
+                    if len(ranked_keys) >= max_labels:
+                        break
+                    parts = rr["event_date"].split("-")
+                    y, m, d = int(parts[0]), int(parts[1]), int(parts[2])
+                    date_int = y * 10000 + m * 100 + d
+                    tidx = ticker_idx[rr["ticker"]]
+                    combined_key = tidx * 100_000_000 + date_int
+
+                    notional = rr["total_notional"] or 0
+                    n_str = f"${notional/1e6:.0f}M" if notional >= 1e6 else f"${notional/1e3:.0f}K"
+                    label_text = f"#{rr['daily_rank']} {n_str}"
+
+                    price = rr["avg_price"] or 0
+                    day_close = daily_closes.get(rr["ticker"], {}).get(rr["event_date"], 0)
+                    if day_close > 0 and price > 0:
+                        raw_ratio = price / day_close
+                        if raw_ratio > 1.5:
+                            price = price / round(raw_ratio)
+                        elif raw_ratio < 0.667:
+                            price = price * round(1.0 / raw_ratio)
+                    ratio = price / day_close if day_close > 0 and price > 0 else 1.0
+
+                    ranked_keys.append(str(combined_key))
+                    ranked_labels.append(f'"{label_text}"')
+                    ranked_ratios.append(f"{ratio:.4f}")
+                    stats["ranked"] += 1
+
+                # Update ticker count (may have grown)
+                stats["tickers"] = len(all_tickers)
+
             # ── Build Pine Script ──
             L = []  # shorthand
             L.append("// @version=5")
@@ -2697,6 +2794,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             L.append('showCB      = input.bool(true, "Clusterbombs",  group="Sweep Types")')
             L.append('showMonster = input.bool(true, "Monsters",      group="Sweep Types")')
             L.append('showRare    = input.bool(true, "Rare Sweeps",   group="Sweep Types")')
+            if "ranked" in include_types:
+                L.append('showRanked  = input.bool(true, "Daily Ranked",  group="Sweep Types")')
             L.append("")
             L.append("// \u2500\u2500 Style \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")
             L.append('opacity    = input.int(0, "Opacity",')
@@ -2710,6 +2809,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             L.append("cbColor      = color.new(#f59e0b, opacity)")
             L.append("monsterColor = color.new(#f97316, opacity)")
             L.append("rareColor    = color.new(#a78bfa, opacity)")
+            if "ranked" in include_types:
+                L.append("rankedColor  = color.new(#22d3ee, opacity)")
             L.append("")
 
             # Emit helper — auto-chunks at 3900 to stay under Pine's 4000-arg limit
@@ -2777,6 +2878,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             if include_tips:
                 _emit("rareTips", rare_tips, 3, "string")
             L.append("")
+            if "ranked" in include_types:
+                _emit("rankedKeys", ranked_keys, 8)
+                _emit("rankedRatios", ranked_ratios, 8, "float")
+                _emit("rankedLabels", ranked_labels, 5, "string")
+                L.append("")
 
             # Detection — match current bar against event arrays
             L.append("// ── Detect ──────────────────────────────────────────────")
@@ -2786,19 +2892,27 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             L.append("isCB      = cbIdx >= 0")
             L.append("isMonster = monsterIdx >= 0")
             L.append("isRare    = rareIdx >= 0")
+            if "ranked" in include_types:
+                L.append("rankedIdx  = tidx >= 0 ? array.indexof(rankedKeys, myKey)  : -1")
+                L.append("isRanked  = rankedIdx >= 0")
             L.append("// ratio * close = split-adjusted true sweep price")
             L.append("cbPrice      = isCB      ? array.get(cbRatios, cbIdx) * close           : na")
             L.append("monsterPrice = isMonster  ? array.get(monsterRatios, monsterIdx) * close : na")
             L.append("rarePrice    = isRare     ? array.get(rareRatios, rareIdx) * close       : na")
+            if "ranked" in include_types:
+                L.append("rankedPrice  = isRanked  ? array.get(rankedRatios, rankedIdx) * close   : na")
             L.append("")
 
             # Plot circles — true sweep price, split-safe
             L.append("// ── Price-anchored circles (ratio * close = true sweep price) ──")
-            for kind, flag, color_var, lw, price_var in [
+            plot_items = [
                 ("Clusterbomb", "showCB and isCB", "cbColor", 12, "cbPrice"),
                 ("Monster", "showMonster and isMonster", "monsterColor", 14, "monsterPrice"),
                 ("Rare Sweep", "showRare and isRare", "rareColor", 11, "rarePrice"),
-            ]:
+            ]
+            if "ranked" in include_types:
+                plot_items.append(("Ranked", "showRanked and isRanked", "rankedColor", 10, "rankedPrice"))
+            for kind, flag, color_var, lw, price_var in plot_items:
                 L.append(f'plot({flag} and newDay ? {price_var} : na, "{kind}", color={color_var},')
                 L.append(f'  style=plot.style_circles, linewidth={lw})')
             L.append("")
@@ -2814,6 +2928,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 L.append(f'  location.abovebar, color=color.new(color.black, 100), size=size.tiny,')
                 L.append(f'  text="{short_label}", textcolor={color_var})')
             L.append("")
+
+            # Ranked labels — always use label.new with rank + notional
+            if "ranked" in include_types:
+                L.append("// ── Ranked Labels (rank + notional) ────────────────────")
+                L.append("if showRanked and isRanked and newDay")
+                L.append("    rIdx = array.indexof(rankedKeys, myKey)")
+                L.append('    rLbl = rIdx >= 0 ? array.get(rankedLabels, rIdx) : ""')
+                L.append('    label.new(bar_index, rankedPrice, rLbl,')
+                L.append("      color=color.new(#22d3ee, math.max(opacity - 20, 0)),")
+                L.append("      textcolor=color.white, style=label.style_label_down, size=size.small)")
+                L.append("")
 
             # Detail labels (only if tips included)
             if include_tips:
@@ -2832,9 +2957,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     L.append(f"          textcolor=color.white, style=label.style_label_down, size={lbl_sz})")
             L.append("")
 
-            included = len(cb_keys) + len(monster_keys) + len(rare_keys)
+            included = len(cb_keys) + len(monster_keys) + len(rare_keys) + len(ranked_keys)
             L.append(f'// Generated {datetime.now().strftime("%Y-%m-%d %H:%M")} | {months}mo window')
-            L.append(f"// {stats['tickers']} tickers, {included} events ({len(cb_keys)} CB, {len(monster_keys)} monsters, {len(rare_keys)} rare)")
+            ranked_str = f", {len(ranked_keys)} ranked" if ranked_keys else ""
+            L.append(f"// {stats['tickers']} tickers, {included} events ({len(cb_keys)} CB, {len(monster_keys)} monsters, {len(rare_keys)} rare{ranked_str})")
 
             script = "\n".join(L)
             stats["included"] = included
