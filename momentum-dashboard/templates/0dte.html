@@ -433,8 +433,10 @@ function drawBubbles(){
     var y = _candleSeries.priceToCoordinate(plotPrice);
     if(y === null || y < 0 || y > _canvas.height) return;
 
-    // Radius based on percentile (6px min, 25px max)
-    var radius = 6 + (s.percentile / 100) * 19;
+    // Radius: exponential curve so low percentiles are tiny, high are big
+    // p^2.5 curve: 20th→~4px, 50th→~9px, 80th→~19px, 99th→~30px
+    var p = s.percentile / 100;
+    var radius = 3 + Math.pow(p, 2.5) * 27;
 
     // Draw bubble
     _ctx.beginPath();
