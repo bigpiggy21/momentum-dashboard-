@@ -14,21 +14,25 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .header-title{font-size:17px;font-weight:700;color:#f59e0b;white-space:nowrap;padding-left:8px;}
 .header input[type="text"]{background:#14141e;border:1px solid #2a2a3a;color:#e0e0e8;padding:5px 10px;border-radius:4px;font-size:13px;font-family:inherit;width:100px;font-weight:600;}
 .header input[type="text"]:focus{border-color:#f59e0b;outline:none;}
-.header input[type="date"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:5px 8px;border-radius:4px;font-size:12px;font-family:inherit;}
 .header select,.header input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:5px 8px;border-radius:4px;font-size:12px;font-family:inherit;}
 .header select{width:52px;}
-.header input[type="number"]{width:82px;}
+.header input[type="number"]{width:62px;}
 /* Divider */
 .hdr-sep{width:1px;height:24px;background:#334155;flex-shrink:0;}
-/* Filter group: label + input pair */
-.filter-group{display:flex;align-items:center;gap:4px;}
-.filter-group .flbl{font-size:11px;color:#888;cursor:pointer;padding:4px 8px;border:1px solid #334155;border-radius:4px;background:#1e293b;font-weight:600;white-space:nowrap;font-family:inherit;}
-.filter-group .flbl:hover{color:#ccc;}
-.filter-group .flbl.active{background:#f59e0b22;color:#f59e0b;border-color:#f59e0b66;}
-.filter-group input[type="number"]{opacity:0.4;pointer-events:none;}
-.filter-group.on input[type="number"]{opacity:1;pointer-events:auto;}
-.sweep-controls{display:flex;align-items:center;gap:8px;}
-.sweep-controls.off .filter-group{opacity:0.3;pointer-events:none;}
+/* Layer toggle buttons */
+.layer-ctrl{display:inline-flex;border:1px solid #334155;border-radius:4px;overflow:hidden;}
+.layer-btn{background:#1e293b;color:#888;border:none;padding:5px 8px;cursor:pointer;font-size:10px;font-family:inherit;border-right:1px solid #334155;font-weight:700;letter-spacing:0.3px;white-space:nowrap;}
+.layer-btn:last-child{border-right:none;}
+.layer-btn:hover{color:#ccc;}
+.layer-btn.active.lyr-daily{background:#f59e0b22;color:#f59e0b;}
+.layer-btn.active.lyr-single{background:#3b82f622;color:#3b82f6;}
+.layer-btn.active.lyr-rare{background:#a78bfa22;color:#c4b5fd;}
+.layer-btn.active.lyr-cb{background:#eab30822;color:#eab308;}
+.layer-btn.active.lyr-monster{background:#f9731622;color:#f97316;}
+/* Layer config inputs */
+.lyr-cfg{display:flex;align-items:center;gap:3px;font-size:10px;color:#555;}
+.lyr-cfg input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:3px;font-size:10px;font-family:inherit;width:38px;text-align:center;}
+.lyr-cfg .cfg-label{font-weight:600;}
 
 /* Layout */
 .main{display:flex;height:calc(100vh - 48px);}
@@ -112,8 +116,6 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
   <div class="header-title">Chart</div>
   <input type="text" id="tickerInput" placeholder="Ticker..." spellcheck="false">
   <div class="hdr-sep"></div>
-  <button class="ctrl-btn" id="btnAutoRefresh" onclick="toggleAutoRefresh()" style="width:auto;padding:5px 10px;font-size:11px;">Live</button>
-  <div class="hdr-sep"></div>
   <div class="seg-ctrl" id="candleIntervalCtrl">
     <button class="active" onclick="setCandleInterval(1,this)">1m</button>
     <button onclick="setCandleInterval(5,this)">5m</button>
@@ -126,18 +128,16 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
     <button onclick="setCandleInterval(129600,this)">3M</button>
   </div>
   <div class="hdr-sep"></div>
-  <input type="date" id="dateInput">
-  <div class="hdr-sep"></div>
-  <div class="sweep-controls" id="sweepControls">
-    <button class="ctrl-btn active" id="btnSweepToggle" onclick="toggleSweepOverlay()" style="width:auto;padding:5px 10px;font-size:11px;">DP Sweeps</button>
-    <div class="filter-group" id="fgNotional">
-      <button class="flbl" onclick="toggleFilter('notional')">Min $</button>
-      <input type="number" id="minNotional" value="500000" step="100000" min="0">
-    </div>
-    <div class="filter-group on" id="fgPercentile">
-      <button class="flbl active" onclick="toggleFilter('percentile')">Percentile</button>
-      <input type="number" id="minPercentile" value="85" step="5" min="0" max="99">
-    </div>
+  <div class="layer-ctrl" id="layerCtrl">
+    <button class="layer-btn lyr-daily active" onclick="toggleLayer('daily',this)">Daily</button>
+    <button class="layer-btn lyr-single active" onclick="toggleLayer('single',this)">Single</button>
+    <button class="layer-btn lyr-rare active" onclick="toggleLayer('rare',this)">Rare</button>
+    <button class="layer-btn lyr-cb" onclick="toggleLayer('cb',this)">CB</button>
+    <button class="layer-btn lyr-monster" onclick="toggleLayer('monster',this)">Monster</button>
+  </div>
+  <div class="lyr-cfg">
+    <span class="cfg-label" style="color:#f59e0b;">D</span><input type="number" id="cfgDailyFrom" value="1" min="1" onchange="onLayerCfgChange()">–<input type="number" id="cfgDailyTo" value="20" min="1" onchange="onLayerCfgChange()">
+    <span class="cfg-label" style="color:#3b82f6;margin-left:4px;">S</span><input type="number" id="cfgSingleFrom" value="1" min="1" onchange="onLayerCfgChange()">–<input type="number" id="cfgSingleTo" value="10" min="1" onchange="onLayerCfgChange()">
   </div>
   <div class="hdr-sep"></div>
   <select id="presetSelect" style="width:120px;" onchange="loadPreset()">
@@ -164,9 +164,9 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
       </div>
     </div>
     <div class="panel-section">
-      <div class="panel-label">Stats</div>
+      <div class="panel-label">Sweep Events</div>
       <div id="statsBox">
-        <div class="stat-row"><span>Sweeps</span><span class="stat-val" id="statSweeps">0</span></div>
+        <div class="stat-row"><span>Events</span><span class="stat-val" id="statSweeps">0</span></div>
         <div class="stat-row"><span>Total $</span><span class="stat-val" id="statNotional">$0</span></div>
         <div class="stat-row"><span>Largest</span><span class="stat-val" id="statLargest">$0</span></div>
       </div>
@@ -373,7 +373,6 @@ var OVERLAY_MAP = {
 var _mode = 'watchlist';          // 'single' | 'watchlist'
 var _activeTicker = 'SPY';       // ticker whose candles are displayed
 var _activeWatchlist = 'Priority';// current watchlist key
-var _sweepOverlayOn = true;      // DP Sweeps toggle
 
 // Overlay state — per-ticker overlay tickers
 var _overlayGroups = [];         // [{name, on, tickers}] for current active ticker
@@ -382,27 +381,28 @@ var _overlayTickers = [];        // flat array of overlay ticker objects
 var _candleInterval = 1;
 var INTERVAL_DAYS = {1:10, 5:60, 60:504, 240:504, 1440:1260, 2880:2520, 10080:2520, 43200:3780, 129600:3780};
 
+// Layer system — replaces old DP Sweeps toggle + percentile/notional filters
+var _activeLayers = {daily:true, single:true, rare:true, cb:false, monster:false};
+var _layerCfg = {dailyFrom:1, dailyTo:20, singleFrom:1, singleTo:10};
+// Raw data from /api/sweeps/chart
+var _chartSweeps = [];       // individual sweep trades
+var _chartEvents = [];       // clusterbomb/rare/monster events with ranks
+
 var _chart = null;
 var _candleSeries = null;
 var _canvas = null;
 var _ctx = null;
-var _sweeps = [];
-var _allSweeps = [];
-var _autoRefresh = false;
-var _sweepTimer = null;
-var _candleTimer = null;
 var _candles = [];
 var _initialLoad = true;
 var _loading = false;
+var _sweepTimer = null;
+var _candleTimer = null;
 var _tickerPrices = {};  // {ticker: {price, change, changePct}}
 
 // ====================================================================
 // INIT
 // ====================================================================
 (function init(){
-  var today = new Date();
-  document.getElementById('dateInput').value = today.toISOString().slice(0,10);
-
   // Populate watchlist dropdown
   var sel = document.getElementById('watchlistSelect');
   Object.keys(WATCHLISTS).forEach(function(key){
@@ -424,30 +424,15 @@ var _tickerPrices = {};  // {ticker: {price, change, changePct}}
     }
   });
 
-  // Date change — smart interval selection
-  document.getElementById('dateInput').addEventListener('change', function(){
-    var picked = new Date(document.getElementById('dateInput').value);
-    var now = new Date();
-    var diffDays = Math.round((now - picked) / 86400000);
-    var bestInterval = _candleInterval;
-    if(diffDays > 504) bestInterval = 1440;
-    else if(diffDays > 60) bestInterval = 60;
-    else if(diffDays > 10) bestInterval = 5;
-    if(bestInterval !== _candleInterval){
-      _candleInterval = bestInterval;
-      _syncIntervalButtons();
-    }
-    loadAll(true);
-  });
-  document.getElementById('minNotional').addEventListener('change', function(){ applyClientFilter(); });
-  document.getElementById('minPercentile').addEventListener('change', function(){ applyClientFilter(); });
-
   // Build initial watchlist view
   buildWatchlistView();
 
   // Init chart
   initChart();
   loadAll(true);
+
+  // Always-live: auto-refresh candles every 60s, sweeps every 30s
+  _startLiveTimers();
 })();
 
 // ====================================================================
@@ -524,8 +509,8 @@ function setActiveTicker(ticker, source){
   if(tickerChanged){
     _candles = [];
     _candleSeries.setData([]);
-    _allSweeps = [];
-    _sweeps = [];
+    _chartSweeps = [];
+    _chartEvents = [];
     if(_ctx) _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
   }
 
@@ -674,22 +659,15 @@ function fetchTickerPrices(tickers){
 // ====================================================================
 // DATA LOADING
 // ====================================================================
-function getDate(){ return document.getElementById('dateInput').value; }
-function getDays(){ return INTERVAL_DAYS[_candleInterval] || 10; }
-function getMinNotional(){ return parseFloat(document.getElementById('minNotional').value) || 500000; }
-function getMinPercentile(){ return parseInt(document.getElementById('minPercentile').value) || 0; }
-
-function getSweepTickers(){
-  if(_mode === 'single') return [_activeTicker];
-  // Watchlist mode — return all overlay tickers if index, or just active ticker if flat
-  if(_overlayTickers.length > 0) return _overlayTickers.map(function(t){ return t.ticker; });
-  return [_activeTicker];
+function getDate(){
+  return new Date().toISOString().slice(0,10);
 }
+function getDays(){ return INTERVAL_DAYS[_candleInterval] || 10; }
 
 function loadAll(resetView){
   if(resetView) _initialLoad = true;
   fetchCandles();
-  if(_sweepOverlayOn) fetchSweeps();
+  fetchSweepChart();
 }
 
 function fetchCandles(){
@@ -733,66 +711,49 @@ function fetchCandles(){
     .catch(function(e){ console.error('Candle fetch error:', e); _setLoading(false); });
 }
 
-function fetchSweeps(){
-  if(!_sweepOverlayOn) return;
-  var date = getDate();
+function fetchSweepChart(){
+  // Use /api/sweeps/chart which returns sweeps + events (daily/single ranks, rare, CB, monster)
   var days = getDays();
-  var tickers = getSweepTickers();
+  var end = new Date();
+  var start = new Date(end.getTime() - (days + 2) * 86400000);
+  var dateFrom = start.toISOString().slice(0,10);
+  var dateTo = end.toISOString().slice(0,10);
 
-  _setLoading(true);
-  fetch('/api/0dte/sweeps?tickers='+tickers.join(',')+'&date='+date+'&days='+days+'&min_notional=0')
-    .then(function(r){return r.json();})
+  var url = '/api/sweeps/chart?ticker='+_activeTicker
+    +'&date_from='+dateFrom+'&date_to='+dateTo
+    +'&daily_from='+_layerCfg.dailyFrom+'&daily_to='+_layerCfg.dailyTo
+    +'&rank_from='+_layerCfg.singleFrom+'&rank_to='+_layerCfg.singleTo;
+
+  fetch(url)
+    .then(function(r){ return r.json(); })
     .then(function(d){
-      _allSweeps = d.sweeps || [];
-      applyClientFilter();
-      _setLoading(false);
+      _chartSweeps = d.sweeps || [];
+      _chartEvents = d.clusterbombs || [];
+      drawBubbles();
+      updateStats();
+      updateFeed();
     })
-    .catch(function(e){ console.error('Sweep fetch error:', e); _setLoading(false); });
-}
-
-function applyClientFilter(){
-  var notionalOn = document.getElementById('fgNotional').classList.contains('on');
-  var pctOn = document.getElementById('fgPercentile').classList.contains('on');
-  var minN = getMinNotional();
-  var minPct = getMinPercentile();
-  _sweeps = _allSweeps.filter(function(s){
-    if(notionalOn && s.notional < minN) return false;
-    if(pctOn && s.percentile < minPct) return false;
-    return true;
-  });
-  drawBubbles();
-  updateStats();
-  updateFeed();
+    .catch(function(e){ console.error('Sweep chart fetch error:', e); });
 }
 
 function _setLoading(on){
   _loading = on;
-  document.getElementById('dateInput').style.borderColor = on ? '#f59e0b' : '#2a2a3a';
+  document.getElementById('tickerInput').style.borderColor = on ? '#f59e0b' : '#2a2a3a';
 }
 
 // ====================================================================
 // BUBBLE DRAWING (Canvas overlay)
 // ====================================================================
 function drawBubbles(){
-  if(!_ctx || !_chart || !_candleSeries || !_sweepOverlayOn) {
+  if(!_ctx || !_chart || !_candleSeries) {
     if(_ctx) _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
     return;
   }
   _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
 
-  // Build active ticker color lookup
-  var activeTickers = {};
-  if(_mode === 'single'){
-    // Single mode — use a default color for the active ticker
-    activeTickers[_activeTicker] = {color: 'rgba(59,130,246,0.55)', stroke: '#3b82f6'};
-  } else {
-    // Watchlist mode — use overlay tickers
-    _overlayTickers.forEach(function(t){ if(t.on) activeTickers[t.ticker] = t; });
-    // No overlays active — at minimum include the active ticker itself
-    if(Object.keys(activeTickers).length === 0){
-      activeTickers[_activeTicker] = {color: 'rgba(59,130,246,0.55)', stroke: '#3b82f6'};
-    }
-  }
+  // No layers active → nothing to draw
+  var anyLayer = _activeLayers.daily || _activeLayers.single || _activeLayers.rare || _activeLayers.cb || _activeLayers.monster;
+  if(!anyLayer) return;
 
   var ts = _chart.timeScale();
   var candleCloseMap = {};
@@ -814,36 +775,131 @@ function drawBubbles(){
     return best;
   }
 
-  _sweeps.forEach(function(s){
-    var tConf = activeTickers[s.ticker];
-    if(!tConf) return;
+  // Helper: map a date string "YYYY-MM-DD" to nearest candle time
+  function dateToUnix(dateStr){
+    // Market close ~4pm ET = 20:00 UTC
+    return Math.floor(new Date(dateStr + 'T20:00:00Z').getTime() / 1000);
+  }
 
-    var candleT = nearestCandleTime(s.time_unix);
-    if(candleT === null) return;
-
+  function getXY(timeVal){
+    var candleT = nearestCandleTime(timeVal);
+    if(candleT === null) return null;
     var x = ts.timeToCoordinate(candleT);
-    if(x === null || x < 0 || x > _canvas.width) return;
-
-    // Price mapping: always snap to candle close at that timestamp.
-    // This handles stock splits (raw sweep price may be pre-split, candles are adjusted)
-    // and also handles non-ref tickers in index mode (different price scale).
+    if(x === null || x < 0 || x > _canvas.width) return null;
     var plotPrice = candleCloseMap[candleT];
-    if(!plotPrice) return;
-
+    if(!plotPrice) return null;
     var y = _candleSeries.priceToCoordinate(plotPrice);
-    if(y === null || y < 0 || y > _canvas.height) return;
+    if(y === null || y < 0 || y > _canvas.height) return null;
+    return {x:x, y:y};
+  }
 
-    var p = s.percentile / 100;
-    var radius = 3 + Math.pow(p, 2.5) * 27;
-
+  function drawCircle(x, y, radius, fillColor, strokeColor, lineWidth){
     _ctx.beginPath();
     _ctx.arc(x, y, radius, 0, Math.PI * 2);
-    _ctx.fillStyle = tConf.color;
+    _ctx.fillStyle = fillColor;
     _ctx.fill();
-    _ctx.strokeStyle = tConf.stroke;
-    _ctx.lineWidth = 1;
-    _ctx.stroke();
+    if(strokeColor){
+      _ctx.strokeStyle = strokeColor;
+      _ctx.lineWidth = lineWidth || 1;
+      _ctx.stroke();
+    }
+  }
+
+  function drawLabel(x, y, text, color){
+    _ctx.font = '9px -apple-system, sans-serif';
+    _ctx.fillStyle = color;
+    _ctx.textAlign = 'center';
+    _ctx.fillText(text, x, y + 20);
+  }
+
+  // Build event lookup by date for quick access
+  var eventByDate = {};
+  _chartEvents.forEach(function(ev){
+    if(!eventByDate[ev.date]) eventByDate[ev.date] = [];
+    eventByDate[ev.date].push(ev);
   });
+
+  // ---- LAYER: CB (yellow + red border ring) ----
+  if(_activeLayers.cb){
+    _chartEvents.forEach(function(ev){
+      var isCB = ev.event_type === 'clusterbomb' || ev.event_type === 'rare_sweep';
+      if(!isCB) return;
+      var pos = getXY(dateToUnix(ev.date));
+      if(!pos) return;
+      // Red border ring
+      drawCircle(pos.x, pos.y, 12, 'rgba(220,38,38,0.25)', 'rgba(220,38,38,0.95)', 2);
+      // Yellow fill
+      drawCircle(pos.x, pos.y, 8, 'rgba(234,179,8,0.90)', '#eab308', 1);
+      // Label
+      var label = 'CB';
+      if(ev.sweep_count) label += ' (' + ev.sweep_count + ')';
+      drawLabel(pos.x, pos.y + 6, label, '#eab308');
+    });
+  }
+
+  // ---- LAYER: Monster (orange + red border ring) ----
+  if(_activeLayers.monster){
+    _chartEvents.forEach(function(ev){
+      var isMonster = ev.is_monster || ev.event_type === 'monster_sweep';
+      if(!isMonster) return;
+      var pos = getXY(dateToUnix(ev.date));
+      if(!pos) return;
+      // Red border ring
+      drawCircle(pos.x, pos.y, 14, 'rgba(220,38,38,0.20)', 'rgba(220,38,38,0.95)', 2);
+      // Orange fill
+      drawCircle(pos.x, pos.y, 10, 'rgba(249,115,22,0.90)', '#f97316', 1);
+      // Label
+      var label = ev.max_notional ? fmt$(ev.max_notional) + ' [M]' : '[M]';
+      drawLabel(pos.x, pos.y + 8, label, '#f97316');
+    });
+  }
+
+  // ---- LAYER: Daily (amber, rank-sized) ----
+  if(_activeLayers.daily){
+    _chartEvents.forEach(function(ev){
+      var dr = ev.daily_rank;
+      if(dr == null) return;
+      if(dr < _layerCfg.dailyFrom || dr > _layerCfg.dailyTo) return;
+      var pos = getXY(dateToUnix(ev.date));
+      if(!pos) return;
+      var radius, color;
+      if(dr <= 3){       radius = 9; color = 'rgba(255,215,0,0.85)'; }
+      else if(dr <= 10){ radius = 7; color = 'rgba(251,191,36,0.75)'; }
+      else if(dr <= 25){ radius = 7; color = 'rgba(245,158,11,0.70)'; }
+      else {             radius = 6; color = 'rgba(245,158,11,0.60)'; }
+      drawCircle(pos.x, pos.y, radius, color, '#f59e0b', 1);
+      drawLabel(pos.x, pos.y, 'D#' + dr, '#f59e0b');
+    });
+  }
+
+  // ---- LAYER: Single (blue, rank-sized) ----
+  if(_activeLayers.single){
+    _chartEvents.forEach(function(ev){
+      var sr = ev.sweep_rank;
+      if(sr == null) return;
+      if(sr < _layerCfg.singleFrom || sr > _layerCfg.singleTo) return;
+      var pos = getXY(dateToUnix(ev.date));
+      if(!pos) return;
+      var radius, color;
+      if(sr <= 3){       radius = 9; color = 'rgba(29,78,216,0.90)'; }
+      else if(sr <= 10){ radius = 8; color = 'rgba(59,130,246,0.85)'; }
+      else if(sr <= 25){ radius = 7; color = 'rgba(96,165,250,0.80)'; }
+      else {             radius = 6; color = 'rgba(147,197,253,0.70)'; }
+      drawCircle(pos.x, pos.y - 2, radius, color, '#3b82f6', 1);
+      drawLabel(pos.x, pos.y - 2, 'S#' + sr, '#3b82f6');
+    });
+  }
+
+  // ---- LAYER: Rare (purple, fixed size) ----
+  if(_activeLayers.rare){
+    _chartEvents.forEach(function(ev){
+      if(!ev.is_rare) return;
+      var pos = getXY(dateToUnix(ev.date));
+      if(!pos) return;
+      drawCircle(pos.x, pos.y + 2, 6, 'rgba(167,139,250,0.75)', '#a78bfa', 1);
+      drawLabel(pos.x, pos.y + 2, '[R]', '#c4b5fd');
+    });
+  }
 }
 
 // ====================================================================
@@ -855,17 +911,10 @@ function onMouseMove(e){
   var my = e.clientY - rect.top;
   var tooltip = document.getElementById('tooltipDiv');
 
-  if(!_sweepOverlayOn || _sweeps.length === 0){
+  var anyLayer = _activeLayers.daily || _activeLayers.single || _activeLayers.rare || _activeLayers.cb || _activeLayers.monster;
+  if(!anyLayer || _chartEvents.length === 0){
     tooltip.style.display = 'none';
     return;
-  }
-
-  var activeTickers = {};
-  if(_mode === 'single'){
-    activeTickers[_activeTicker] = true;
-  } else {
-    _overlayTickers.forEach(function(t){ if(t.on) activeTickers[t.ticker] = true; });
-    if(Object.keys(activeTickers).length === 0) activeTickers[_activeTicker] = true;
   }
 
   var ts = _chart.timeScale();
@@ -882,13 +931,14 @@ function onMouseMove(e){
     return best;
   }
 
+  function dateToUnix2(d){ return Math.floor(new Date(d + 'T20:00:00Z').getTime() / 1000); }
+
   var closest = null;
   var closestDist = 30;
 
-  for(var i = 0; i < _sweeps.length; i++){
-    var s = _sweeps[i];
-    if(!activeTickers[s.ticker]) continue;
-    var ct = nearest2(s.time_unix);
+  for(var i = 0; i < _chartEvents.length; i++){
+    var ev = _chartEvents[i];
+    var ct = nearest2(dateToUnix2(ev.date));
     if(ct === null) continue;
     var x = ts.timeToCoordinate(ct);
     if(x === null) continue;
@@ -899,7 +949,7 @@ function onMouseMove(e){
     var dist = Math.sqrt((mx-x)*(mx-x) + (my-y)*(my-y));
     if(dist < closestDist){
       closestDist = dist;
-      closest = s;
+      closest = ev;
     }
   }
 
@@ -907,9 +957,16 @@ function onMouseMove(e){
     tooltip.style.display = 'block';
     tooltip.style.left = (mx + 12) + 'px';
     tooltip.style.top = (my - 10) + 'px';
-    tooltip.innerHTML = '<b>' + closest.ticker + '</b> ' + closest.time
-      + '<br>$' + fmt$(closest.notional) + ' @ $' + closest.price.toFixed(2)
-      + '<br>Percentile: ' + closest.percentile + '%';
+    var lines = ['<b>' + _activeTicker + '</b> ' + closest.date];
+    if(closest.daily_rank) lines.push('Daily Rank: #' + closest.daily_rank);
+    if(closest.sweep_rank) lines.push('Single Rank: #' + closest.sweep_rank);
+    if(closest.total_notional) lines.push('Total: $' + fmt$(closest.total_notional));
+    if(closest.sweep_count) lines.push('Sweeps: ' + closest.sweep_count);
+    if(closest.is_rare) lines.push('<span style="color:#c4b5fd">[Rare]</span>');
+    if(closest.is_monster) lines.push('<span style="color:#f97316">[Monster]</span>');
+    if(closest.event_type === 'clusterbomb') lines.push('<span style="color:#eab308">[Clusterbomb]</span>');
+    if(closest.direction) lines.push('Direction: ' + closest.direction);
+    tooltip.innerHTML = lines.join('<br>');
   } else {
     tooltip.style.display = 'none';
   }
@@ -979,57 +1036,34 @@ function _syncIntervalButtons(){
   });
 }
 
-function toggleFilter(which){
-  var fg = document.getElementById(which === 'notional' ? 'fgNotional' : 'fgPercentile');
-  var lbl = fg.querySelector('.flbl');
-  var isOn = fg.classList.contains('on');
-  if(isOn){
-    fg.classList.remove('on');
-    lbl.classList.remove('active');
-  } else {
-    fg.classList.add('on');
-    lbl.classList.add('active');
-  }
-  applyClientFilter();
+function toggleLayer(layer, btn){
+  _activeLayers[layer] = !_activeLayers[layer];
+  btn.classList.toggle('active', _activeLayers[layer]);
+  drawBubbles();
+  updateStats();
 }
 
-function toggleSweepOverlay(){
-  _sweepOverlayOn = !_sweepOverlayOn;
-  var btn = document.getElementById('btnSweepToggle');
-  btn.classList.toggle('active', _sweepOverlayOn);
-  document.getElementById('sweepControls').classList.toggle('off', !_sweepOverlayOn);
-  if(_sweepOverlayOn){
-    fetchSweeps();
-  } else {
-    _sweeps = [];
-    _allSweeps = [];
-    drawBubbles();
-    updateStats();
-    updateFeed();
-  }
+function onLayerCfgChange(){
+  _layerCfg.dailyFrom = parseInt(document.getElementById('cfgDailyFrom').value) || 1;
+  _layerCfg.dailyTo = parseInt(document.getElementById('cfgDailyTo').value) || 20;
+  _layerCfg.singleFrom = parseInt(document.getElementById('cfgSingleFrom').value) || 1;
+  _layerCfg.singleTo = parseInt(document.getElementById('cfgSingleTo').value) || 10;
+  // Re-fetch with new rank ranges
+  fetchSweepChart();
 }
 
-function toggleAutoRefresh(){
-  _autoRefresh = !_autoRefresh;
-  var btn = document.getElementById('btnAutoRefresh');
-  btn.classList.toggle('active', _autoRefresh);
-  _startStopTimers();
-}
-
-function _startStopTimers(){
+// Always-live timers
+function _startLiveTimers(){
   clearInterval(_sweepTimer);
   clearInterval(_candleTimer);
-  if(_autoRefresh){
-    _sweepTimer = setInterval(fetchSweeps, 15000);
-    _candleTimer = setInterval(fetchCandles, 60000);
-    fetchCandles();
-    fetchSweeps();
-  }
+  _candleTimer = setInterval(fetchCandles, 60000);
+  _sweepTimer = setInterval(fetchSweepChart, 30000);
 }
 
 document.addEventListener('visibilitychange', function(){
-  if(!document.hidden && _autoRefresh){
-    _startStopTimers();
+  if(!document.hidden){
+    _startLiveTimers();
+    fetchCandles();
   }
 });
 
@@ -1037,48 +1071,40 @@ document.addEventListener('visibilitychange', function(){
 // STATS & FEED
 // ====================================================================
 function updateStats(){
-  var activeTickers = {};
-  if(_mode === 'single'){
-    activeTickers[_activeTicker] = true;
-  } else {
-    _overlayTickers.forEach(function(t){ if(t.on) activeTickers[t.ticker] = true; });
-    if(Object.keys(activeTickers).length === 0) activeTickers[_activeTicker] = true;
-  }
-  var total = 0, totalN = 0, largest = 0;
-  _sweeps.forEach(function(s){
-    if(!activeTickers[s.ticker]) return;
-    total++;
-    totalN += s.notional;
-    if(s.notional > largest) largest = s.notional;
+  var events = _chartEvents.length;
+  var totalN = 0, largest = 0;
+  _chartEvents.forEach(function(ev){
+    if(ev.total_notional){
+      totalN += ev.total_notional;
+      if(ev.total_notional > largest) largest = ev.total_notional;
+    }
   });
-  document.getElementById('statSweeps').textContent = total;
+  document.getElementById('statSweeps').textContent = events;
   document.getElementById('statNotional').textContent = '$' + fmt$(totalN);
   document.getElementById('statLargest').textContent = '$' + fmt$(largest);
 }
 
 function updateFeed(){
   var feed = document.getElementById('sweepFeed');
-  var activeTickers = {};
-  if(_mode === 'single'){
-    activeTickers[_activeTicker] = true;
-  } else {
-    _overlayTickers.forEach(function(t){ if(t.on) activeTickers[t.ticker] = true; });
-    if(Object.keys(activeTickers).length === 0) activeTickers[_activeTicker] = true;
-  }
-  var recent = _sweeps.filter(function(s){ return activeTickers[s.ticker]; }).slice(-50).reverse();
+  // Show recent events (most recent first)
+  var recent = _chartEvents.slice().reverse().slice(0, 30);
   if(recent.length === 0){
-    feed.innerHTML = '<div style="color:#555;font-size:11px;">No sweeps found</div>';
+    feed.innerHTML = '<div style="color:#555;font-size:11px;">No events found</div>';
     return;
   }
   var html = '';
-  recent.forEach(function(s){
-    var tConf = _overlayTickers.find(function(t){return t.ticker === s.ticker;});
-    var color = tConf ? tConf.stroke : '#3b82f6';
+  recent.forEach(function(ev){
+    var typeColor = '#888';
+    var typeLabel = '';
+    if(ev.event_type === 'clusterbomb'){ typeColor = '#eab308'; typeLabel = 'CB'; }
+    else if(ev.event_type === 'rare_sweep'){ typeColor = '#c4b5fd'; typeLabel = 'Rare'; }
+    else if(ev.event_type === 'monster_sweep'){ typeColor = '#f97316'; typeLabel = 'Monster'; }
+    if(ev.daily_rank && !typeLabel){ typeColor = '#f59e0b'; typeLabel = 'D#' + ev.daily_rank; }
+    if(ev.sweep_rank && !typeLabel){ typeColor = '#3b82f6'; typeLabel = 'S#' + ev.sweep_rank; }
     html += '<div class="feed-item">'
-      + '<span class="feed-time">' + s.time + '</span>'
-      + '<span class="feed-ticker" style="color:'+color+'">' + s.ticker + '</span>'
-      + '<span>$' + s.price.toFixed(2) + '</span>'
-      + '<span class="feed-notional">$' + fmt$(s.notional) + '</span>'
+      + '<span class="feed-time">' + ev.date + '</span>'
+      + '<span class="feed-ticker" style="color:'+typeColor+'">' + (typeLabel || 'Event') + '</span>'
+      + '<span class="feed-notional">$' + fmt$(ev.total_notional || 0) + '</span>'
       + '</div>';
   });
   feed.innerHTML = html;
@@ -1097,7 +1123,7 @@ function fmt$(v){
 // ====================================================================
 // PRESETS (localStorage)
 // ====================================================================
-var PRESET_KEY = '0dte_presets_v2';
+var PRESET_KEY = '0dte_presets_v3';
 
 function _getPresets(){
   try { return JSON.parse(localStorage.getItem(PRESET_KEY)) || {}; } catch(e){ return {}; }
@@ -1124,11 +1150,8 @@ function savePreset(){
     ticker: _activeTicker,
     watchlist: _activeWatchlist,
     interval: _candleInterval,
-    sweepOverlayOn: _sweepOverlayOn,
-    notionalOn: document.getElementById('fgNotional').classList.contains('on'),
-    percentileOn: document.getElementById('fgPercentile').classList.contains('on'),
-    minNotional: parseFloat(document.getElementById('minNotional').value) || 500000,
-    minPercentile: parseInt(document.getElementById('minPercentile').value) || 85,
+    layers: JSON.parse(JSON.stringify(_activeLayers)),
+    layerCfg: JSON.parse(JSON.stringify(_layerCfg)),
     tickers: {}
   };
   // Save overlay ticker on/off state
@@ -1150,20 +1173,21 @@ function loadPreset(){
   var cfg = presets[name];
   if(!cfg) return;
 
-  // Restore filter toggles
-  var fgN = document.getElementById('fgNotional');
-  var fgP = document.getElementById('fgPercentile');
-  fgN.classList.toggle('on', !!cfg.notionalOn);
-  fgN.querySelector('.flbl').classList.toggle('active', !!cfg.notionalOn);
-  fgP.classList.toggle('on', !!cfg.percentileOn);
-  fgP.querySelector('.flbl').classList.toggle('active', !!cfg.percentileOn);
-  document.getElementById('minNotional').value = cfg.minNotional || 500000;
-  document.getElementById('minPercentile').value = cfg.minPercentile || 85;
-
-  // Restore sweep overlay
-  _sweepOverlayOn = cfg.sweepOverlayOn !== false;
-  document.getElementById('btnSweepToggle').classList.toggle('active', _sweepOverlayOn);
-  document.getElementById('sweepControls').classList.toggle('off', !_sweepOverlayOn);
+  // Restore layer toggles
+  if(cfg.layers){
+    _activeLayers = cfg.layers;
+    ['daily','single','rare','cb','monster'].forEach(function(l){
+      var btn = document.querySelector('.lyr-' + l);
+      if(btn) btn.classList.toggle('active', !!_activeLayers[l]);
+    });
+  }
+  if(cfg.layerCfg){
+    _layerCfg = cfg.layerCfg;
+    document.getElementById('cfgDailyFrom').value = _layerCfg.dailyFrom || 1;
+    document.getElementById('cfgDailyTo').value = _layerCfg.dailyTo || 20;
+    document.getElementById('cfgSingleFrom').value = _layerCfg.singleFrom || 1;
+    document.getElementById('cfgSingleTo').value = _layerCfg.singleTo || 10;
+  }
 
   // Restore interval
   if(cfg.interval){
