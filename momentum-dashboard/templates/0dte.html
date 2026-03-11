@@ -231,6 +231,7 @@ var _autoRefresh = false;
 var _sweepTimer = null;
 var _candleTimer = null;
 var _candles = [];       // raw candle array
+var _initialLoad = true; // first load fitContent, subsequent preserve viewport
 
 // ====================================================================
 // INIT
@@ -284,7 +285,7 @@ var _candles = [];       // raw candle array
         if(mins === bestInterval) b.classList.add('active');
       });
     }
-    loadAll();
+    loadAll(true);
   });
   document.getElementById('minNotional').addEventListener('change', function(){ applyClientFilter(); });
   document.getElementById('minPercentile').addEventListener('change', function(){ applyClientFilter(); });
@@ -356,7 +357,8 @@ function getAllTickers(){ return TICKERS.map(function(t){return t.ticker;}); }
 var _allSweeps = [];  // unfiltered sweeps from API
 var _loading = false;
 
-function loadAll(){
+function loadAll(resetView){
+  if(resetView) _initialLoad = true;
   fetchCandles();
   fetchSweeps();
 }
@@ -368,10 +370,38 @@ function fetchCandles(){
   fetch('/api/0dte/candles?ticker='+REF_TICKER+'&date='+date+'&days='+days+'&interval='+_candleInterval)
     .then(function(r){return r.json();})
     .then(function(d){
-      _candles = d.candles || [];
-      if(_candles.length > 0){
+      var newCandles = d.candles || [];
+      if(newCandles.length === 0){ _setLoading(false); return; }
+
+      if(_initialLoad || _candles.length === 0){
+        // First load or empty: full setData + fit
+        _candles = newCandles;
         _candleSeries.setData(_candles);
         _chart.timeScale().fitContent();
+        _initialLoad = false;
+      } else {
+        // Live update: merge new/updated candles without resetting viewport
+        var oldLast = _candles.length > 0 ? _candles[_candles.length - 1].time : 0;
+        var updated = false;
+        newCandles.forEach(function(c){
+          if(c.time > oldLast){
+            // Brand new candle
+            _candleSeries.update(c);
+            _candles.push(c);
+            updated = true;
+          } else if(c.time === oldLast){
+            // Update the current (last) candle in-place
+            _candleSeries.update(c);
+            _candles[_candles.length - 1] = c;
+            updated = true;
+          }
+        });
+        // If the server returned a completely different range (e.g. date change), do full reset
+        if(!updated && newCandles.length > 0 && newCandles[0].time !== (_candles[0] || {}).time){
+          _candles = newCandles;
+          _candleSeries.setData(_candles);
+          _chart.timeScale().fitContent();
+        }
       }
       drawBubbles();
       _setLoading(false);
@@ -637,7 +667,7 @@ function setIndex(idx, btn){
   });
 
   // Reload everything for new index
-  loadAll();
+  loadAll(true);
 }
 
 function setCandleInterval(mins, btn){
@@ -647,7 +677,7 @@ function setCandleInterval(mins, btn){
   btns.forEach(function(b){ b.classList.remove('active'); });
   btn.classList.add('active');
   // Both candles and sweeps need refetch since lookback changes
-  loadAll();
+  loadAll(true);
 }
 
 function toggleFilter(which){
