@@ -546,7 +546,7 @@ def _save_log_filters(data):
 
 from config import (
     TICKER_GROUPS, PROTOTYPE_TICKERS, TIMEFRAMES,
-    REFRESH_INTERVAL_SECONDS, DB_PATH, MASSIVE_API_KEY,
+    REFRESH_INTERVAL_SECONDS, DB_PATH, MASSIVE_API_KEY, MASSIVE_BASE_URL,
     OVERVIEW_GROUPS, INDICATOR_VERSION, _load_watchlists,
 )
 from config import WATCHLISTS as _INITIAL_WATCHLISTS
@@ -767,6 +767,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_page("hvc.html")
         elif path == "/sweeps":
             self.serve_page("sweeps_unified.html")
+        elif path == "/0dte":
+            self.serve_page("0dte.html")
         elif path == "/etf-sweeps":
             self.send_response(302)
             self.send_header("Location", "/sweeps?asset=etf")
@@ -847,6 +849,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_etf_categories()
         elif path == "/api/ticker-names":
             self.serve_ticker_names()
+        elif path == "/api/0dte/candles":
+            self.serve_0dte_candles(query)
+        elif path == "/api/0dte/sweeps":
+            self.serve_0dte_sweeps(query)
         elif path == "/api/analysis/river":
             self.serve_analysis_river(query)
         elif path == "/api/analysis/heatmap":
@@ -5222,6 +5228,177 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         conn.close()
         return out
+
+    # ====================================================================
+    # 0DTE DARKPOOL FLOW
+    # ====================================================================
+
+    def serve_0dte_candles(self, query=None):
+        """GET /api/0dte/candles — fetch 1-min candles from Polygon for a ticker."""
+        query = query or {}
+        ticker = query.get("ticker", ["SPY"])[0]
+        date_str = query.get("date", [None])[0]
+        days = int(query.get("days", ["1"])[0])
+
+        if not date_str:
+            from datetime import date as dt_date
+            date_str = dt_date.today().isoformat()
+
+        # Compute date range for multi-day
+        from datetime import datetime, timedelta
+        end_date = datetime.strptime(date_str, "%Y-%m-%d")
+        start_date = end_date - timedelta(days=max(0, days - 1) + 2)  # +2 for weekends
+        from_str = start_date.strftime("%Y-%m-%d")
+
+        url = f"{MASSIVE_BASE_URL}/aggs/ticker/{ticker}/range/1/minute/{from_str}/{date_str}"
+        headers = {"Authorization": f"Bearer {MASSIVE_API_KEY}"}
+        params = {"adjusted": "true", "sort": "asc", "limit": 50000}
+
+        all_bars = []
+        try:
+            while url:
+                resp = requests.get(url, params=params, headers=headers, timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
+                results = data.get("results", [])
+                for r in results:
+                    ts = r.get("t", 0) // 1000  # ms → seconds
+                    all_bars.append({
+                        "time": ts,
+                        "open": r.get("o", 0),
+                        "high": r.get("h", 0),
+                        "low": r.get("l", 0),
+                        "close": r.get("c", 0),
+                        "volume": r.get("v", 0),
+                    })
+                url = data.get("next_url")
+                params = {}  # next_url includes params
+                if url and MASSIVE_API_KEY:
+                    url += f"&apiKey={MASSIVE_API_KEY}"
+        except Exception as e:
+            self.send_json({"error": str(e), "candles": []})
+            return
+
+        self.send_json({"candles": all_bars, "ticker": ticker})
+
+    def serve_0dte_sweeps(self, query=None):
+        """GET /api/0dte/sweeps — darkpool sweeps for multiple tickers with percentile sizing."""
+        query = query or {}
+        tickers_str = query.get("tickers", ["SPY,VOO"])[0]
+        tickers = [t.strip() for t in tickers_str.split(",") if t.strip()]
+        date_str = query.get("date", [None])[0]
+        days = int(query.get("days", ["1"])[0])
+        min_notional = float(query.get("min_notional", ["500000"])[0])
+
+        if not date_str:
+            from datetime import date as dt_date
+            date_str = dt_date.today().isoformat()
+
+        from datetime import datetime, timedelta
+        end_date = datetime.strptime(date_str, "%Y-%m-%d")
+        # For multi-day, go back extra for weekends
+        start_date = end_date - timedelta(days=max(0, days - 1) + 2)
+        from_str = start_date.strftime("%Y-%m-%d")
+
+        import sqlite3
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+
+        # 1) Get today's sweeps for requested tickers
+        placeholders = ",".join("?" for _ in tickers)
+        sweeps_sql = f"""
+            SELECT ticker, trade_date, trade_time, sip_timestamp, price, size, notional
+            FROM sweep_trades
+            WHERE ticker IN ({placeholders})
+              AND trade_date >= ? AND trade_date <= ?
+              AND is_darkpool = 1 AND is_sweep = 1
+              AND notional >= ?
+            ORDER BY trade_date, trade_time
+        """
+        rows = conn.execute(sweeps_sql, tickers + [from_str, date_str, min_notional]).fetchall()
+
+        # 2) Build percentile lookup per ticker (3 years of history)
+        three_years_ago = (end_date - timedelta(days=3*365)).strftime("%Y-%m-%d")
+        percentile_cache = {}
+        for tk in tickers:
+            hist_sql = """
+                SELECT notional FROM sweep_trades
+                WHERE ticker = ? AND is_darkpool = 1 AND is_sweep = 1
+                  AND trade_date >= ? AND notional >= ?
+                ORDER BY notional
+            """
+            hist = [r[0] for r in conn.execute(hist_sql, (tk, three_years_ago, min_notional)).fetchall()]
+            percentile_cache[tk] = hist  # sorted ascending
+
+        # 3) Compute SPY ratio for price normalisation
+        spy_ratio = {}
+        ref_ticker = "SPY"
+        # Get first candle of the target date for each ticker from cache
+        for tk in tickers:
+            if tk == ref_ticker:
+                spy_ratio[tk] = 1.0
+                continue
+            # Use first sweep price as approximation, or query candles
+            first_sweep = None
+            first_ref = None
+            for r in rows:
+                if r["ticker"] == tk and first_sweep is None:
+                    first_sweep = r["price"]
+                if r["ticker"] == ref_ticker and first_ref is None:
+                    first_ref = r["price"]
+            if first_sweep and first_ref and first_ref > 0:
+                spy_ratio[tk] = first_sweep / first_ref
+            else:
+                spy_ratio[tk] = 1.0
+
+        conn.close()
+
+        # 4) Build response with percentiles
+        def _percentile(ticker, notional):
+            hist = percentile_cache.get(ticker, [])
+            if not hist:
+                return 50
+            # Binary search for position
+            lo, hi = 0, len(hist)
+            while lo < hi:
+                mid = (lo + hi) // 2
+                if hist[mid] < notional:
+                    lo = mid + 1
+                else:
+                    hi = mid
+            return min(99, int(lo / len(hist) * 100))
+
+        sweeps = []
+        for r in rows:
+            # Convert trade_time to unix timestamp
+            dt_str = f"{r['trade_date']} {r['trade_time'][:8]}"
+            try:
+                from datetime import datetime as _dt
+                trade_dt = _dt.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+                # Assume ET (UTC-4 or UTC-5) — sweeps are US market
+                time_unix = int(trade_dt.timestamp())
+            except Exception:
+                continue
+
+            pct = _percentile(r["ticker"], r["notional"])
+            sweeps.append({
+                "ticker": r["ticker"],
+                "time_unix": time_unix,
+                "date": r["trade_date"],
+                "time": r["trade_time"][:8],
+                "price": r["price"],
+                "size": r["size"],
+                "notional": r["notional"],
+                "percentile": pct,
+            })
+
+        self.send_json({
+            "sweeps": sweeps,
+            "spy_ratio": spy_ratio,
+            "tickers": tickers,
+            "date": date_str,
+            "total": len(sweeps),
+        })
 
     def send_json(self, data):
         """Helper to send JSON response, with optional gzip compression."""

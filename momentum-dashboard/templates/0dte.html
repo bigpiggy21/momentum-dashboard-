@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TBD Technologies — 0DTE Flow</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden;height:100vh;}
+
+/* Header */
+.header{background:#0c0c14;padding:10px 20px;border-bottom:1px solid #1e1e2e;display:flex;align-items:center;gap:16px;height:48px;z-index:10;}
+.header-title{font-size:18px;font-weight:700;color:#f59e0b;}
+.header-subtitle{font-size:12px;color:#666;margin-left:4px;}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
+.header input[type="date"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:4px 8px;border-radius:4px;font-size:12px;font-family:inherit;}
+.header select,.header input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:4px 8px;border-radius:4px;font-size:12px;font-family:inherit;width:70px;}
+.header label{font-size:11px;color:#888;}
+
+/* Layout */
+.main{display:flex;height:calc(100vh - 48px);}
+.left-panel{width:280px;min-width:280px;background:#0a0a12;border-right:1px solid #1e1e2e;padding:16px;overflow-y:auto;transition:width 0.2s,min-width 0.2s,padding 0.2s;}
+.left-panel.collapsed{width:0;min-width:0;padding:0;overflow:hidden;border-right:none;}
+.chart-area{flex:1;position:relative;overflow:hidden;}
+#chartContainer{width:100%;height:100%;position:relative;}
+#bubbleCanvas{position:absolute;top:0;left:0;pointer-events:none;z-index:5;}
+#tooltipDiv{position:absolute;display:none;background:rgba(0,0,0,0.85);border:1px solid #334155;border-radius:4px;padding:6px 10px;font-size:11px;color:#e0e0e8;pointer-events:none;z-index:10;white-space:nowrap;}
+
+/* Left panel sections */
+.panel-section{margin-bottom:16px;}
+.panel-label{font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600;}
+.ticker-row{display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;}
+.ticker-row:hover{background:#14141e;border-radius:4px;}
+.ticker-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.ticker-label{font-size:13px;font-weight:600;}
+.ticker-check{accent-color:#f59e0b;}
+.stat-row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px;}
+.stat-val{color:#f59e0b;font-weight:600;}
+
+/* Buttons */
+.ctrl-btn{background:#1e293b;color:#e2e8f0;border:1px solid #334155;padding:6px 14px;border-radius:4px;font-size:11px;cursor:pointer;font-weight:500;width:100%;}
+.ctrl-btn:hover{background:#334155;}
+.ctrl-btn.active{background:#f59e0b22;color:#f59e0b;border-color:#f59e0b66;}
+.collapse-btn{position:absolute;left:0;top:50%;transform:translateY(-50%);background:#1e293b;border:1px solid #334155;border-left:none;color:#888;padding:8px 4px;cursor:pointer;border-radius:0 4px 4px 0;z-index:6;font-size:10px;}
+.collapse-btn:hover{color:#f59e0b;}
+
+/* Sweep feed */
+.feed{margin-top:8px;max-height:300px;overflow-y:auto;}
+.feed-item{font-size:11px;padding:4px 0;border-bottom:1px solid #1a1a26;display:flex;gap:6px;}
+.feed-time{color:#555;min-width:55px;}
+.feed-ticker{font-weight:600;min-width:32px;}
+.feed-notional{color:#f59e0b;margin-left:auto;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">0DTE Flow</div>
+  <div class="header-subtitle">Darkpool Sweep Overlay</div>
+  <div class="header-right">
+    <label>Date</label>
+    <input type="date" id="dateInput">
+    <label>Days</label>
+    <select id="daysSelect">
+      <option value="1" selected>1</option>
+      <option value="3">3</option>
+      <option value="5">5</option>
+    </select>
+    <label>Min $</label>
+    <input type="number" id="minNotional" value="500000" step="100000" min="0" style="width:90px;">
+    <button class="ctrl-btn" id="btnRefresh" onclick="loadAll()" style="width:auto;padding:6px 16px;">Refresh</button>
+    <button class="ctrl-btn" id="btnAutoRefresh" onclick="toggleAutoRefresh()" style="width:auto;padding:6px 16px;">Auto: Off</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="left-panel" id="leftPanel">
+    <div class="panel-section">
+      <div class="panel-label">Tickers</div>
+      <div id="tickerList">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-label">Stats</div>
+      <div id="statsBox">
+        <div class="stat-row"><span>Sweeps</span><span class="stat-val" id="statSweeps">0</span></div>
+        <div class="stat-row"><span>Total $</span><span class="stat-val" id="statNotional">$0</span></div>
+        <div class="stat-row"><span>Largest</span><span class="stat-val" id="statLargest">$0</span></div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-label">Recent Sweeps</div>
+      <div class="feed" id="sweepFeed">
+        <div style="color:#555;font-size:11px;">No data yet</div>
+      </div>
+    </div>
+  </div>
+  <div class="chart-area">
+    <button class="collapse-btn" id="collapseBtn" onclick="togglePanel()">&#x25C0;</button>
+    <div id="chartContainer"></div>
+    <canvas id="bubbleCanvas"></canvas>
+    <div id="tooltipDiv"></div>
+  </div>
+</div>
+
+<script>
+// ====================================================================
+// CONFIG
+// ====================================================================
+var TICKERS = [
+  {ticker: 'SPY', color: 'rgba(59,130,246,0.55)', stroke: '#3b82f6', label: 'SPY', on: true, isRef: true},
+  {ticker: 'VOO', color: 'rgba(234,179,8,0.55)', stroke: '#eab308', label: 'VOO', on: true},
+];
+var REF_TICKER = 'SPY';
+
+// ====================================================================
+// STATE
+// ====================================================================
+var _chart = null;
+var _candleSeries = null;
+var _canvas = null;
+var _ctx = null;
+var _sweeps = [];       // all fetched sweeps
+var _spyRatio = {};     // {VOO: 0.915, ...}
+var _autoRefresh = false;
+var _sweepTimer = null;
+var _candleTimer = null;
+var _candles = [];       // raw candle array
+
+// ====================================================================
+// INIT
+// ====================================================================
+(function init(){
+  // Set date to today
+  var today = new Date();
+  var iso = today.toISOString().slice(0,10);
+  document.getElementById('dateInput').value = iso;
+
+  // Build ticker checkboxes
+  var list = document.getElementById('tickerList');
+  TICKERS.forEach(function(t){
+    var row = document.createElement('div');
+    row.className = 'ticker-row';
+    row.innerHTML = '<input type="checkbox" class="ticker-check" data-ticker="'+t.ticker+'" '+(t.on?'checked':'')+' onchange="onTickerToggle(this)">'
+      + '<div class="ticker-dot" style="background:'+t.stroke+';"></div>'
+      + '<span class="ticker-label">'+t.label+'</span>';
+    list.appendChild(row);
+  });
+
+  // Init chart
+  initChart();
+  loadAll();
+})();
+
+function initChart(){
+  var container = document.getElementById('chartContainer');
+  _chart = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: container.clientHeight,
+    layout: {background:{type:'solid',color:'#0c0c14'}, textColor:'#888', fontSize:11},
+    grid: {vertLines:{color:'#1a1a26'}, horzLines:{color:'#1a1a26'}},
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+      vertLine:{color:'#f59e0b33',width:1,style:3},
+      horzLine:{color:'#f59e0b33',width:1,style:3},
+    },
+    timeScale: {borderColor:'#1e1e2e', timeVisible:true, secondsVisible:false},
+    rightPriceScale: {borderColor:'#1e1e2e'},
+  });
+
+  _candleSeries = _chart.addCandlestickSeries({
+    upColor:'transparent', downColor:'#b22833',
+    borderUpColor:'#056656', borderDownColor:'#b22833',
+    wickUpColor:'#056656', wickDownColor:'#b22833',
+  });
+
+  // Canvas overlay
+  _canvas = document.getElementById('bubbleCanvas');
+  _ctx = _canvas.getContext('2d');
+  resizeCanvas();
+
+  // Redraw bubbles on scroll/zoom
+  _chart.timeScale().subscribeVisibleTimeRangeChange(drawBubbles);
+
+  // Resize handler
+  window.addEventListener('resize', function(){
+    _chart.resize(container.clientWidth, container.clientHeight);
+    resizeCanvas();
+    drawBubbles();
+  });
+
+  // Mouse move for tooltip
+  container.addEventListener('mousemove', onMouseMove);
+  container.addEventListener('mouseleave', function(){
+    document.getElementById('tooltipDiv').style.display = 'none';
+  });
+}
+
+function resizeCanvas(){
+  var container = document.getElementById('chartContainer');
+  _canvas.width = container.clientWidth;
+  _canvas.height = container.clientHeight;
+}
+
+// ====================================================================
+// DATA LOADING
+// ====================================================================
+function getDate(){ return document.getElementById('dateInput').value; }
+function getDays(){ return parseInt(document.getElementById('daysSelect').value) || 1; }
+function getMinNotional(){ return parseFloat(document.getElementById('minNotional').value) || 500000; }
+function getActiveTickers(){ return TICKERS.filter(function(t){return t.on;}).map(function(t){return t.ticker;}); }
+
+function loadAll(){
+  fetchCandles();
+  fetchSweeps();
+}
+
+function fetchCandles(){
+  var date = getDate();
+  var days = getDays();
+  fetch('/api/0dte/candles?ticker='+REF_TICKER+'&date='+date+'&days='+days)
+    .then(function(r){return r.json();})
+    .then(function(d){
+      _candles = d.candles || [];
+      if(_candles.length > 0){
+        _candleSeries.setData(_candles);
+        _chart.timeScale().fitContent();
+      }
+      drawBubbles();
+    })
+    .catch(function(e){ console.error('Candle fetch error:', e); });
+}
+
+function fetchSweeps(){
+  var date = getDate();
+  var days = getDays();
+  var tickers = getActiveTickers();
+  var minN = getMinNotional();
+  if(tickers.length === 0) { _sweeps = []; drawBubbles(); updateStats(); return; }
+
+  fetch('/api/0dte/sweeps?tickers='+tickers.join(',')+'&date='+date+'&days='+days+'&min_notional='+minN)
+    .then(function(r){return r.json();})
+    .then(function(d){
+      _sweeps = d.sweeps || [];
+      _spyRatio = d.spy_ratio || {};
+      drawBubbles();
+      updateStats();
+      updateFeed();
+    })
+    .catch(function(e){ console.error('Sweep fetch error:', e); });
+}
+
+// ====================================================================
+// BUBBLE DRAWING (Canvas overlay)
+// ====================================================================
+function drawBubbles(){
+  if(!_ctx || !_chart || !_candleSeries) return;
+  _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
+
+  var activeTickers = {};
+  TICKERS.forEach(function(t){ if(t.on) activeTickers[t.ticker] = t; });
+
+  var ts = _chart.timeScale();
+
+  _sweeps.forEach(function(s){
+    var tConf = activeTickers[s.ticker];
+    if(!tConf) return;
+
+    // Map time to x coordinate
+    var x = ts.timeToCoordinate(s.time_unix);
+    if(x === null || x < 0 || x > _canvas.width) return;
+
+    // Normalise price to reference ticker axis
+    var ratio = _spyRatio[s.ticker] || 1;
+    var normPrice = ratio === 1 ? s.price : s.price / ratio;
+
+    // Map price to y coordinate
+    var y = _candleSeries.priceToCoordinate(normPrice);
+    if(y === null || y < 0 || y > _canvas.height) return;
+
+    // Radius based on percentile (3px min, 25px max)
+    var radius = 3 + (s.percentile / 100) * 22;
+
+    // Draw bubble
+    _ctx.beginPath();
+    _ctx.arc(x, y, radius, 0, Math.PI * 2);
+    _ctx.fillStyle = tConf.color;
+    _ctx.fill();
+    _ctx.strokeStyle = tConf.stroke;
+    _ctx.lineWidth = 1;
+    _ctx.stroke();
+  });
+}
+
+// ====================================================================
+// TOOLTIP
+// ====================================================================
+function onMouseMove(e){
+  var rect = document.getElementById('chartContainer').getBoundingClientRect();
+  var mx = e.clientX - rect.left;
+  var my = e.clientY - rect.top;
+  var tooltip = document.getElementById('tooltipDiv');
+
+  // Find nearest bubble
+  var closest = null;
+  var closestDist = 30; // max hover distance
+  var activeTickers = {};
+  TICKERS.forEach(function(t){ if(t.on) activeTickers[t.ticker] = t; });
+  var ts = _chart.timeScale();
+
+  for(var i = 0; i < _sweeps.length; i++){
+    var s = _sweeps[i];
+    if(!activeTickers[s.ticker]) continue;
+    var x = ts.timeToCoordinate(s.time_unix);
+    if(x === null) continue;
+    var ratio = _spyRatio[s.ticker] || 1;
+    var normPrice = ratio === 1 ? s.price : s.price / ratio;
+    var y = _candleSeries.priceToCoordinate(normPrice);
+    if(y === null) continue;
+    var dist = Math.sqrt((mx-x)*(mx-x) + (my-y)*(my-y));
+    if(dist < closestDist){
+      closestDist = dist;
+      closest = s;
+    }
+  }
+
+  if(closest){
+    tooltip.style.display = 'block';
+    tooltip.style.left = (mx + 12) + 'px';
+    tooltip.style.top = (my - 10) + 'px';
+    tooltip.innerHTML = '<b>' + closest.ticker + '</b> ' + closest.time
+      + '<br>$' + fmt$(closest.notional) + ' @ $' + closest.price.toFixed(2)
+      + '<br>Percentile: ' + closest.percentile + '%';
+  } else {
+    tooltip.style.display = 'none';
+  }
+}
+
+// ====================================================================
+// CONTROLS
+// ====================================================================
+function onTickerToggle(el){
+  var ticker = el.getAttribute('data-ticker');
+  TICKERS.forEach(function(t){ if(t.ticker === ticker) t.on = el.checked; });
+  fetchSweeps();
+}
+
+function togglePanel(){
+  var panel = document.getElementById('leftPanel');
+  var btn = document.getElementById('collapseBtn');
+  panel.classList.toggle('collapsed');
+  btn.innerHTML = panel.classList.contains('collapsed') ? '&#x25B6;' : '&#x25C0;';
+  // Resize chart after transition
+  setTimeout(function(){
+    var container = document.getElementById('chartContainer');
+    _chart.resize(container.clientWidth, container.clientHeight);
+    resizeCanvas();
+    drawBubbles();
+  }, 250);
+}
+
+function toggleAutoRefresh(){
+  _autoRefresh = !_autoRefresh;
+  var btn = document.getElementById('btnAutoRefresh');
+  btn.textContent = _autoRefresh ? 'Auto: On' : 'Auto: Off';
+  btn.classList.toggle('active', _autoRefresh);
+  if(_autoRefresh){
+    _sweepTimer = setInterval(fetchSweeps, 15000);
+    _candleTimer = setInterval(fetchCandles, 60000);
+  } else {
+    clearInterval(_sweepTimer);
+    clearInterval(_candleTimer);
+  }
+}
+
+// ====================================================================
+// STATS & FEED
+// ====================================================================
+function updateStats(){
+  var total = _sweeps.length;
+  var totalN = 0;
+  var largest = 0;
+  _sweeps.forEach(function(s){
+    totalN += s.notional;
+    if(s.notional > largest) largest = s.notional;
+  });
+  document.getElementById('statSweeps').textContent = total;
+  document.getElementById('statNotional').textContent = '$' + fmt$(totalN);
+  document.getElementById('statLargest').textContent = '$' + fmt$(largest);
+}
+
+function updateFeed(){
+  var feed = document.getElementById('sweepFeed');
+  // Show last 50 sweeps, most recent first
+  var recent = _sweeps.slice(-50).reverse();
+  if(recent.length === 0){
+    feed.innerHTML = '<div style="color:#555;font-size:11px;">No sweeps found</div>';
+    return;
+  }
+  var html = '';
+  recent.forEach(function(s){
+    var tConf = TICKERS.find(function(t){return t.ticker === s.ticker;});
+    var color = tConf ? tConf.stroke : '#888';
+    html += '<div class="feed-item">'
+      + '<span class="feed-time">' + s.time + '</span>'
+      + '<span class="feed-ticker" style="color:'+color+'">' + s.ticker + '</span>'
+      + '<span>$' + s.price.toFixed(2) + '</span>'
+      + '<span class="feed-notional">$' + fmt$(s.notional) + '</span>'
+      + '</div>';
+  });
+  feed.innerHTML = html;
+}
+
+// ====================================================================
+// UTILS
+// ====================================================================
+function fmt$(v){
+  if(v >= 1e9) return (v/1e9).toFixed(2) + 'B';
+  if(v >= 1e6) return (v/1e6).toFixed(1) + 'M';
+  if(v >= 1e3) return (v/1e3).toFixed(0) + 'K';
+  return v.toFixed(0);
+}
+</script>
+</body>
+</html>
