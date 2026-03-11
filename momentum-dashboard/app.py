@@ -5240,7 +5240,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         date_str = query.get("date", [None])[0]
         days = int(query.get("days", ["1"])[0])
         interval = int(query.get("interval", ["1"])[0])
-        if interval not in (1, 5, 60):
+        if interval not in (1, 5, 60, 1440):
             interval = 1
 
         if not date_str:
@@ -5250,13 +5250,16 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         # Compute date range for multi-day
         from datetime import datetime, timedelta
         end_date = datetime.strptime(date_str, "%Y-%m-%d")
-        # For hourly with 30-60 day ranges, need more weekend padding
-        weekend_pad = 2 if days <= 10 else int(days * 0.4)
+        # Weekend/holiday padding scales with range
+        weekend_pad = 2 if days <= 10 else int(days * 0.45)
         start_date = end_date - timedelta(days=max(0, days - 1) + weekend_pad)
         from_str = start_date.strftime("%Y-%m-%d")
 
-        # Polygon: 60 min = 1 hour
-        if interval == 60:
+        # Map interval to Polygon aggregation unit
+        if interval == 1440:
+            agg_unit = "day"
+            agg_mult = 1
+        elif interval == 60:
             agg_unit = "hour"
             agg_mult = 1
         else:

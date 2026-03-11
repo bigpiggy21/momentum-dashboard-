@@ -10,8 +10,8 @@
 body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden;height:100vh;}
 
 /* Header */
-.header{background:#0c0c14;padding:8px 20px;border-bottom:1px solid #1e1e2e;display:flex;align-items:center;gap:10px;height:48px;z-index:10;}
-.header-title{font-size:17px;font-weight:700;color:#f59e0b;white-space:nowrap;}
+.header{background:#0c0c14;padding:8px 0;border-bottom:1px solid #1e1e2e;display:flex;align-items:center;gap:10px;height:48px;z-index:10;}
+.header-title{font-size:17px;font-weight:700;color:#f59e0b;white-space:nowrap;width:280px;min-width:280px;padding-left:20px;box-sizing:border-box;}
 .header input[type="date"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:5px 8px;border-radius:4px;font-size:12px;font-family:inherit;}
 .header select,.header input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:5px 8px;border-radius:4px;font-size:12px;font-family:inherit;}
 .header select{width:52px;}
@@ -85,24 +85,17 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
   <button class="idx-tab active" onclick="setIndex('SPX',this)">SPX</button>
   <button class="idx-tab" onclick="setIndex('NDX',this)" disabled style="opacity:0.4">NDX</button>
   <button class="idx-tab" onclick="setIndex('RTY',this)" disabled style="opacity:0.4">RTY</button>
-  <div class="hdr-spacer"></div>
+  <div class="hdr-sep"></div>
   <button class="ctrl-btn" id="btnAutoRefresh" onclick="toggleAutoRefresh()" style="width:auto;padding:5px 12px;font-size:12px;">Live</button>
   <div class="hdr-sep"></div>
   <div class="seg-ctrl" id="candleIntervalCtrl">
     <button class="active" onclick="setCandleInterval(1,this)">1m</button>
     <button onclick="setCandleInterval(5,this)">5m</button>
     <button onclick="setCandleInterval(60,this)">1h</button>
+    <button onclick="setCandleInterval(1440,this)">1D</button>
   </div>
   <div class="hdr-sep"></div>
   <input type="date" id="dateInput">
-  <select id="daysSelect">
-    <option value="1" selected>1d</option>
-    <option value="3">3d</option>
-    <option value="5">5d</option>
-    <option value="10">10d</option>
-    <option value="30">30d</option>
-    <option value="60">60d</option>
-  </select>
   <div class="hdr-sep"></div>
   <div class="filter-group on" id="fgNotional">
     <button class="flbl active" onclick="toggleFilter('notional')">Min $</button>
@@ -160,7 +153,9 @@ var REF_TICKER = 'SPY';
 // ====================================================================
 // STATE
 // ====================================================================
-var _candleInterval = 1; // 1 or 5 minutes
+var _candleInterval = 1; // 1, 5, 60, or 1440
+// Each interval has a fixed lookback in trading days
+var INTERVAL_DAYS = {1: 10, 5: 60, 60: 504, 1440: 1260};
 var _chart = null;
 var _candleSeries = null;
 var _canvas = null;
@@ -192,9 +187,30 @@ var _candles = [];       // raw candle array
     list.appendChild(row);
   });
 
-  // Auto-load on date/days/filter change
-  document.getElementById('dateInput').addEventListener('change', function(){ loadAll(); });
-  document.getElementById('daysSelect').addEventListener('change', function(){ loadAll(); });
+  // Auto-load on date/filter change
+  document.getElementById('dateInput').addEventListener('change', function(){
+    // Smart interval: if date is far in the past, auto-switch to higher timeframe
+    var picked = new Date(document.getElementById('dateInput').value);
+    var now = new Date();
+    var diffDays = Math.round((now - picked) / 86400000);
+    var bestInterval = 1;
+    if(diffDays > 60) bestInterval = 60;      // >60 days ago → 1h
+    else if(diffDays > 10) bestInterval = 5;   // >10 days ago → 5m
+    if(diffDays > 504) bestInterval = 1440;    // >2 years ago → 1D
+    if(bestInterval !== _candleInterval){
+      _candleInterval = bestInterval;
+      var btns = document.getElementById('candleIntervalCtrl').querySelectorAll('button');
+      btns.forEach(function(b){ b.classList.remove('active'); });
+      // Find the matching button
+      btns.forEach(function(b){
+        var mins = {
+          '1m':1,'5m':5,'1h':60,'1D':1440
+        }[b.textContent];
+        if(mins === bestInterval) b.classList.add('active');
+      });
+    }
+    loadAll();
+  });
   document.getElementById('minNotional').addEventListener('change', function(){ applyClientFilter(); });
   document.getElementById('minPercentile').addEventListener('change', function(){ applyClientFilter(); });
 
@@ -257,7 +273,7 @@ function resizeCanvas(){
 // DATA LOADING
 // ====================================================================
 function getDate(){ return document.getElementById('dateInput').value; }
-function getDays(){ return parseInt(document.getElementById('daysSelect').value) || 1; }
+function getDays(){ return INTERVAL_DAYS[_candleInterval] || 10; }
 function getMinNotional(){ return parseFloat(document.getElementById('minNotional').value) || 500000; }
 function getMinPercentile(){ return parseInt(document.getElementById('minPercentile').value) || 0; }
 function getAllTickers(){ return TICKERS.map(function(t){return t.ticker;}); }
@@ -502,7 +518,8 @@ function setCandleInterval(mins, btn){
   var btns = document.getElementById('candleIntervalCtrl').querySelectorAll('button');
   btns.forEach(function(b){ b.classList.remove('active'); });
   btn.classList.add('active');
-  fetchCandles();
+  // Both candles and sweeps need refetch since lookback changes
+  loadAll();
 }
 
 function toggleFilter(which){
