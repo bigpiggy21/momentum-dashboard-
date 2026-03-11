@@ -67,9 +67,9 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
       <option value="3">3</option>
       <option value="5">5</option>
     </select>
-    <label>Min $</label>
+    <button class="ctrl-btn" id="btnFilterMode" onclick="toggleFilterMode()" style="width:auto;padding:6px 12px;min-width:50px;">Min $</button>
     <input type="number" id="minNotional" value="500000" step="100000" min="0" style="width:90px;">
-    <button class="ctrl-btn" id="btnRefresh" onclick="loadAll()" style="width:auto;padding:6px 16px;">Refresh</button>
+    <input type="number" id="minPercentile" value="50" step="5" min="0" max="99" style="width:60px;display:none;">
     <button class="ctrl-btn" id="btnAutoRefresh" onclick="toggleAutoRefresh()" style="width:auto;padding:6px 16px;">Auto: Off</button>
   </div>
 </div>
@@ -149,6 +149,12 @@ var _candles = [];       // raw candle array
     list.appendChild(row);
   });
 
+  // Auto-load on date/days/filter change
+  document.getElementById('dateInput').addEventListener('change', function(){ loadAll(); });
+  document.getElementById('daysSelect').addEventListener('change', function(){ loadAll(); });
+  document.getElementById('minNotional').addEventListener('change', function(){ fetchSweeps(); });
+  document.getElementById('minPercentile').addEventListener('change', function(){ applyClientFilter(); });
+
   // Init chart
   initChart();
   loadAll();
@@ -210,7 +216,12 @@ function resizeCanvas(){
 function getDate(){ return document.getElementById('dateInput').value; }
 function getDays(){ return parseInt(document.getElementById('daysSelect').value) || 1; }
 function getMinNotional(){ return parseFloat(document.getElementById('minNotional').value) || 500000; }
-function getActiveTickers(){ return TICKERS.filter(function(t){return t.on;}).map(function(t){return t.ticker;}); }
+function getMinPercentile(){ return parseInt(document.getElementById('minPercentile').value) || 0; }
+function getAllTickers(){ return TICKERS.map(function(t){return t.ticker;}); }
+
+var _filterMode = 'notional'; // 'notional' or 'percentile'
+var _allSweeps = [];  // unfiltered sweeps from API
+var _loading = false;
 
 function loadAll(){
   fetchCandles();
@@ -220,6 +231,7 @@ function loadAll(){
 function fetchCandles(){
   var date = getDate();
   var days = getDays();
+  _setLoading(true);
   fetch('/api/0dte/candles?ticker='+REF_TICKER+'&date='+date+'&days='+days)
     .then(function(r){return r.json();})
     .then(function(d){
@@ -229,27 +241,46 @@ function fetchCandles(){
         _chart.timeScale().fitContent();
       }
       drawBubbles();
+      _setLoading(false);
     })
-    .catch(function(e){ console.error('Candle fetch error:', e); });
+    .catch(function(e){ console.error('Candle fetch error:', e); _setLoading(false); });
 }
 
 function fetchSweeps(){
   var date = getDate();
   var days = getDays();
-  var tickers = getActiveTickers();
-  var minN = getMinNotional();
-  if(tickers.length === 0) { _sweeps = []; drawBubbles(); updateStats(); return; }
+  // Always fetch ALL tickers — visibility is controlled client-side
+  var tickers = getAllTickers();
+  var minN = _filterMode === 'notional' ? getMinNotional() : 0;
 
+  _setLoading(true);
   fetch('/api/0dte/sweeps?tickers='+tickers.join(',')+'&date='+date+'&days='+days+'&min_notional='+minN)
     .then(function(r){return r.json();})
     .then(function(d){
-      _sweeps = d.sweeps || [];
+      _allSweeps = d.sweeps || [];
       _spyRatio = d.spy_ratio || {};
-      drawBubbles();
-      updateStats();
-      updateFeed();
+      applyClientFilter();
+      _setLoading(false);
     })
-    .catch(function(e){ console.error('Sweep fetch error:', e); });
+    .catch(function(e){ console.error('Sweep fetch error:', e); _setLoading(false); });
+}
+
+function applyClientFilter(){
+  if(_filterMode === 'percentile'){
+    var minPct = getMinPercentile();
+    _sweeps = _allSweeps.filter(function(s){ return s.percentile >= minPct; });
+  } else {
+    _sweeps = _allSweeps;
+  }
+  drawBubbles();
+  updateStats();
+  updateFeed();
+}
+
+function _setLoading(on){
+  _loading = on;
+  var el = document.getElementById('dateInput');
+  el.style.borderColor = on ? '#f59e0b' : '#2a2a3a';
 }
 
 // ====================================================================
@@ -381,7 +412,10 @@ function onMouseMove(e){
 function onTickerToggle(el){
   var ticker = el.getAttribute('data-ticker');
   TICKERS.forEach(function(t){ if(t.ticker === ticker) t.on = el.checked; });
-  fetchSweeps();
+  // Just redraw — don't refetch, data for all tickers is already loaded
+  drawBubbles();
+  updateStats();
+  updateFeed();
 }
 
 function togglePanel(){
@@ -396,6 +430,28 @@ function togglePanel(){
     resizeCanvas();
     drawBubbles();
   }, 250);
+}
+
+function toggleFilterMode(){
+  var btn = document.getElementById('btnFilterMode');
+  var notionalEl = document.getElementById('minNotional');
+  var pctEl = document.getElementById('minPercentile');
+  if(_filterMode === 'notional'){
+    _filterMode = 'percentile';
+    btn.textContent = 'Min %';
+    btn.classList.add('active');
+    notionalEl.style.display = 'none';
+    pctEl.style.display = '';
+    // In percentile mode, refetch with no min_notional to get all sweeps
+    fetchSweeps();
+  } else {
+    _filterMode = 'notional';
+    btn.textContent = 'Min $';
+    btn.classList.remove('active');
+    notionalEl.style.display = '';
+    pctEl.style.display = 'none';
+    fetchSweeps();
+  }
 }
 
 function toggleAutoRefresh(){
@@ -416,10 +472,14 @@ function toggleAutoRefresh(){
 // STATS & FEED
 // ====================================================================
 function updateStats(){
-  var total = _sweeps.length;
+  var activeTickers = {};
+  TICKERS.forEach(function(t){ if(t.on) activeTickers[t.ticker] = true; });
+  var total = 0;
   var totalN = 0;
   var largest = 0;
   _sweeps.forEach(function(s){
+    if(!activeTickers[s.ticker]) return;
+    total++;
     totalN += s.notional;
     if(s.notional > largest) largest = s.notional;
   });
@@ -430,8 +490,10 @@ function updateStats(){
 
 function updateFeed(){
   var feed = document.getElementById('sweepFeed');
-  // Show last 50 sweeps, most recent first
-  var recent = _sweeps.slice(-50).reverse();
+  var activeTickers = {};
+  TICKERS.forEach(function(t){ if(t.on) activeTickers[t.ticker] = true; });
+  // Show last 50 visible sweeps, most recent first
+  var recent = _sweeps.filter(function(s){ return activeTickers[s.ticker]; }).slice(-50).reverse();
   if(recent.length === 0){
     feed.innerHTML = '<div style="color:#555;font-size:11px;">No sweeps found</div>';
     return;
