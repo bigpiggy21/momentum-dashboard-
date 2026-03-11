@@ -3224,6 +3224,11 @@ def _load_price_candles(ticker, date_from=None, date_to=None, timeframe="1D"):
 
     If the LivePriceDaemon is running, today's bars are merged from
     in-memory live data for real-time freshness.
+
+    Option C: If cache is missing entirely, kicks off a background fetch
+    so the data is ready on next load.  If hourly cache exists but is
+    stale (last bar > 1 hour old during market hours), refreshes it in
+    the background too.
     """
     safe = ticker.replace("/", "_").replace(":", "_")
     suffix = _TF_SUFFIX.get(timeframe, "day")
@@ -3233,7 +3238,22 @@ def _load_price_candles(ticker, date_from=None, date_to=None, timeframe="1D"):
         path = os.path.join(PRICE_CACHE_DIR, f"{safe}_day.csv")
         timeframe = "1D"
         if not os.path.exists(path):
+            # No cache at all — trigger background fetch for day + hour
+            _bg_price_fetch(ticker, ("day", "hour"))
             return []
+
+    # Check hourly staleness during market hours — refresh in background
+    if suffix == "hour":
+        hour_path = os.path.join(PRICE_CACHE_DIR, f"{safe}_hour.csv")
+        if os.path.exists(hour_path):
+            age_s = _time.time() - os.path.getmtime(hour_path)
+            if age_s > 3600:  # older than 1 hour
+                from data_fetcher import _is_market_hours
+                if _is_market_hours():
+                    _bg_price_fetch(ticker, ("hour",))
+        else:
+            # Hourly cache doesn't exist — fetch it in background
+            _bg_price_fetch(ticker, ("hour",))
     try:
         df = pd.read_csv(path, parse_dates=["timestamp"])
         df = df.sort_values("timestamp").reset_index(drop=True)
@@ -3281,6 +3301,81 @@ def _load_price_candles(ticker, date_from=None, date_to=None, timeframe="1D"):
     except Exception as e:
         print(f"  Warning: Could not load candles for {ticker} ({timeframe}): {e}")
         return []
+
+
+# ---------------------------------------------------------------------------
+# On-demand price backfill
+# ---------------------------------------------------------------------------
+
+# Track in-flight background fetches to avoid duplicate work
+_price_fetch_inflight = set()
+_price_fetch_lock = threading.Lock()
+
+
+def _quick_price_fetch(ticker, timespans=("day", "hour")):
+    """Fetch price data for a single ticker into the CSV cache.
+
+    Lightweight wrapper around data_fetcher.fetch_with_cache().
+    Designed to be called from a background thread — safe to fire-and-forget.
+    """
+    from data_fetcher import fetch_with_cache
+    safe = ticker.replace("/", "_").replace(":", "_")
+    for ts in timespans:
+        try:
+            fetch_with_cache(ticker, ts)
+        except Exception as e:
+            print(f"  [price-backfill] {ticker}/{ts} fetch error: {e}", flush=True)
+
+
+def _bg_price_fetch(ticker, timespans=("day", "hour")):
+    """Run _quick_price_fetch in a background thread with dedup."""
+    key = ticker
+    with _price_fetch_lock:
+        if key in _price_fetch_inflight:
+            return  # already fetching
+        _price_fetch_inflight.add(key)
+
+    def _do():
+        try:
+            _quick_price_fetch(ticker, timespans)
+        finally:
+            with _price_fetch_lock:
+                _price_fetch_inflight.discard(key)
+
+    t = threading.Thread(target=_do, daemon=True)
+    t.start()
+
+
+def backfill_event_ticker_prices(tickers=None):
+    """Option A: Post-detection backfill.
+
+    Finds tickers in clusterbomb_events that have NO daily price cache
+    and fetches day + hour candles for them.  Returns the list of tickers
+    that were queued for backfill.
+    """
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    if tickers:
+        placeholders = ",".join("?" for _ in tickers)
+        rows = conn.execute(
+            f"SELECT DISTINCT ticker FROM clusterbomb_events WHERE ticker IN ({placeholders})",
+            tickers,
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT DISTINCT ticker FROM clusterbomb_events").fetchall()
+    conn.close()
+
+    queued = []
+    for (tk,) in rows:
+        safe = tk.replace("/", "_").replace(":", "_")
+        day_path = os.path.join(PRICE_CACHE_DIR, f"{safe}_day.csv")
+        if not os.path.exists(day_path):
+            queued.append(tk)
+            _bg_price_fetch(tk, ("day", "hour"))
+
+    if queued:
+        print(f"  [price-backfill] Queued {len(queued)} event tickers with no price cache: "
+              f"{', '.join(queued[:10])}{'...' if len(queued) > 10 else ''}", flush=True)
+    return queued
 
 
 # ---------------------------------------------------------------------------

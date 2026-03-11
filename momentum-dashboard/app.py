@@ -3370,6 +3370,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     )
                     detect_ranked_sweeps(rank_limit=100, tickers=tickers,
                                          exclude_etfs=False, etf_only=True)
+                    # Option A: backfill price cache for event tickers with no data
+                    from sweep_engine import backfill_event_ticker_prices
+                    backfill_event_ticker_prices(tickers=tickers)
                     _clear_fetch_job()  # fetch complete — remove job file
                     with _sweep_fetch_lock:
                         _sweep_fetch_progress["phase"] = "done"
