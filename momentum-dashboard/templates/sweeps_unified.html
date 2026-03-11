@@ -520,12 +520,6 @@ td .cb-flag,td .monster-flag{font-size:8px;padding:0px 3px;margin-left:2px;}
         <input type="number" class="filter-input" id="trackerRareDays" value="20" min="5" max="365" title="Rare min dormancy days" oninput="debouncedTrackerRefresh()" style="width:36px;border-color:#a78bfa44;color:#a78bfa;">
       </div>
     </div>
-    <div class="filter-col" data-type="cb">
-      <button class="tracker-filter-btn flt-cb" id="filterCb" onclick="setTrackerTypeFilter('cb',this)" style="color:#eab308;border-color:#eab30844;">CB</button>
-    </div>
-    <div class="filter-col" data-type="monster">
-      <button class="tracker-filter-btn flt-monster" id="filterMonster" onclick="setTrackerTypeFilter('monster',this)" style="color:#f97316;border-color:#f9731644;">Monster</button>
-    </div>
     <div style="display:flex;align-items:center;gap:2px;align-self:center;flex-shrink:0;margin-left:auto;">
       <select class="profile-select" id="profileSelect" onchange="applyFilterProfile(this.value)" title="Filter profiles" style="max-width:62px;padding:2px 2px;">
         <option value="Default">Default</option>
@@ -827,13 +821,32 @@ function setAssetClass(ac){
   _assetClass = ac;
   localStorage.setItem('sweep_assetClass', ac);
   _subFilters = {cb: false, monster: false};
+  _activeLayers.cb = false;
+  _activeLayers.monster = false;
+  _activeLayers.daily = true;
+  _activeLayers.single = true;
   _updateAssetClassUI();
+  _syncLayerButtonStates();
+  _applyBubbleFilter();
   _selectedTicker = null;
   loadAll();
 }
 
 function toggleSubFilter(type){
   _subFilters[type] = !_subFilters[type];
+  // Sync chart bubble layers with mutual exclusivity:
+  // CB ↔ daily are either/or, Monster ↔ single are either/or
+  if(type === 'cb'){
+    _activeLayers.cb = _subFilters.cb;
+    if(_subFilters.cb) _activeLayers.daily = false;
+    else _activeLayers.daily = true;
+  } else if(type === 'monster'){
+    _activeLayers.monster = _subFilters.monster;
+    if(_subFilters.monster) _activeLayers.single = false;
+    else _activeLayers.single = true;
+  }
+  _syncLayerButtonStates();
+  _applyBubbleFilter();
   _updateAssetClassUI();
   loadAll();
 }
@@ -846,8 +859,8 @@ function _updateAssetClassUI(){
   // Sub-filter pills: visible when not ETF-only
   var showSub = _assetClass !== 'etf';
   document.getElementById('subFilterBar').style.display = showSub ? 'flex' : 'none';
-  document.getElementById('subCB').classList.toggle('active', _subFilters.cb);
-  document.getElementById('subMonster').classList.toggle('active', _subFilters.monster);
+  document.getElementById('subCB').classList.toggle('active', _activeLayers.cb);
+  document.getElementById('subMonster').classList.toggle('active', _activeLayers.monster);
   // Stock-only detail tabs
   document.querySelectorAll('.stock-only-tab').forEach(function(el){
     el.style.display = showSub ? '' : 'none';
@@ -1234,10 +1247,23 @@ var _trackerOffset = 0;
 var _trackerTotal = 0;
 var _trackerPageSize = 200;
 
+function _syncLayerButtonStates(){
+  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare && !_activeLayers.cb && !_activeLayers.monster;
+  document.getElementById('filterAll').classList.toggle('active', allOn);
+  document.getElementById('filterDaily').classList.toggle('active', _activeLayers.daily);
+  document.getElementById('filterSingle').classList.toggle('active', _activeLayers.single);
+  document.getElementById('filterRare').classList.toggle('active', _activeLayers.rare);
+  // CB/Monster buttons are in the sub-filter bar (subCB / subMonster)
+  document.getElementById('subCB').classList.toggle('active', _activeLayers.cb);
+  document.getElementById('subMonster').classList.toggle('active', _activeLayers.monster);
+}
+
 function setTrackerTypeFilter(filter, btn){
   if(filter === 'all'){
-    // "All" resets — enable all layers
+    // "All" resets — enable ranked layers, disable event layers + sync subFilters
     _activeLayers = {daily: true, single: true, rare: true, cb: false, monster: false};
+    _subFilters.cb = false;
+    _subFilters.monster = false;
   } else {
     // Map filter name to layer key
     var layerKey = filter === 'rare_sweep' ? 'rare' : filter;
@@ -1246,16 +1272,11 @@ function setTrackerTypeFilter(filter, btn){
     // If all are off, reset to all on
     if(!_activeLayers.daily && !_activeLayers.single && !_activeLayers.rare && !_activeLayers.cb && !_activeLayers.monster){
       _activeLayers = {daily: true, single: true, rare: true, cb: false, monster: false};
+      _subFilters.cb = false;
+      _subFilters.monster = false;
     }
   }
-  // Update button active states — multi-select
-  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare && !_activeLayers.cb && !_activeLayers.monster;
-  document.getElementById('filterAll').classList.toggle('active', allOn);
-  document.getElementById('filterDaily').classList.toggle('active', _activeLayers.daily);
-  document.getElementById('filterSingle').classList.toggle('active', _activeLayers.single);
-  document.getElementById('filterRare').classList.toggle('active', _activeLayers.rare);
-  document.getElementById('filterCb').classList.toggle('active', _activeLayers.cb);
-  document.getElementById('filterMonster').classList.toggle('active', _activeLayers.monster);
+  _syncLayerButtonStates();
   // Dim filter columns for inactive layers
   _syncFilterGroupDim();
   // Re-render from cached events (no API call)
@@ -1572,13 +1593,10 @@ function cycleLayerFilter(){
   } else {
     _activeLayers = {daily: target === 'daily', single: target === 'single', rare: target === 'rare', cb: target === 'cb', monster: target === 'monster'};
   }
-  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare && !_activeLayers.cb && !_activeLayers.monster;
-  document.getElementById('filterAll').classList.toggle('active', allOn);
-  document.getElementById('filterDaily').classList.toggle('active', _activeLayers.daily);
-  document.getElementById('filterSingle').classList.toggle('active', _activeLayers.single);
-  document.getElementById('filterRare').classList.toggle('active', _activeLayers.rare);
-  document.getElementById('filterCb').classList.toggle('active', _activeLayers.cb);
-  document.getElementById('filterMonster').classList.toggle('active', _activeLayers.monster);
+  // Sync subFilters with layer state
+  _subFilters.cb = _activeLayers.cb;
+  _subFilters.monster = _activeLayers.monster;
+  _syncLayerButtonStates();
   _syncFilterGroupDim();
   var filtered = filterByType(_allTrackerEvents);
   document.getElementById('stocksCount').textContent = filtered.length + (_trackerTotal > _trackerOffset ? '+' : '');
@@ -2143,16 +2161,16 @@ function renderChart(ticker, chartData, containerId){
     // --- CB layer (yellow + red border) — clusterbombs and rare sweeps ---
     var isCBEvent = cb.event_type === 'clusterbomb' || cb.event_type === 'rare_sweep';
     if(isCBEvent){
-      // Red border ring (slightly larger)
+      // Red border ring (larger gap for visibility)
       _layerSeries.cb.borderData.push({time: timeVal, value: markerPrice});
       _layerSeries.cb.borderMarkers.push({
-        time: timeVal, position: 'inBar', color: 'rgba(220, 38, 38, 0.9)',
-        shape: 'circle', text: '', size: 10,
+        time: timeVal, position: 'inBar', color: 'rgba(220, 38, 38, 0.95)',
+        shape: 'circle', text: '', size: 12,
       });
       // Yellow fill dot
       _layerSeries.cb.dotData.push({time: timeVal, value: markerPrice});
       _layerSeries.cb.dotMarkers.push({
-        time: timeVal, position: 'inBar', color: 'rgba(234, 179, 8, 0.85)',
+        time: timeVal, position: 'inBar', color: 'rgba(234, 179, 8, 0.90)',
         shape: 'circle', text: '', size: 8,
       });
       // Text label
@@ -2168,17 +2186,17 @@ function renderChart(ticker, chartData, containerId){
     // --- MONSTER layer (orange + red border) ---
     var isMonsterEvent = cb.is_monster == 1 || cb.event_type === 'monster_sweep';
     if(isMonsterEvent){
-      // Red border ring (slightly larger)
+      // Red border ring (larger gap for visibility)
       _layerSeries.monster.borderData.push({time: timeVal, value: markerPrice});
       _layerSeries.monster.borderMarkers.push({
-        time: timeVal, position: 'inBar', color: 'rgba(220, 38, 38, 0.9)',
-        shape: 'circle', text: '', size: 11,
+        time: timeVal, position: 'inBar', color: 'rgba(220, 38, 38, 0.95)',
+        shape: 'circle', text: '', size: 14,
       });
       // Orange fill dot
       _layerSeries.monster.dotData.push({time: timeVal, value: markerPrice});
       _layerSeries.monster.dotMarkers.push({
-        time: timeVal, position: 'inBar', color: 'rgba(249, 115, 22, 0.85)',
-        shape: 'circle', text: '', size: 9,
+        time: timeVal, position: 'inBar', color: 'rgba(249, 115, 22, 0.90)',
+        shape: 'circle', text: '', size: 10,
       });
       // Text label
       var mLabel = (cb.max_notional ? fmt$(cb.max_notional) : dailyLabel) + '  [M]';
