@@ -10,23 +10,27 @@
 body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden;height:100vh;}
 
 /* Header */
-.header{background:#0c0c14;padding:10px 20px;border-bottom:1px solid #1e1e2e;display:flex;align-items:center;gap:0;height:48px;z-index:10;}
-.header-left{display:flex;align-items:center;gap:12px;}
-.header-title{font-size:18px;font-weight:700;color:#f59e0b;}
-.header-controls{margin-left:auto;display:flex;align-items:center;gap:10px;}
-.header input[type="date"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:4px 8px;border-radius:4px;font-size:12px;font-family:inherit;}
-.header select,.header input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:4px 8px;border-radius:4px;font-size:12px;font-family:inherit;width:70px;}
-.header label{font-size:11px;color:#888;}
-/* Index tabs */
-.idx-tabs{display:flex;gap:0;}
-.idx-tab{background:#1e293b;color:#888;border:1px solid #334155;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;border-right:none;}
-.idx-tab:first-child{border-radius:4px 0 0 4px;}
-.idx-tab:last-child{border-radius:0 4px 4px 0;border-right:1px solid #334155;}
+.header{background:#0c0c14;padding:8px 20px;border-bottom:1px solid #1e1e2e;display:flex;align-items:center;gap:10px;height:48px;z-index:10;}
+.header-title{font-size:17px;font-weight:700;color:#f59e0b;white-space:nowrap;}
+.header input[type="date"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:5px 8px;border-radius:4px;font-size:12px;font-family:inherit;}
+.header select,.header input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:5px 8px;border-radius:4px;font-size:12px;font-family:inherit;}
+.header select{width:52px;}
+.header input[type="number"]{width:82px;}
+/* Index tabs — standalone buttons with gaps */
+.idx-tab{background:#1e293b;color:#888;border:1px solid #334155;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;border-radius:4px;}
 .idx-tab:hover{color:#ccc;}
 .idx-tab.active{background:#f59e0b22;color:#f59e0b;border-color:#f59e0b66;}
-.idx-tab.active+.idx-tab{border-left-color:#f59e0b66;}
-/* Divider between header groups */
-.hdr-sep{width:1px;height:24px;background:#334155;margin:0 6px;}
+/* Divider */
+.hdr-sep{width:1px;height:24px;background:#334155;flex-shrink:0;}
+/* Filter group: label + input pair */
+.filter-group{display:flex;align-items:center;gap:4px;}
+.filter-group .flbl{font-size:11px;color:#888;cursor:pointer;padding:4px 8px;border:1px solid #334155;border-radius:4px;background:#1e293b;font-weight:600;white-space:nowrap;font-family:inherit;}
+.filter-group .flbl:hover{color:#ccc;}
+.filter-group .flbl.active{background:#f59e0b22;color:#f59e0b;border-color:#f59e0b66;}
+.filter-group input[type="number"]{opacity:0.4;pointer-events:none;}
+.filter-group.on input[type="number"]{opacity:1;pointer-events:auto;}
+/* Spacer to push controls right */
+.hdr-spacer{flex:1;}
 
 /* Layout */
 .main{display:flex;height:calc(100vh - 48px);}
@@ -77,38 +81,36 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 <body>
 
 <div class="header">
-  <div class="header-left">
-    <div class="header-title">Darkpool Flow</div>
-    <div class="idx-tabs" id="indexTabs">
-      <button class="idx-tab active" onclick="setIndex('SPX',this)">SPX</button>
-      <button class="idx-tab" onclick="setIndex('NDX',this)" disabled style="opacity:0.4">NDX</button>
-      <button class="idx-tab" onclick="setIndex('RTY',this)" disabled style="opacity:0.4">RTY</button>
-    </div>
+  <div class="header-title">Darkpool Flow</div>
+  <button class="idx-tab active" onclick="setIndex('SPX',this)">SPX</button>
+  <button class="idx-tab" onclick="setIndex('NDX',this)" disabled style="opacity:0.4">NDX</button>
+  <button class="idx-tab" onclick="setIndex('RTY',this)" disabled style="opacity:0.4">RTY</button>
+  <div class="hdr-spacer"></div>
+  <button class="ctrl-btn" id="btnAutoRefresh" onclick="toggleAutoRefresh()" style="width:auto;padding:5px 12px;font-size:12px;">Live</button>
+  <div class="hdr-sep"></div>
+  <div class="seg-ctrl" id="candleIntervalCtrl">
+    <button class="active" onclick="setCandleInterval(1,this)">1m</button>
+    <button onclick="setCandleInterval(5,this)">5m</button>
+    <button onclick="setCandleInterval(60,this)">1h</button>
   </div>
-  <div class="header-controls">
-    <button class="ctrl-btn" id="btnAutoRefresh" onclick="toggleAutoRefresh()" style="width:auto;padding:6px 14px;font-size:12px;">Auto</button>
-    <div class="hdr-sep"></div>
-    <div class="seg-ctrl" id="candleIntervalCtrl">
-      <button class="active" onclick="setCandleInterval(1,this)">1m</button>
-      <button onclick="setCandleInterval(5,this)">5m</button>
-      <button onclick="setCandleInterval(60,this)">1h</button>
-    </div>
-    <input type="date" id="dateInput">
-    <select id="daysSelect">
-      <option value="1" selected>1</option>
-      <option value="3">3</option>
-      <option value="5">5</option>
-      <option value="10">10</option>
-      <option value="30">30</option>
-      <option value="60">60</option>
-    </select>
-    <div class="hdr-sep"></div>
-    <div class="seg-ctrl" id="filterModeCtrl">
-      <button class="active" onclick="setFilterMode('notional',this)">Min $500K</button>
-      <button onclick="setFilterMode('percentile',this)">Top 15%</button>
-    </div>
-    <input type="number" id="minNotional" value="500000" step="100000" min="0" style="width:90px;">
-    <input type="number" id="minPercentile" value="85" step="5" min="0" max="99" style="width:60px;display:none;">
+  <div class="hdr-sep"></div>
+  <input type="date" id="dateInput">
+  <select id="daysSelect">
+    <option value="1" selected>1d</option>
+    <option value="3">3d</option>
+    <option value="5">5d</option>
+    <option value="10">10d</option>
+    <option value="30">30d</option>
+    <option value="60">60d</option>
+  </select>
+  <div class="hdr-sep"></div>
+  <div class="filter-group on" id="fgNotional">
+    <button class="flbl active" onclick="toggleFilter('notional')">Min $</button>
+    <input type="number" id="minNotional" value="500000" step="100000" min="0">
+  </div>
+  <div class="filter-group" id="fgPercentile">
+    <button class="flbl" onclick="toggleFilter('percentile')">Percentile</button>
+    <input type="number" id="minPercentile" value="85" step="5" min="0" max="99">
   </div>
 </div>
 
@@ -193,7 +195,7 @@ var _candles = [];       // raw candle array
   // Auto-load on date/days/filter change
   document.getElementById('dateInput').addEventListener('change', function(){ loadAll(); });
   document.getElementById('daysSelect').addEventListener('change', function(){ loadAll(); });
-  document.getElementById('minNotional').addEventListener('change', function(){ fetchSweeps(); });
+  document.getElementById('minNotional').addEventListener('change', function(){ applyClientFilter(); });
   document.getElementById('minPercentile').addEventListener('change', function(){ applyClientFilter(); });
 
   // Init chart
@@ -260,7 +262,6 @@ function getMinNotional(){ return parseFloat(document.getElementById('minNotiona
 function getMinPercentile(){ return parseInt(document.getElementById('minPercentile').value) || 0; }
 function getAllTickers(){ return TICKERS.map(function(t){return t.ticker;}); }
 
-var _filterMode = 'notional'; // 'notional' or 'percentile'
 var _allSweeps = [];  // unfiltered sweeps from API
 var _loading = false;
 
@@ -290,9 +291,9 @@ function fetchCandles(){
 function fetchSweeps(){
   var date = getDate();
   var days = getDays();
-  // Always fetch ALL tickers — visibility is controlled client-side
+  // Always fetch ALL tickers + all sweeps — filtering is client-side
   var tickers = getAllTickers();
-  var minN = _filterMode === 'notional' ? getMinNotional() : 0;
+  var minN = 0;
 
   _setLoading(true);
   fetch('/api/0dte/sweeps?tickers='+tickers.join(',')+'&date='+date+'&days='+days+'&min_notional='+minN)
@@ -306,12 +307,14 @@ function fetchSweeps(){
 }
 
 function applyClientFilter(){
-  if(_filterMode === 'percentile'){
-    var minPct = getMinPercentile();
-    _sweeps = _allSweeps.filter(function(s){ return s.percentile >= minPct; });
-  } else {
-    _sweeps = _allSweeps;
-  }
+  var notionalOn = document.getElementById('fgNotional').classList.contains('on');
+  var pctOn = document.getElementById('fgPercentile').classList.contains('on');
+  var minPct = getMinPercentile();
+  _sweeps = _allSweeps.filter(function(s){
+    if(notionalOn && s.notional < getMinNotional()) return false;
+    if(pctOn && s.percentile < minPct) return false;
+    return true;
+  });
   drawBubbles();
   updateStats();
   updateFeed();
@@ -502,31 +505,24 @@ function setCandleInterval(mins, btn){
   fetchCandles();
 }
 
-function setFilterMode(mode, btn){
-  if(_filterMode === mode) return;
-  _filterMode = mode;
-  var notionalEl = document.getElementById('minNotional');
-  var pctEl = document.getElementById('minPercentile');
-  // Update segmented control active state
-  var btns = document.getElementById('filterModeCtrl').querySelectorAll('button');
-  btns.forEach(function(b){ b.classList.remove('active'); });
-  btn.classList.add('active');
-  if(mode === 'percentile'){
-    notionalEl.style.display = 'none';
-    pctEl.style.display = '';
-    // Refetch with no min_notional to get all sweeps for percentile filtering
-    fetchSweeps();
+function toggleFilter(which){
+  var fg = document.getElementById(which === 'notional' ? 'fgNotional' : 'fgPercentile');
+  var lbl = fg.querySelector('.flbl');
+  var isOn = fg.classList.contains('on');
+  if(isOn){
+    fg.classList.remove('on');
+    lbl.classList.remove('active');
   } else {
-    notionalEl.style.display = '';
-    pctEl.style.display = 'none';
-    fetchSweeps();
+    fg.classList.add('on');
+    lbl.classList.add('active');
   }
+  applyClientFilter();
 }
 
 function toggleAutoRefresh(){
   _autoRefresh = !_autoRefresh;
   var btn = document.getElementById('btnAutoRefresh');
-  btn.textContent = 'Auto';
+  btn.textContent = 'Live';
   btn.classList.toggle('active', _autoRefresh);
   if(_autoRefresh){
     _sweepTimer = setInterval(fetchSweeps, 15000);
