@@ -48,7 +48,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .chart-area{flex:1;position:relative;overflow:hidden;}
 #chartContainer{width:100%;height:100%;position:relative;}
 #bubbleCanvas{position:absolute;top:0;left:0;pointer-events:none;z-index:5;}
-#tooltipDiv{position:absolute;display:none;background:rgba(0,0,0,0.85);border:1px solid #334155;border-radius:4px;padding:6px 10px;font-size:11px;color:#e0e0e8;pointer-events:none;z-index:10;white-space:nowrap;}
+#tooltipDiv{position:absolute;display:none;background:rgba(0,0,0,0.90);border:1px solid #334155;border-radius:4px;padding:6px 10px;font-size:11px;color:#e0e0e8;pointer-events:none;z-index:10;white-space:nowrap;max-height:400px;overflow-y:auto;}
 
 /* Left panel sections */
 .panel-section{margin-bottom:12px;}
@@ -402,6 +402,7 @@ var _layerCfg = {minNotional:500000, percentile:85, dailyFrom:1, dailyTo:20, sin
 // Raw data from /api/sweeps/chart
 var _chartSweeps = [];       // individual sweep trades
 var _chartEvents = [];       // clusterbomb/rare/monster events with ranks
+var _tickerColorMap = {};    // ticker → {stroke} for tooltip coloring
 
 var _chart = null;
 var _candleSeries = null;
@@ -728,7 +729,7 @@ function fetchCandles(){
       drawBubbles();
       _setLoading(false);
     })
-    .catch(function(e){ if(e.name === 'AbortError') return; console.error('Candle fetch error:', e); _setLoading(false); });
+    .catch(function(e){ if(e.name === 'AbortError' || (e instanceof TypeError && _fetchController && _fetchController.signal.aborted)) return; console.error('Candle fetch error:', e); _setLoading(false); });
 }
 
 function fetchSweepChart(){
@@ -739,11 +740,17 @@ function fetchSweepChart(){
   var dateFrom = start.toISOString().slice(0,10);
   var dateTo = end.toISOString().slice(0,10);
 
-  // Build list of tickers to fetch: active + all enabled overlays
-  var tickers = [_activeTicker];
+  // Build list of tickers to fetch: only those checked ON in overlay
+  var tickers = [];
   _overlayTickers.forEach(function(t){
-    if(t.on && t.ticker !== _activeTicker) tickers.push(t.ticker);
+    if(t.on) tickers.push(t.ticker);
   });
+  // If nothing is checked, nothing to fetch
+  if(tickers.length === 0){
+    _chartSweeps = []; _chartEvents = [];
+    drawBubbles(); updateStats(); updateFeed();
+    return;
+  }
 
   // Fetch all tickers in parallel (with abort signal)
   var signal = _fetchController ? _fetchController.signal : undefined;
@@ -770,7 +777,7 @@ function fetchSweepChart(){
       updateStats();
       updateFeed();
     })
-    .catch(function(e){ if(e.name === 'AbortError') return; console.error('Sweep chart fetch error:', e); });
+    .catch(function(e){ if(e.name === 'AbortError' || (e instanceof TypeError && _fetchController && _fetchController.signal.aborted)) return; console.error('Sweep chart fetch error:', e); });
 }
 
 function _setLoading(on){
@@ -866,8 +873,8 @@ function drawBubbles(){
     };
   }
 
-  // Build ticker → color lookup from overlay tickers
-  var _tickerColorMap = {};
+  // Build ticker → color lookup from overlay tickers (writes to global for tooltip access)
+  _tickerColorMap = {};
   _overlayTickers.forEach(function(t){ _tickerColorMap[t.ticker] = {stroke: t.stroke}; });
   // Fallback for tickers not in overlay
   var _defaultStroke = '#60a5fa';
@@ -1044,9 +1051,8 @@ function onMouseMove(e){
 
   function dateToUnix2(d){ return Math.floor(new Date(d + 'T20:00:00Z').getTime() / 1000); }
 
-  var closest = null;
-  var closestDist = 30;
-  var closestType = null; // 'event' or 'sweep'
+  var hitRadius = 30;
+  var hits = []; // collect ALL bubbles within range
 
   // Hit-test events (daily/single/rare/cb/monster)
   for(var i = 0; i < _chartEvents.length; i++){
@@ -1060,10 +1066,8 @@ function onMouseMove(e){
     var y = _candleSeries.priceToCoordinate(plotPrice2);
     if(y === null) continue;
     var dist = Math.sqrt((mx-x)*(mx-x) + (my-y)*(my-y));
-    if(dist < closestDist){
-      closestDist = dist;
-      closest = ev;
-      closestType = 'event';
+    if(dist < hitRadius){
+      hits.push({type:'event', data:ev, dist:dist});
     }
   }
 
@@ -1088,38 +1092,56 @@ function onMouseMove(e){
       var y2 = _candleSeries.priceToCoordinate(pp);
       if(y2 === null) continue;
       var d2 = Math.sqrt((mx-x2)*(mx-x2) + (my-y2)*(my-y2));
-      if(d2 < closestDist){
-        closestDist = d2;
-        closest = s;
-        closestType = 'sweep';
+      if(d2 < hitRadius){
+        hits.push({type:'sweep', data:s, dist:d2});
       }
     }
   }
 
-  if(closest){
+  if(hits.length > 0){
+    // Sort by distance (closest first)
+    hits.sort(function(a,b){ return a.dist - b.dist; });
+    // Cap at 15 to keep tooltip manageable
+    if(hits.length > 15) hits = hits.slice(0, 15);
+
     tooltip.style.display = 'block';
     tooltip.style.left = (mx + 12) + 'px';
     tooltip.style.top = (my - 10) + 'px';
     var lines = [];
-    if(closestType === 'sweep'){
-      var tkr = closest.ticker || _activeTicker;
-      lines.push('<b>' + tkr + '</b> ' + closest.date + (closest.time ? ' ' + closest.time : ''));
-      if(closest.price) lines.push('Price: $' + Number(closest.price).toFixed(2));
-      if(closest.notional) lines.push('Notional: $' + fmt$(closest.notional));
-      if(closest.size) lines.push('Size: ' + closest.size.toLocaleString());
-      if(closest.condition) lines.push('Type: ' + closest.condition);
-    } else {
-      var tkr2 = closest.ticker || _activeTicker;
-      lines.push('<b>' + tkr2 + '</b> ' + closest.date);
-      if(closest.daily_rank) lines.push('Daily Rank: #' + closest.daily_rank);
-      if(closest.sweep_rank) lines.push('Single Rank: #' + closest.sweep_rank);
-      if(closest.total_notional) lines.push('Total: $' + fmt$(closest.total_notional));
-      if(closest.sweep_count) lines.push('Sweeps: ' + closest.sweep_count);
-      if(closest.is_rare) lines.push('<span style="color:#c4b5fd">[Rare]</span>');
-      if(closest.is_monster) lines.push('<span style="color:#f97316">[Monster]</span>');
-      if(closest.event_type === 'clusterbomb') lines.push('<span style="color:#eab308">[Clusterbomb]</span>');
-      if(closest.direction) lines.push('Direction: ' + closest.direction);
+
+    if(hits.length > 1){
+      lines.push('<b style="color:#94a3b8">' + hits.length + ' items</b>');
+      lines.push('<hr style="border:0;border-top:1px solid #475569;margin:3px 0">');
     }
+
+    hits.forEach(function(hit, idx){
+      if(idx > 0) lines.push('<hr style="border:0;border-top:1px solid #334155;margin:2px 0">');
+      if(hit.type === 'sweep'){
+        var sw = hit.data;
+        var tkr = sw.ticker || _activeTicker;
+        var tc = _tickerColorMap[tkr];
+        var clr = tc ? tc.stroke : '#60a5fa';
+        lines.push('<b style="color:'+clr+'">' + tkr + '</b> ' + sw.date + (sw.time ? ' ' + sw.time : ''));
+        if(sw.price) lines.push('Price: $' + Number(sw.price).toFixed(2));
+        if(sw.notional) lines.push('Notional: $' + fmt$(sw.notional));
+        if(sw.size) lines.push('Size: ' + sw.size.toLocaleString());
+        if(sw.condition) lines.push('Type: ' + sw.condition);
+      } else {
+        var ev2 = hit.data;
+        var tkr2 = ev2.ticker || _activeTicker;
+        var tc2 = _tickerColorMap[tkr2];
+        var clr2 = tc2 ? tc2.stroke : '#60a5fa';
+        lines.push('<b style="color:'+clr2+'">' + tkr2 + '</b> ' + ev2.date);
+        if(ev2.daily_rank) lines.push('Daily Rank: #' + ev2.daily_rank);
+        if(ev2.sweep_rank) lines.push('Single Rank: #' + ev2.sweep_rank);
+        if(ev2.total_notional) lines.push('Total: $' + fmt$(ev2.total_notional));
+        if(ev2.sweep_count) lines.push('Sweeps: ' + ev2.sweep_count);
+        if(ev2.is_rare) lines.push('<span style="color:#c4b5fd">[Rare]</span>');
+        if(ev2.is_monster) lines.push('<span style="color:#f97316">[Monster]</span>');
+        if(ev2.event_type === 'clusterbomb') lines.push('<span style="color:#eab308">[Clusterbomb]</span>');
+        if(ev2.direction) lines.push('Direction: ' + ev2.direction);
+      }
+    });
     tooltip.innerHTML = lines.join('<br>');
   } else {
     tooltip.style.display = 'none';
