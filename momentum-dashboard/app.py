@@ -2301,8 +2301,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         """Load {ticker: {date_str: close}} from cache/{TICKER}_day.csv.
 
         Used to compute split-safe price ratios for Pine Script.
-        Both avg_price and CSV close are unadjusted, so their ratio
-        is invariant to splits.  Pine then does ratio * close (adjusted).
+        CSV closes are split-adjusted (Polygon adjusted=true), so the
+        ratio avg_price/close must account for splits.
         """
         import csv as _csv
         cache_dir = os.path.join(os.path.dirname(__file__), "cache")
@@ -2360,6 +2360,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 n_str = f"${notional/1e6:.1f}M" if notional >= 1e6 else f"${notional/1e3:.0f}K"
                 price = r["avg_price"] or 0
                 day_close = closes.get(r["event_date"], 0)
+                # Split adjustment: avg_price is raw but day_close is
+                # split-adjusted from Polygon CSV cache.
+                if day_close > 0 and price > 0:
+                    raw_ratio = price / day_close
+                    if raw_ratio > 1.5:
+                        price = price / round(raw_ratio)
+                    elif raw_ratio < 0.667:
+                        price = price * round(1.0 / raw_ratio)
                 ratio = price / day_close if day_close > 0 and price > 0 else 1.0
                 ratio_str = f"{ratio:.4f}"
 
@@ -2644,6 +2652,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
                 price = r["avg_price"] or 0
                 day_close = daily_closes.get(r["ticker"], {}).get(r["event_date"], 0)
+                # Split adjustment: avg_price is raw (unadjusted) but
+                # day_close is split-adjusted from Polygon.  Detect and
+                # correct so the ratio stays near 1.0.
+                if day_close > 0 and price > 0:
+                    raw_ratio = price / day_close
+                    if raw_ratio > 1.5:
+                        # Forward split (e.g. 10:1) — raw price >> adjusted
+                        price = price / round(raw_ratio)
+                    elif raw_ratio < 0.667:
+                        # Reverse split (e.g. 1:4) — raw price << adjusted
+                        price = price * round(1.0 / raw_ratio)
                 ratio = price / day_close if day_close > 0 and price > 0 else 1.0
                 ratio_str = f"{ratio:.4f}"
 
