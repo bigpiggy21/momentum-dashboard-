@@ -474,7 +474,6 @@ class UnifiedLiveDaemon:
         self._trade_count = 0             # rolling count for trades/s
         self._trade_window_start = 0      # epoch second of current window
         self._last_trade_ts = 0           # monotonic timestamp of last T.* message
-        self._subscribed_at = 0           # time.time() when subscription succeeded
 
         # ── Combined status ──
         self._status = {
@@ -841,11 +840,7 @@ class UnifiedLiveDaemon:
             on_error=self._on_error,
             on_close=self._on_close,
         )
-        # Send pings every 30s to keep the connection alive.
-        # Polygon may not respond with pong frames, so set a generous
-        # timeout (90s) — we only care that *we* send pings so the
-        # server doesn't close us for inactivity (close code 1008).
-        self._ws.run_forever(ping_interval=30, ping_timeout=90)
+        self._ws.run_forever(ping_interval=0)
 
     # ------------------------------------------------------------------
     # WebSocket callbacks
@@ -885,21 +880,13 @@ class UnifiedLiveDaemon:
         print(f"[LIVE] WebSocket error: {error}", flush=True)
 
     def _on_close(self, ws, close_status_code, close_msg):
-        now = time.time()
-        sub_at = self._subscribed_at
         with self._lock:
             self._status["connected"] = False
             self._status["authenticated"] = False
             self._status["subscribed"] = False
         reason = f"code={close_status_code} msg={close_msg}" if close_status_code else "clean"
-        # Only reset backoff if connection was stable for ≥60s.
-        # This prevents rapid reconnect loops when server keeps closing us.
-        if sub_at and (now - sub_at) >= 60:
-            self._reconnect_wait = RECONNECT_MIN_WAIT
-        uptime = f" (uptime {now - sub_at:.0f}s)" if sub_at else ""
-        self._subscribed_at = 0
         _daemon_log("ws_closed", reason)
-        print(f"[LIVE] WebSocket closed ({reason}){uptime}", flush=True)
+        print(f"[LIVE] WebSocket closed ({reason})", flush=True)
 
     # ------------------------------------------------------------------
     # Status message handler
@@ -929,10 +916,7 @@ class UnifiedLiveDaemon:
             _daemon_log("subscribed", message)
             with self._lock:
                 self._status["subscribed"] = True
-            # Record subscribe time — backoff resets only after connection
-            # has been stable for 60s (see _on_close). This prevents rapid
-            # reconnect loops when Polygon keeps closing us quickly.
-            self._subscribed_at = time.time()
+            self._reconnect_wait = RECONNECT_MIN_WAIT
 
         elif status == "error":
             print(f"[LIVE] Server error: {message}", flush=True)
@@ -1734,9 +1718,7 @@ class UnifiedLiveDaemon:
     # ------------------------------------------------------------------
 
     def _heartbeat_loop(self):
-        """Print status every 30 minutes + stale-connection watchdog every 60s."""
-        WATCHDOG_INTERVAL = 60       # check liveness every 60 seconds
-        STALE_THRESHOLD = 600        # force reconnect if no trades in 10 minutes
+        """Print status every 30 minutes."""
         HEARTBEAT_INTERVAL = 1800    # print summary every 30 minutes
         last_heartbeat = time.time()
 
@@ -1744,34 +1726,12 @@ class UnifiedLiveDaemon:
         while not self._stop_event.is_set():
             try:
                 now = time.time()
-
-                # Stale-connection watchdog: if connected + subscribed but no
-                # T.* messages in STALE_THRESHOLD seconds, the connection is dead
-                with self._lock:
-                    connected = self._status.get("connected", False)
-                    subscribed = self._status.get("subscribed", False)
-                last_trade = self._last_trade_ts
-                if connected and subscribed and last_trade > 0:
-                    silence = now - last_trade
-                    if silence > STALE_THRESHOLD:
-                        print(f"[LIVE] WATCHDOG: No trades for {silence:.0f}s — "
-                              f"forcing reconnect", flush=True)
-                        _daemon_log("watchdog_reconnect",
-                                    f"stale {silence:.0f}s")
-                        try:
-                            if self._ws:
-                                self._ws.close()
-                        except Exception:
-                            pass
-
-                # Periodic heartbeat summary
                 if now - last_heartbeat >= HEARTBEAT_INTERVAL:
                     self._print_heartbeat()
                     last_heartbeat = now
-
             except Exception as e:
                 print(f"[LIVE] Heartbeat error: {e}", flush=True)
-            self._stop_event.wait(timeout=WATCHDOG_INTERVAL)
+            self._stop_event.wait(timeout=60)
 
     def _print_heartbeat(self):
         with self._lock:
