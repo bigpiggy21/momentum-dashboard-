@@ -5240,7 +5240,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         date_str = query.get("date", [None])[0]
         days = int(query.get("days", ["1"])[0])
         interval = int(query.get("interval", ["1"])[0])
-        if interval not in (1, 5):
+        if interval not in (1, 5, 60):
             interval = 1
 
         if not date_str:
@@ -5250,10 +5250,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         # Compute date range for multi-day
         from datetime import datetime, timedelta
         end_date = datetime.strptime(date_str, "%Y-%m-%d")
-        start_date = end_date - timedelta(days=max(0, days - 1) + 2)  # +2 for weekends
+        # For hourly with 30-60 day ranges, need more weekend padding
+        weekend_pad = 2 if days <= 10 else int(days * 0.4)
+        start_date = end_date - timedelta(days=max(0, days - 1) + weekend_pad)
         from_str = start_date.strftime("%Y-%m-%d")
 
-        url = f"{MASSIVE_BASE_URL}/aggs/ticker/{ticker}/range/{interval}/minute/{from_str}/{date_str}"
+        # Polygon: 60 min = 1 hour
+        if interval == 60:
+            agg_unit = "hour"
+            agg_mult = 1
+        else:
+            agg_unit = "minute"
+            agg_mult = interval
+
+        url = f"{MASSIVE_BASE_URL}/aggs/ticker/{ticker}/range/{agg_mult}/{agg_unit}/{from_str}/{date_str}"
         headers = {"Authorization": f"Bearer {MASSIVE_API_KEY}"}
         params = {"adjusted": "true", "sort": "asc", "limit": 50000}
 
