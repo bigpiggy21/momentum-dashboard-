@@ -2544,57 +2544,26 @@ function saveChartPNG(){
   var screenshotCanvas = chartInstance.takeScreenshot();
   _overlayChartInfo(screenshotCanvas);
 
-  // Try Clipboard API first (works on HTTPS / localhost)
   screenshotCanvas.toBlob(function(blob){
-    if(!blob){ showToast('Failed to capture chart'); return; }
+    if(!blob){ _downloadChartBlob(screenshotCanvas); return; }
+    // Try clipboard (requires HTTPS / localhost — will fail on plain HTTP)
     if(navigator.clipboard && typeof ClipboardItem !== 'undefined'){
       try {
         navigator.clipboard.write([
           new ClipboardItem({'image/png': blob})
         ]).then(function(){
           showToast('Chart copied to clipboard');
-        }).catch(function(){
-          _copyViaExecCommand(screenshotCanvas);
+        }).catch(function(err){
+          console.log('Clipboard write failed, downloading instead:', err);
+          _downloadChartBlob(screenshotCanvas);
         });
+        return;
       } catch(e){
-        _copyViaExecCommand(screenshotCanvas);
+        console.log('ClipboardItem error, downloading instead:', e);
       }
-    } else {
-      _copyViaExecCommand(screenshotCanvas);
     }
+    _downloadChartBlob(screenshotCanvas);
   }, 'image/png');
-}
-
-function _copyViaExecCommand(canvas){
-  // Fallback for HTTP: render canvas to an <img>, select it, execCommand('copy')
-  try {
-    var dataUrl = canvas.toDataURL('image/png');
-    var img = document.createElement('img');
-    img.src = dataUrl;
-    img.style.position = 'fixed';
-    img.style.left = '0';
-    img.style.top = '0';
-    img.style.zIndex = '99999';
-    img.style.opacity = '0.01';
-    document.body.appendChild(img);
-    img.onload = function(){
-      var range = document.createRange();
-      range.selectNode(img);
-      var sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-      var ok = document.execCommand('copy');
-      sel.removeAllRanges();
-      document.body.removeChild(img);
-      if(ok){
-        showToast('Chart copied to clipboard');
-      } else {
-        _downloadChartBlob(canvas);
-      }
-    };
-  } catch(e){
-    _downloadChartBlob(canvas);
-  }
 }
 
 function _downloadChartBlob(canvas){
