@@ -280,8 +280,8 @@ function drawBubbles(){
     var y = _candleSeries.priceToCoordinate(normPrice);
     if(y === null || y < 0 || y > _canvas.height) return;
 
-    // Radius based on percentile (3px min, 25px max)
-    var radius = 3 + (s.percentile / 100) * 22;
+    // Radius based on percentile (6px min, 25px max)
+    var radius = 6 + (s.percentile / 100) * 19;
 
     // Draw bubble
     _ctx.beginPath();

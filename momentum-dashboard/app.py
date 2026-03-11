@@ -5318,16 +5318,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         rows = conn.execute(sweeps_sql, tickers + [from_str, date_str, min_notional]).fetchall()
 
         # 2) Build percentile lookup per ticker (3 years of history)
+        #    Always use ALL sweeps (no min_notional filter) so percentile stays
+        #    stable regardless of the display filter.
         three_years_ago = (end_date - timedelta(days=3*365)).strftime("%Y-%m-%d")
         percentile_cache = {}
         for tk in tickers:
             hist_sql = """
                 SELECT notional FROM sweep_trades
                 WHERE ticker = ? AND is_darkpool = 1 AND is_sweep = 1
-                  AND trade_date >= ? AND notional >= ?
+                  AND trade_date >= ?
                 ORDER BY notional
             """
-            hist = [r[0] for r in conn.execute(hist_sql, (tk, three_years_ago, min_notional)).fetchall()]
+            hist = [r[0] for r in conn.execute(hist_sql, (tk, three_years_ago)).fetchall()]
             percentile_cache[tk] = hist  # sorted ascending
 
         # 3) Compute SPY ratio for price normalisation
@@ -5370,15 +5372,30 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         sweeps = []
         for r in rows:
-            # Convert trade_time to unix timestamp
-            dt_str = f"{r['trade_date']} {r['trade_time'][:8]}"
-            try:
-                from datetime import datetime as _dt
-                trade_dt = _dt.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
-                # Assume ET (UTC-4 or UTC-5) — sweeps are US market
-                time_unix = int(trade_dt.timestamp())
-            except Exception:
-                continue
+            # Convert trade_time to UTC unix timestamp to match Polygon candle timestamps.
+            # sweep_trades stores sip_timestamp (nanoseconds UTC) — use that if available.
+            # Otherwise parse trade_date + trade_time as ET and convert to UTC.
+            sip = r["sip_timestamp"] if r["sip_timestamp"] else None
+            if sip and sip > 1e15:
+                # sip_timestamp is in nanoseconds UTC
+                time_unix = int(sip // 1e9)
+            elif sip and sip > 1e12:
+                # milliseconds
+                time_unix = int(sip // 1e3)
+            elif sip and sip > 1e9:
+                # already seconds
+                time_unix = int(sip)
+            else:
+                # Fallback: parse as ET (UTC-4 during EDT)
+                dt_str = f"{r['trade_date']} {r['trade_time'][:8]}"
+                try:
+                    from datetime import datetime as _dt, timezone as _tz
+                    trade_dt = _dt.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+                    # Assume EDT (UTC-4) for US market hours
+                    trade_dt = trade_dt.replace(tzinfo=_tz(timedelta(hours=-4)))
+                    time_unix = int(trade_dt.timestamp())
+                except Exception:
+                    continue
 
             pct = _percentile(r["ticker"], r["notional"])
             sweeps.append({
