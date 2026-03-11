@@ -5511,7 +5511,11 @@ def main():
     
     # Initialize database
     init_db()
-    init_sweep_db()
+    try:
+        init_sweep_db()
+    except Exception as _e:
+        print(f"[SERVER] init_sweep_db() failed (DB likely locked by another process): {_e}", flush=True)
+        print("[SERVER] Continuing anyway — tables already exist if backfill is running.", flush=True)
 
     # Refresh ETF ticker cache (skips if < 7 days old)
     # Note: purge_etf_events() removed — ETF events now shown on ETF sweeps page
