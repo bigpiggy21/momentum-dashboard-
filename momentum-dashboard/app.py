@@ -5398,6 +5398,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 except Exception:
                     continue
 
+            # Snap to minute boundary to match 1-min candle timestamps
+            # LC timeToCoordinate returns null for times between candles
+            time_unix = (time_unix // 60) * 60
+
             pct = _percentile(r["ticker"], r["notional"])
             sweeps.append({
                 "ticker": r["ticker"],

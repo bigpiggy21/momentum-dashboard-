@@ -264,12 +264,37 @@ function drawBubbles(){
 
   var ts = _chart.timeScale();
 
+  // Build sorted candle time array for nearest-match lookup
+  // LC timeToCoordinate only works for exact candle timestamps
+  var candleTimes = _candles.map(function(c){ return c.time; });
+
+  // Binary search: find nearest candle time for a given unix timestamp
+  function nearestCandleTime(t){
+    if(candleTimes.length === 0) return null;
+    var lo = 0, hi = candleTimes.length - 1;
+    while(lo < hi){
+      var mid = (lo + hi) >> 1;
+      if(candleTimes[mid] < t) lo = mid + 1;
+      else hi = mid;
+    }
+    // Check both lo and lo-1 for closest
+    var best = candleTimes[lo];
+    if(lo > 0 && Math.abs(candleTimes[lo-1] - t) < Math.abs(best - t)){
+      best = candleTimes[lo-1];
+    }
+    return best;
+  }
+
   _sweeps.forEach(function(s){
     var tConf = activeTickers[s.ticker];
     if(!tConf) return;
 
-    // Map time to x coordinate
-    var x = ts.timeToCoordinate(s.time_unix);
+    // Find nearest candle time for this sweep
+    var candleT = nearestCandleTime(s.time_unix);
+    if(candleT === null) return;
+
+    // Map time to x coordinate using matched candle time
+    var x = ts.timeToCoordinate(candleT);
     if(x === null || x < 0 || x > _canvas.width) return;
 
     // Normalise price to reference ticker axis
@@ -310,10 +335,22 @@ function onMouseMove(e){
   TICKERS.forEach(function(t){ if(t.on) activeTickers[t.ticker] = t; });
   var ts = _chart.timeScale();
 
+  var candleTimes2 = _candles.map(function(c){ return c.time; });
+  function nearest2(t){
+    if(candleTimes2.length === 0) return null;
+    var lo = 0, hi = candleTimes2.length - 1;
+    while(lo < hi){ var mid = (lo+hi)>>1; if(candleTimes2[mid]<t) lo=mid+1; else hi=mid; }
+    var best = candleTimes2[lo];
+    if(lo > 0 && Math.abs(candleTimes2[lo-1]-t) < Math.abs(best-t)) best = candleTimes2[lo-1];
+    return best;
+  }
+
   for(var i = 0; i < _sweeps.length; i++){
     var s = _sweeps[i];
     if(!activeTickers[s.ticker]) continue;
-    var x = ts.timeToCoordinate(s.time_unix);
+    var ct = nearest2(s.time_unix);
+    if(ct === null) continue;
+    var x = ts.timeToCoordinate(ct);
     if(x === null) continue;
     var ratio = _spyRatio[s.ticker] || 1;
     var normPrice = ratio === 1 ? s.price : s.price / ratio;
