@@ -74,8 +74,8 @@ DEFAULT_BUFFER_FLUSH_SECONDS = 30
 DEFAULT_BUFFER_MAX_TRADES = 200
 
 # Reconnection backoff
-RECONNECT_MIN_WAIT = 2
-RECONNECT_MAX_WAIT = 60
+RECONNECT_MIN_WAIT = 5
+RECONNECT_MAX_WAIT = 120
 
 
 # ---------------------------------------------------------------------------
@@ -474,6 +474,7 @@ class UnifiedLiveDaemon:
         self._trade_count = 0             # rolling count for trades/s
         self._trade_window_start = 0      # epoch second of current window
         self._last_trade_ts = 0           # monotonic timestamp of last T.* message
+        self._subscribed_at = 0           # time.time() when subscription succeeded
 
         # ── Combined status ──
         self._status = {
@@ -840,10 +841,11 @@ class UnifiedLiveDaemon:
             on_error=self._on_error,
             on_close=self._on_close,
         )
-        # Polygon doesn't respond to client ping frames, so disable library
-        # ping/pong. We rely on the steady stream of T.*/AM.* messages as
-        # proof of liveness instead.
-        self._ws.run_forever(ping_interval=0)
+        # Send pings every 30s to keep the connection alive.
+        # Polygon may not respond with pong frames, so set a generous
+        # timeout (90s) — we only care that *we* send pings so the
+        # server doesn't close us for inactivity (close code 1008).
+        self._ws.run_forever(ping_interval=30, ping_timeout=90)
 
     # ------------------------------------------------------------------
     # WebSocket callbacks
@@ -883,13 +885,21 @@ class UnifiedLiveDaemon:
         print(f"[LIVE] WebSocket error: {error}", flush=True)
 
     def _on_close(self, ws, close_status_code, close_msg):
+        now = time.time()
+        sub_at = self._subscribed_at
         with self._lock:
             self._status["connected"] = False
             self._status["authenticated"] = False
             self._status["subscribed"] = False
         reason = f"code={close_status_code} msg={close_msg}" if close_status_code else "clean"
+        # Only reset backoff if connection was stable for ≥60s.
+        # This prevents rapid reconnect loops when server keeps closing us.
+        if sub_at and (now - sub_at) >= 60:
+            self._reconnect_wait = RECONNECT_MIN_WAIT
+        uptime = f" (uptime {now - sub_at:.0f}s)" if sub_at else ""
+        self._subscribed_at = 0
         _daemon_log("ws_closed", reason)
-        print(f"[LIVE] WebSocket closed ({reason})", flush=True)
+        print(f"[LIVE] WebSocket closed ({reason}){uptime}", flush=True)
 
     # ------------------------------------------------------------------
     # Status message handler
@@ -919,8 +929,10 @@ class UnifiedLiveDaemon:
             _daemon_log("subscribed", message)
             with self._lock:
                 self._status["subscribed"] = True
-            # Reset reconnect backoff — we're fully operational
-            self._reconnect_wait = RECONNECT_MIN_WAIT
+            # Record subscribe time — backoff resets only after connection
+            # has been stable for 60s (see _on_close). This prevents rapid
+            # reconnect loops when Polygon keeps closing us quickly.
+            self._subscribed_at = time.time()
 
         elif status == "error":
             print(f"[LIVE] Server error: {message}", flush=True)
