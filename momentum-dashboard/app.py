@@ -5333,25 +5333,40 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             hist = [r[0] for r in conn.execute(hist_sql, (tk, three_years_ago)).fetchall()]
             percentile_cache[tk] = hist  # sorted ascending
 
-        # 3) Compute SPY ratio for price normalisation
+        # 3) Compute SPY ratio for price normalisation using candle data
+        # For each non-ref ticker, fetch daily close on the target date to get a stable ratio
         spy_ratio = {}
         ref_ticker = "SPY"
-        # Get first candle of the target date for each ticker from cache
+        spy_ratio[ref_ticker] = 1.0
+
+        # Fetch reference ticker's daily bar for the date
+        ref_close = None
+        try:
+            import urllib.request, json as _json
+            ref_url = f"{MASSIVE_BASE_URL}/v2/aggs/ticker/{ref_ticker}/range/1/day/{date_str}/{date_str}?adjusted=true&sort=asc&apiKey={MASSIVE_API_KEY}"
+            with urllib.request.urlopen(ref_url, timeout=10) as resp:
+                ref_data = _json.loads(resp.read())
+                if ref_data.get("results"):
+                    ref_close = ref_data["results"][0]["c"]
+        except Exception:
+            pass
+
         for tk in tickers:
             if tk == ref_ticker:
+                continue
+            if not ref_close:
                 spy_ratio[tk] = 1.0
                 continue
-            # Use first sweep price as approximation, or query candles
-            first_sweep = None
-            first_ref = None
-            for r in rows:
-                if r["ticker"] == tk and first_sweep is None:
-                    first_sweep = r["price"]
-                if r["ticker"] == ref_ticker and first_ref is None:
-                    first_ref = r["price"]
-            if first_sweep and first_ref and first_ref > 0:
-                spy_ratio[tk] = first_sweep / first_ref
-            else:
+            try:
+                tk_url = f"{MASSIVE_BASE_URL}/v2/aggs/ticker/{tk}/range/1/day/{date_str}/{date_str}?adjusted=true&sort=asc&apiKey={MASSIVE_API_KEY}"
+                with urllib.request.urlopen(tk_url, timeout=10) as resp:
+                    tk_data = _json.loads(resp.read())
+                    if tk_data.get("results"):
+                        tk_close = tk_data["results"][0]["c"]
+                        spy_ratio[tk] = tk_close / ref_close
+                    else:
+                        spy_ratio[tk] = 1.0
+            except Exception:
                 spy_ratio[tk] = 1.0
 
         conn.close()
