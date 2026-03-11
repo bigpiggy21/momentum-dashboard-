@@ -2186,10 +2186,10 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
             except sqlite3.IntegrityError:
                 pass
 
-    # Cleanup: after backfill, some events may now be ranked beyond the limit.
-    # For processed tickers, NULL out sweep_rank for events not in the current
-    # ranked result set, and DELETE standalone ranked_sweep events that lost rank.
-    if tickers and not date_from and not date_to:
+    # Cleanup: after FULL re-detection (no ticker filter), remove stale ranks.
+    # Never run during single-ticker fetches — would delete valid events that
+    # simply aren't in that ticker's top-N (ASTS bug fix).
+    if not tickers and not date_from and not date_to:
         _valid = set((r["ticker"], r["trade_date"]) for r in rows)
 
         _ph = ",".join("?" * len(tickers))
@@ -2356,11 +2356,10 @@ def detect_ranked_daily(rank_limit=100, min_sweeps=2, tickers=None,
             except sqlite3.IntegrityError:
                 pass
 
-    # Cleanup: after backfill, some events may now be ranked beyond the limit
-    # or no longer qualify. For processed tickers, NULL out daily_rank for events
-    # not in the current ranked result set, and DELETE standalone ranked_daily
-    # events that lost their rank (they have no other purpose).
-    if tickers and not date_from and not date_to:
+    # Cleanup: after FULL re-detection (no ticker filter), remove stale ranks.
+    # Never run during single-ticker fetches — would delete valid events that
+    # simply aren't in that ticker's top-N (ASTS bug fix).
+    if not tickers and not date_from and not date_to:
         # Build set of (ticker, date) that ARE validly ranked
         _valid = set((r["ticker"], r["trade_date"]) for r in rows)
         _processed_tickers = set(tickers)
