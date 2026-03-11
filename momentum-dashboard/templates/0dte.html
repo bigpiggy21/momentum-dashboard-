@@ -29,10 +29,12 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .layer-btn.active.lyr-rare{background:#a78bfa22;color:#c4b5fd;}
 .layer-btn.active.lyr-cb{background:#eab30822;color:#eab308;}
 .layer-btn.active.lyr-monster{background:#f9731622;color:#f97316;}
+.layer-btn.active.lyr-sweeps{background:#10b98122;color:#10b981;}
 /* Layer config inputs */
 .lyr-cfg{display:flex;align-items:center;gap:3px;font-size:10px;color:#555;}
 .lyr-cfg input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:3px;font-size:10px;font-family:inherit;width:38px;text-align:center;}
 .lyr-cfg .cfg-label{font-weight:600;}
+.lyr-cfg .cfg-wide{width:58px;}
 
 /* Layout */
 .main{display:flex;height:calc(100vh - 48px);}
@@ -129,6 +131,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
   </div>
   <div class="hdr-sep"></div>
   <div class="layer-ctrl" id="layerCtrl">
+    <button class="layer-btn lyr-sweeps active" onclick="toggleLayer('sweeps',this)">Sweeps</button>
     <button class="layer-btn lyr-daily active" onclick="toggleLayer('daily',this)">Daily</button>
     <button class="layer-btn lyr-single active" onclick="toggleLayer('single',this)">Single</button>
     <button class="layer-btn lyr-rare active" onclick="toggleLayer('rare',this)">Rare</button>
@@ -136,7 +139,9 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
     <button class="layer-btn lyr-monster" onclick="toggleLayer('monster',this)">Monster</button>
   </div>
   <div class="lyr-cfg">
-    <span class="cfg-label" style="color:#f59e0b;">D</span><input type="number" id="cfgDailyFrom" value="1" min="1" onchange="onLayerCfgChange()">–<input type="number" id="cfgDailyTo" value="20" min="1" onchange="onLayerCfgChange()">
+    <span class="cfg-label" style="color:#10b981;">$</span><input type="number" class="cfg-wide" id="cfgMinNotional" value="500000" step="100000" min="0" onchange="onLayerCfgChange()">
+    <span class="cfg-label" style="color:#10b981;">P</span><input type="number" id="cfgPercentile" value="85" step="5" min="0" max="99" onchange="onLayerCfgChange()">
+    <span class="cfg-label" style="color:#f59e0b;margin-left:4px;">D</span><input type="number" id="cfgDailyFrom" value="1" min="1" onchange="onLayerCfgChange()">–<input type="number" id="cfgDailyTo" value="20" min="1" onchange="onLayerCfgChange()">
     <span class="cfg-label" style="color:#3b82f6;margin-left:4px;">S</span><input type="number" id="cfgSingleFrom" value="1" min="1" onchange="onLayerCfgChange()">–<input type="number" id="cfgSingleTo" value="10" min="1" onchange="onLayerCfgChange()">
   </div>
   <div class="hdr-sep"></div>
@@ -381,9 +386,9 @@ var _overlayTickers = [];        // flat array of overlay ticker objects
 var _candleInterval = 1;
 var INTERVAL_DAYS = {1:10, 5:60, 60:504, 240:504, 1440:1260, 2880:2520, 10080:2520, 43200:3780, 129600:3780};
 
-// Layer system — replaces old DP Sweeps toggle + percentile/notional filters
-var _activeLayers = {daily:true, single:true, rare:true, cb:false, monster:false};
-var _layerCfg = {dailyFrom:1, dailyTo:20, singleFrom:1, singleTo:10};
+// Layer system — 6 layers: raw sweeps + 5 event layers
+var _activeLayers = {sweeps:true, daily:true, single:true, rare:true, cb:false, monster:false};
+var _layerCfg = {minNotional:500000, percentile:85, dailyFrom:1, dailyTo:20, singleFrom:1, singleTo:10};
 // Raw data from /api/sweeps/chart
 var _chartSweeps = [];       // individual sweep trades
 var _chartEvents = [];       // clusterbomb/rare/monster events with ranks
@@ -751,8 +756,7 @@ function drawBubbles(){
   }
   _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
 
-  // No layers active → nothing to draw
-  var anyLayer = _activeLayers.daily || _activeLayers.single || _activeLayers.rare || _activeLayers.cb || _activeLayers.monster;
+  var anyLayer = _activeLayers.sweeps || _activeLayers.daily || _activeLayers.single || _activeLayers.rare || _activeLayers.cb || _activeLayers.monster;
   if(!anyLayer) return;
 
   var ts = _chart.timeScale();
@@ -775,9 +779,7 @@ function drawBubbles(){
     return best;
   }
 
-  // Helper: map a date string "YYYY-MM-DD" to nearest candle time
   function dateToUnix(dateStr){
-    // Market close ~4pm ET = 20:00 UTC
     return Math.floor(new Date(dateStr + 'T20:00:00Z').getTime() / 1000);
   }
 
@@ -812,49 +814,125 @@ function drawBubbles(){
     _ctx.fillText(text, x, y + 20);
   }
 
-  // Build event lookup by date for quick access
-  var eventByDate = {};
-  _chartEvents.forEach(function(ev){
-    if(!eventByDate[ev.date]) eventByDate[ev.date] = [];
-    eventByDate[ev.date].push(ev);
-  });
+  // Dynamic rank sizing: rank 1 = maxR, last rank = minR, smooth interpolation
+  function rankRadius(rank, fromRank, toRank, minR, maxR){
+    var range = Math.max(toRank - fromRank, 1);
+    var t = (rank - fromRank) / range;  // 0 = best, 1 = worst
+    return maxR - t * (maxR - minR);
+  }
 
-  // ---- LAYER: CB (yellow + red border ring) ----
+  // Dynamic rank opacity: rank 1 = bright, last = dim
+  function rankAlpha(rank, fromRank, toRank, minA, maxA){
+    var range = Math.max(toRank - fromRank, 1);
+    var t = (rank - fromRank) / range;
+    return maxA - t * (maxA - minA);
+  }
+
+  // ---- LAYER: Sweeps (green, percentile-sized individual trades) ----
+  if(_activeLayers.sweeps && _chartSweeps.length > 0){
+    // Compute percentiles client-side: sort notionals, binary search position
+    var sortedNotionals = _chartSweeps.map(function(s){ return s.notional; }).sort(function(a,b){ return a - b; });
+    var totalS = sortedNotionals.length;
+    function computePct(notional){
+      var lo = 0, hi = totalS;
+      while(lo < hi){
+        var mid = (lo + hi) >> 1;
+        if(sortedNotionals[mid] < notional) lo = mid + 1;
+        else hi = mid;
+      }
+      return Math.min(99, Math.floor(lo / totalS * 100));
+    }
+
+    _chartSweeps.forEach(function(s){
+      // Apply filters
+      if(s.notional < _layerCfg.minNotional) return;
+      var pct = computePct(s.notional);
+      if(pct < _layerCfg.percentile) return;
+
+      // Convert trade date+time to unix timestamp
+      // sweep_chart returns {date:"2026-03-10", time:"14:32:15", ...}
+      var timeUnix;
+      if(s.time && s.time.length >= 5){
+        // Parse date + time as ET (UTC-4 during EDT)
+        var dt = new Date(s.date + 'T' + s.time + '-04:00');
+        timeUnix = Math.floor(dt.getTime() / 1000);
+      } else {
+        timeUnix = dateToUnix(s.date);
+      }
+      // Snap to minute for matching candle times
+      timeUnix = Math.floor(timeUnix / 60) * 60;
+
+      var pos = getXY(timeUnix);
+      if(!pos) return;
+
+      // Percentile-based exponential sizing: p=0 → 3px, p=1 → 30px
+      var p = pct / 100;
+      var radius = 3 + Math.pow(p, 2.5) * 27;
+      var alpha = 0.3 + p * 0.5;
+
+      drawCircle(pos.x, pos.y, radius, 'rgba(16,185,129,' + alpha + ')', '#10b981', 1);
+    });
+  }
+
+  // ---- LAYER: CB (yellow + red border, sized by notional) ----
   if(_activeLayers.cb){
+    // Find notional range for dynamic sizing
+    var cbNotionals = [];
+    _chartEvents.forEach(function(ev){
+      if(ev.event_type === 'clusterbomb' || ev.event_type === 'rare_sweep'){
+        cbNotionals.push(ev.total_notional || 0);
+      }
+    });
+    var cbMin = Math.min.apply(null, cbNotionals.length ? cbNotionals : [0]);
+    var cbMax = Math.max.apply(null, cbNotionals.length ? cbNotionals : [1]);
+    var cbRange = Math.max(cbMax - cbMin, 1);
+
     _chartEvents.forEach(function(ev){
       var isCB = ev.event_type === 'clusterbomb' || ev.event_type === 'rare_sweep';
       if(!isCB) return;
       var pos = getXY(dateToUnix(ev.date));
       if(!pos) return;
-      // Red border ring
-      drawCircle(pos.x, pos.y, 12, 'rgba(220,38,38,0.25)', 'rgba(220,38,38,0.95)', 2);
-      // Yellow fill
-      drawCircle(pos.x, pos.y, 8, 'rgba(234,179,8,0.90)', '#eab308', 1);
-      // Label
+      // Dynamic size: 6–14 based on notional within range
+      var t = ((ev.total_notional || 0) - cbMin) / cbRange;
+      var innerR = 6 + t * 8;
+      var outerR = innerR + 4;
+      drawCircle(pos.x, pos.y, outerR, 'rgba(220,38,38,0.20)', 'rgba(220,38,38,0.95)', 2);
+      drawCircle(pos.x, pos.y, innerR, 'rgba(234,179,8,0.90)', '#eab308', 1);
       var label = 'CB';
       if(ev.sweep_count) label += ' (' + ev.sweep_count + ')';
-      drawLabel(pos.x, pos.y + 6, label, '#eab308');
+      drawLabel(pos.x, pos.y + innerR - 2, label, '#eab308');
     });
   }
 
-  // ---- LAYER: Monster (orange + red border ring) ----
+  // ---- LAYER: Monster (orange + red border, sized by max_notional) ----
   if(_activeLayers.monster){
+    var mNotionals = [];
+    _chartEvents.forEach(function(ev){
+      if(ev.is_monster || ev.event_type === 'monster_sweep'){
+        mNotionals.push(ev.max_notional || ev.total_notional || 0);
+      }
+    });
+    var mMin = Math.min.apply(null, mNotionals.length ? mNotionals : [0]);
+    var mMax = Math.max.apply(null, mNotionals.length ? mNotionals : [1]);
+    var mRange = Math.max(mMax - mMin, 1);
+
     _chartEvents.forEach(function(ev){
       var isMonster = ev.is_monster || ev.event_type === 'monster_sweep';
       if(!isMonster) return;
       var pos = getXY(dateToUnix(ev.date));
       if(!pos) return;
-      // Red border ring
-      drawCircle(pos.x, pos.y, 14, 'rgba(220,38,38,0.20)', 'rgba(220,38,38,0.95)', 2);
-      // Orange fill
-      drawCircle(pos.x, pos.y, 10, 'rgba(249,115,22,0.90)', '#f97316', 1);
-      // Label
-      var label = ev.max_notional ? fmt$(ev.max_notional) + ' [M]' : '[M]';
-      drawLabel(pos.x, pos.y + 8, label, '#f97316');
+      var val = ev.max_notional || ev.total_notional || 0;
+      var t = (val - mMin) / mRange;
+      var innerR = 8 + t * 8;
+      var outerR = innerR + 4;
+      drawCircle(pos.x, pos.y, outerR, 'rgba(220,38,38,0.15)', 'rgba(220,38,38,0.95)', 2);
+      drawCircle(pos.x, pos.y, innerR, 'rgba(249,115,22,0.90)', '#f97316', 1);
+      var label = val ? fmt$(val) + ' [M]' : '[M]';
+      drawLabel(pos.x, pos.y + innerR, label, '#f97316');
     });
   }
 
-  // ---- LAYER: Daily (amber, rank-sized) ----
+  // ---- LAYER: Daily (amber, dynamically rank-sized) ----
   if(_activeLayers.daily){
     _chartEvents.forEach(function(ev){
       var dr = ev.daily_rank;
@@ -862,17 +940,15 @@ function drawBubbles(){
       if(dr < _layerCfg.dailyFrom || dr > _layerCfg.dailyTo) return;
       var pos = getXY(dateToUnix(ev.date));
       if(!pos) return;
-      var radius, color;
-      if(dr <= 3){       radius = 9; color = 'rgba(255,215,0,0.85)'; }
-      else if(dr <= 10){ radius = 7; color = 'rgba(251,191,36,0.75)'; }
-      else if(dr <= 25){ radius = 7; color = 'rgba(245,158,11,0.70)'; }
-      else {             radius = 6; color = 'rgba(245,158,11,0.60)'; }
-      drawCircle(pos.x, pos.y, radius, color, '#f59e0b', 1);
+      // Dynamic: rank 1 → 12px, last rank → 4px
+      var radius = rankRadius(dr, _layerCfg.dailyFrom, _layerCfg.dailyTo, 4, 12);
+      var alpha = rankAlpha(dr, _layerCfg.dailyFrom, _layerCfg.dailyTo, 0.50, 0.90);
+      drawCircle(pos.x, pos.y, radius, 'rgba(245,158,11,' + alpha.toFixed(2) + ')', '#f59e0b', 1);
       drawLabel(pos.x, pos.y, 'D#' + dr, '#f59e0b');
     });
   }
 
-  // ---- LAYER: Single (blue, rank-sized) ----
+  // ---- LAYER: Single (blue, dynamically rank-sized) ----
   if(_activeLayers.single){
     _chartEvents.forEach(function(ev){
       var sr = ev.sweep_rank;
@@ -880,23 +956,29 @@ function drawBubbles(){
       if(sr < _layerCfg.singleFrom || sr > _layerCfg.singleTo) return;
       var pos = getXY(dateToUnix(ev.date));
       if(!pos) return;
-      var radius, color;
-      if(sr <= 3){       radius = 9; color = 'rgba(29,78,216,0.90)'; }
-      else if(sr <= 10){ radius = 8; color = 'rgba(59,130,246,0.85)'; }
-      else if(sr <= 25){ radius = 7; color = 'rgba(96,165,250,0.80)'; }
-      else {             radius = 6; color = 'rgba(147,197,253,0.70)'; }
-      drawCircle(pos.x, pos.y - 2, radius, color, '#3b82f6', 1);
+      // Dynamic: rank 1 → 12px, last rank → 4px
+      var radius = rankRadius(sr, _layerCfg.singleFrom, _layerCfg.singleTo, 4, 12);
+      var alpha = rankAlpha(sr, _layerCfg.singleFrom, _layerCfg.singleTo, 0.50, 0.95);
+      drawCircle(pos.x, pos.y - 2, radius, 'rgba(59,130,246,' + alpha.toFixed(2) + ')', '#3b82f6', 1);
       drawLabel(pos.x, pos.y - 2, 'S#' + sr, '#3b82f6');
     });
   }
 
-  // ---- LAYER: Rare (purple, fixed size) ----
+  // ---- LAYER: Rare (purple, sized by total_notional) ----
   if(_activeLayers.rare){
+    var rareNotionals = [];
+    _chartEvents.forEach(function(ev){ if(ev.is_rare) rareNotionals.push(ev.total_notional || 0); });
+    var rMin = Math.min.apply(null, rareNotionals.length ? rareNotionals : [0]);
+    var rMax = Math.max.apply(null, rareNotionals.length ? rareNotionals : [1]);
+    var rRange = Math.max(rMax - rMin, 1);
+
     _chartEvents.forEach(function(ev){
       if(!ev.is_rare) return;
       var pos = getXY(dateToUnix(ev.date));
       if(!pos) return;
-      drawCircle(pos.x, pos.y + 2, 6, 'rgba(167,139,250,0.75)', '#a78bfa', 1);
+      var t = ((ev.total_notional || 0) - rMin) / rRange;
+      var radius = 4 + t * 7;
+      drawCircle(pos.x, pos.y + 2, radius, 'rgba(167,139,250,0.75)', '#a78bfa', 1);
       drawLabel(pos.x, pos.y + 2, '[R]', '#c4b5fd');
     });
   }
@@ -911,8 +993,8 @@ function onMouseMove(e){
   var my = e.clientY - rect.top;
   var tooltip = document.getElementById('tooltipDiv');
 
-  var anyLayer = _activeLayers.daily || _activeLayers.single || _activeLayers.rare || _activeLayers.cb || _activeLayers.monster;
-  if(!anyLayer || _chartEvents.length === 0){
+  var anyLayer = _activeLayers.sweeps || _activeLayers.daily || _activeLayers.single || _activeLayers.rare || _activeLayers.cb || _activeLayers.monster;
+  if(!anyLayer || (_chartEvents.length === 0 && _chartSweeps.length === 0)){
     tooltip.style.display = 'none';
     return;
   }
@@ -1044,12 +1126,16 @@ function toggleLayer(layer, btn){
 }
 
 function onLayerCfgChange(){
+  _layerCfg.minNotional = parseFloat(document.getElementById('cfgMinNotional').value) || 0;
+  _layerCfg.percentile = parseInt(document.getElementById('cfgPercentile').value) || 0;
   _layerCfg.dailyFrom = parseInt(document.getElementById('cfgDailyFrom').value) || 1;
   _layerCfg.dailyTo = parseInt(document.getElementById('cfgDailyTo').value) || 20;
   _layerCfg.singleFrom = parseInt(document.getElementById('cfgSingleFrom').value) || 1;
   _layerCfg.singleTo = parseInt(document.getElementById('cfgSingleTo').value) || 10;
-  // Re-fetch with new rank ranges
-  fetchSweepChart();
+  // Sweeps layer uses client-side filtering — just redraw
+  drawBubbles();
+  updateStats();
+  updateFeed();
 }
 
 // Always-live timers
@@ -1176,13 +1262,17 @@ function loadPreset(){
   // Restore layer toggles
   if(cfg.layers){
     _activeLayers = cfg.layers;
-    ['daily','single','rare','cb','monster'].forEach(function(l){
+    // Ensure sweeps key exists for backward compat with v3 presets saved before sweeps layer
+    if(_activeLayers.sweeps === undefined) _activeLayers.sweeps = true;
+    ['sweeps','daily','single','rare','cb','monster'].forEach(function(l){
       var btn = document.querySelector('.lyr-' + l);
       if(btn) btn.classList.toggle('active', !!_activeLayers[l]);
     });
   }
   if(cfg.layerCfg){
     _layerCfg = cfg.layerCfg;
+    document.getElementById('cfgMinNotional').value = _layerCfg.minNotional || 500000;
+    document.getElementById('cfgPercentile').value = _layerCfg.percentile || 85;
     document.getElementById('cfgDailyFrom').value = _layerCfg.dailyFrom || 1;
     document.getElementById('cfgDailyTo').value = _layerCfg.dailyTo || 20;
     document.getElementById('cfgSingleFrom').value = _layerCfg.singleFrom || 1;
