@@ -707,13 +707,6 @@ function drawBubbles(){
     return best;
   }
 
-  // Determine if we need ref-ticker price snapping
-  var refTicker = null;
-  if(_mode === 'watchlist' && _activeWatchlist){
-    var wCfg = WATCHLIST_CONFIG[_activeWatchlist];
-    if(wCfg && wCfg.ref) refTicker = wCfg.ref;
-  }
-
   _sweeps.forEach(function(s){
     var tConf = activeTickers[s.ticker];
     if(!tConf) return;
@@ -724,14 +717,11 @@ function drawBubbles(){
     var x = ts.timeToCoordinate(candleT);
     if(x === null || x < 0 || x > _canvas.width) return;
 
-    // Price mapping: single mode or same-as-ref → use sweep price. Otherwise snap to ref candle close.
-    var plotPrice;
-    if(_mode === 'single' || !refTicker || s.ticker === refTicker){
-      plotPrice = s.price;
-    } else {
-      plotPrice = candleCloseMap[candleT];
-      if(!plotPrice) return;
-    }
+    // Price mapping: always snap to candle close at that timestamp.
+    // This handles stock splits (raw sweep price may be pre-split, candles are adjusted)
+    // and also handles non-ref tickers in index mode (different price scale).
+    var plotPrice = candleCloseMap[candleT];
+    if(!plotPrice) return;
 
     var y = _candleSeries.priceToCoordinate(plotPrice);
     if(y === null || y < 0 || y > _canvas.height) return;
@@ -776,12 +766,6 @@ function onMouseMove(e){
   var candleCloseMap2 = {};
   _candles.forEach(function(c){ candleCloseMap2[c.time] = c.close; });
 
-  var refTicker = null;
-  if(_mode === 'watchlist' && _activeWatchlist){
-    var wCfg = WATCHLIST_CONFIG[_activeWatchlist];
-    if(wCfg && wCfg.ref) refTicker = wCfg.ref;
-  }
-
   function nearest2(t){
     if(candleTimes2.length === 0) return null;
     var lo = 0, hi = candleTimes2.length - 1;
@@ -801,12 +785,7 @@ function onMouseMove(e){
     if(ct === null) continue;
     var x = ts.timeToCoordinate(ct);
     if(x === null) continue;
-    var plotPrice2;
-    if(_mode === 'single' || !refTicker || s.ticker === refTicker){
-      plotPrice2 = s.price;
-    } else {
-      plotPrice2 = candleCloseMap2[ct];
-    }
+    var plotPrice2 = candleCloseMap2[ct];
     if(!plotPrice2) continue;
     var y = _candleSeries.priceToCoordinate(plotPrice2);
     if(y === null) continue;
