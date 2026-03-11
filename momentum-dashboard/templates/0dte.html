@@ -88,8 +88,8 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 <div class="header">
   <div class="header-title">Darkpool Flow</div>
   <button class="idx-tab active" onclick="setIndex('SPX',this)">SPX</button>
-  <button class="idx-tab" onclick="setIndex('NDX',this)" disabled style="opacity:0.4">NDX</button>
-  <button class="idx-tab" onclick="setIndex('RTY',this)" disabled style="opacity:0.4">RTY</button>
+  <button class="idx-tab" onclick="setIndex('NDX',this)">NDX</button>
+  <button class="idx-tab" onclick="setIndex('RTY',this)">RTY</button>
   <div class="hdr-sep"></div>
   <button class="ctrl-btn" id="btnAutoRefresh" onclick="toggleAutoRefresh()" style="width:auto;padding:5px 12px;font-size:12px;">Live</button>
   <div class="hdr-sep"></div>
@@ -147,26 +147,65 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 // ====================================================================
 // CONFIG
 // ====================================================================
-var TICKER_GROUPS = [
-  {name: 'Underlying', on: true, tickers: [
-    {ticker: 'SPY',  color: 'rgba(59,130,246,0.55)',  stroke: '#3b82f6', label: 'SPY',  on: true, isRef: true},
-    {ticker: 'VOO',  color: 'rgba(234,179,8,0.55)',   stroke: '#eab308', label: 'VOO',  on: true},
-    {ticker: 'IVV',  color: 'rgba(16,185,129,0.55)',   stroke: '#10b981', label: 'IVV',  on: true},
-    {ticker: 'SPLG', color: 'rgba(139,92,246,0.55)',   stroke: '#8b5cf6', label: 'SPLG', on: false},
-  ]},
-  {name: 'Leveraged', on: true, tickers: [
-    {ticker: 'UPRO', color: 'rgba(239,68,68,0.55)',   stroke: '#ef4444', label: 'UPRO', on: true},
-    {ticker: 'SPXL', color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'SPXL', on: false},
-    {ticker: 'SSO',  color: 'rgba(236,72,153,0.55)',   stroke: '#ec4899', label: 'SSO',  on: false},
-    {ticker: 'SH',   color: 'rgba(107,114,128,0.55)',  stroke: '#6b7280', label: 'SH',   on: false},
-    {ticker: 'SPXS', color: 'rgba(156,163,175,0.55)',  stroke: '#9ca3af', label: 'SPXS', on: false},
-    {ticker: 'SPXU', color: 'rgba(75,85,99,0.55)',     stroke: '#4b5563', label: 'SPXU', on: false},
-  ]},
-];
-// Flat list for compatibility with existing code
+var INDEX_CONFIG = {
+  SPX: {
+    ref: 'SPY',
+    groups: [
+      {name: 'Underlying', on: true, tickers: [
+        {ticker: 'SPY',  color: 'rgba(59,130,246,0.55)',  stroke: '#3b82f6', label: 'SPY',  on: true, isRef: true},
+        {ticker: 'VOO',  color: 'rgba(234,179,8,0.55)',   stroke: '#eab308', label: 'VOO',  on: true},
+        {ticker: 'IVV',  color: 'rgba(16,185,129,0.55)',  stroke: '#10b981', label: 'IVV',  on: true},
+        {ticker: 'SPLG', color: 'rgba(139,92,246,0.55)',  stroke: '#8b5cf6', label: 'SPLG', on: false},
+      ]},
+      {name: 'Leveraged', on: true, tickers: [
+        {ticker: 'UPRO', color: 'rgba(239,68,68,0.55)',   stroke: '#ef4444', label: 'UPRO', on: true},
+        {ticker: 'SPXL', color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'SPXL', on: false},
+        {ticker: 'SSO',  color: 'rgba(236,72,153,0.55)',  stroke: '#ec4899', label: 'SSO',  on: false},
+        {ticker: 'SH',   color: 'rgba(107,114,128,0.55)', stroke: '#6b7280', label: 'SH',   on: false},
+        {ticker: 'SPXS', color: 'rgba(156,163,175,0.55)', stroke: '#9ca3af', label: 'SPXS', on: false},
+        {ticker: 'SPXU', color: 'rgba(75,85,99,0.55)',    stroke: '#4b5563', label: 'SPXU', on: false},
+      ]},
+    ]
+  },
+  NDX: {
+    ref: 'QQQ',
+    groups: [
+      {name: 'Underlying', on: true, tickers: [
+        {ticker: 'QQQ',  color: 'rgba(59,130,246,0.55)',  stroke: '#3b82f6', label: 'QQQ',  on: true, isRef: true},
+        {ticker: 'QQQM', color: 'rgba(234,179,8,0.55)',   stroke: '#eab308', label: 'QQQM', on: true},
+      ]},
+      {name: 'Leveraged', on: true, tickers: [
+        {ticker: 'TQQQ', color: 'rgba(239,68,68,0.55)',   stroke: '#ef4444', label: 'TQQQ', on: true},
+        {ticker: 'QLD',  color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'QLD',  on: false},
+        {ticker: 'SQQQ', color: 'rgba(107,114,128,0.55)', stroke: '#6b7280', label: 'SQQQ', on: false},
+        {ticker: 'PSQ',  color: 'rgba(156,163,175,0.55)', stroke: '#9ca3af', label: 'PSQ',  on: false},
+        {ticker: 'QID',  color: 'rgba(75,85,99,0.55)',    stroke: '#4b5563', label: 'QID',  on: false},
+      ]},
+    ]
+  },
+  RTY: {
+    ref: 'IWM',
+    groups: [
+      {name: 'Underlying', on: true, tickers: [
+        {ticker: 'IWM',  color: 'rgba(59,130,246,0.55)',  stroke: '#3b82f6', label: 'IWM',  on: true, isRef: true},
+        {ticker: 'VTWO', color: 'rgba(234,179,8,0.55)',   stroke: '#eab308', label: 'VTWO', on: true},
+      ]},
+      {name: 'Leveraged', on: true, tickers: [
+        {ticker: 'TNA',  color: 'rgba(239,68,68,0.55)',   stroke: '#ef4444', label: 'TNA',  on: true},
+        {ticker: 'UWM',  color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'UWM',  on: false},
+        {ticker: 'TZA',  color: 'rgba(107,114,128,0.55)', stroke: '#6b7280', label: 'TZA',  on: false},
+        {ticker: 'RWM',  color: 'rgba(156,163,175,0.55)', stroke: '#9ca3af', label: 'RWM',  on: false},
+        {ticker: 'SRTY', color: 'rgba(75,85,99,0.55)',    stroke: '#4b5563', label: 'SRTY', on: false},
+      ]},
+    ]
+  }
+};
+
+var _activeIndex = 'SPX';
+var TICKER_GROUPS = INDEX_CONFIG[_activeIndex].groups;
 var TICKERS = [];
 TICKER_GROUPS.forEach(function(g){ g.tickers.forEach(function(t){ t.group = g.name; TICKERS.push(t); }); });
-var REF_TICKER = 'SPY';
+var REF_TICKER = INDEX_CONFIG[_activeIndex].ref;
 
 // ====================================================================
 // STATE
@@ -557,12 +596,40 @@ function togglePanel(){
 }
 
 function setIndex(idx, btn){
-  // Only SPX is active for now — NDX/RTY are disabled placeholders
-  if(idx !== 'SPX') return;
+  if(idx === _activeIndex) return;
+  _activeIndex = idx;
   var btns = document.getElementById('indexTabs').querySelectorAll('.idx-tab');
   btns.forEach(function(b){ b.classList.remove('active'); });
   btn.classList.add('active');
-  // Future: switch TICKERS array and REF_TICKER per index
+
+  // Swap ticker config
+  TICKER_GROUPS = INDEX_CONFIG[idx].groups;
+  TICKERS = [];
+  TICKER_GROUPS.forEach(function(g){ g.tickers.forEach(function(t){ t.group = g.name; TICKERS.push(t); }); });
+  REF_TICKER = INDEX_CONFIG[idx].ref;
+
+  // Rebuild left panel ticker list
+  var list = document.getElementById('tickerList');
+  list.innerHTML = '';
+  TICKER_GROUPS.forEach(function(g, gi){
+    var hdr = document.createElement('div');
+    hdr.className = 'ticker-group-hdr';
+    hdr.innerHTML = '<input type="checkbox" '+(g.on?'checked':'')+' onchange="onGroupToggle('+gi+',this)">'
+      + '<span>'+g.name+'</span>';
+    list.appendChild(hdr);
+    g.tickers.forEach(function(t){
+      var row = document.createElement('div');
+      row.className = 'ticker-row';
+      row.setAttribute('data-group', gi);
+      row.innerHTML = '<input type="checkbox" class="ticker-check" data-ticker="'+t.ticker+'" '+(t.on?'checked':'')+' onchange="onTickerToggle(this)">'
+        + '<div class="ticker-dot" style="background:'+t.stroke+';"></div>'
+        + '<span class="ticker-label">'+t.label+'</span>';
+      list.appendChild(row);
+    });
+  });
+
+  // Reload everything for new index
+  loadAll();
 }
 
 function setCandleInterval(mins, btn){
