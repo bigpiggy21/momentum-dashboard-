@@ -5343,7 +5343,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         ref_close = None
         try:
             import urllib.request, json as _json
-            ref_url = f"{MASSIVE_BASE_URL}/v2/aggs/ticker/{ref_ticker}/range/1/day/{date_str}/{date_str}?adjusted=true&sort=asc&apiKey={MASSIVE_API_KEY}"
+            ref_url = f"{MASSIVE_BASE_URL}/aggs/ticker/{ref_ticker}/range/1/day/{date_str}/{date_str}?adjusted=true&sort=asc&apiKey={MASSIVE_API_KEY}"
             with urllib.request.urlopen(ref_url, timeout=10) as resp:
                 ref_data = _json.loads(resp.read())
                 if ref_data.get("results"):
@@ -5358,7 +5358,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 spy_ratio[tk] = 1.0
                 continue
             try:
-                tk_url = f"{MASSIVE_BASE_URL}/v2/aggs/ticker/{tk}/range/1/day/{date_str}/{date_str}?adjusted=true&sort=asc&apiKey={MASSIVE_API_KEY}"
+                tk_url = f"{MASSIVE_BASE_URL}/aggs/ticker/{tk}/range/1/day/{date_str}/{date_str}?adjusted=true&sort=asc&apiKey={MASSIVE_API_KEY}"
                 with urllib.request.urlopen(tk_url, timeout=10) as resp:
                     tk_data = _json.loads(resp.read())
                     if tk_data.get("results"):
