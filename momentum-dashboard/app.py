@@ -5301,7 +5301,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         from_str = start_date.strftime("%Y-%m-%d")
 
         import sqlite3
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30)
+        conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
 
         # 1) Get today's sweeps for requested tickers
