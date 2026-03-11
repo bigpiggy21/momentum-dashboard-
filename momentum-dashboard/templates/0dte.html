@@ -87,9 +87,11 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 
 <div class="header">
   <div class="header-title">Darkpool Flow</div>
-  <button class="idx-tab active" onclick="setIndex('SPX',this)">SPX</button>
-  <button class="idx-tab" onclick="setIndex('NDX',this)">NDX</button>
-  <button class="idx-tab" onclick="setIndex('RTY',this)">RTY</button>
+  <span id="indexTabs" style="display:inline-flex;gap:6px;">
+    <button class="idx-tab active" onclick="setIndex('SPX',this)">SPX</button>
+    <button class="idx-tab" onclick="setIndex('NDX',this)">NDX</button>
+    <button class="idx-tab" onclick="setIndex('RTY',this)">RTY</button>
+  </span>
   <div class="hdr-sep"></div>
   <button class="ctrl-btn" id="btnAutoRefresh" onclick="toggleAutoRefresh()" style="width:auto;padding:5px 12px;font-size:12px;">Live</button>
   <div class="hdr-sep"></div>
@@ -102,14 +104,20 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
   <div class="hdr-sep"></div>
   <input type="date" id="dateInput">
   <div class="hdr-sep"></div>
-  <div class="filter-group on" id="fgNotional">
-    <button class="flbl active" onclick="toggleFilter('notional')">Min $</button>
+  <div class="filter-group" id="fgNotional">
+    <button class="flbl" onclick="toggleFilter('notional')">Min $</button>
     <input type="number" id="minNotional" value="500000" step="100000" min="0">
   </div>
-  <div class="filter-group" id="fgPercentile">
-    <button class="flbl" onclick="toggleFilter('percentile')">Percentile</button>
+  <div class="filter-group on" id="fgPercentile">
+    <button class="flbl active" onclick="toggleFilter('percentile')">Percentile</button>
     <input type="number" id="minPercentile" value="85" step="5" min="0" max="99">
   </div>
+  <div class="hdr-sep"></div>
+  <select id="presetSelect" style="width:120px;" onchange="loadPreset()">
+    <option value="">Presets...</option>
+  </select>
+  <button class="ctrl-btn" style="width:auto;padding:5px 10px;font-size:11px;" onclick="savePreset()">Save</button>
+  <button class="ctrl-btn" style="width:auto;padding:5px 10px;font-size:11px;color:#ef4444;" onclick="deletePreset()">Del</button>
 </div>
 
 <div class="main">
@@ -155,15 +163,15 @@ var INDEX_CONFIG = {
         {ticker: 'SPY',  color: 'rgba(59,130,246,0.55)',  stroke: '#3b82f6', label: 'SPY',  on: true, isRef: true},
         {ticker: 'VOO',  color: 'rgba(234,179,8,0.55)',   stroke: '#eab308', label: 'VOO',  on: true},
         {ticker: 'IVV',  color: 'rgba(16,185,129,0.55)',  stroke: '#10b981', label: 'IVV',  on: true},
-        {ticker: 'SPLG', color: 'rgba(139,92,246,0.55)',  stroke: '#8b5cf6', label: 'SPLG', on: false},
+        {ticker: 'SPLG', color: 'rgba(139,92,246,0.55)',  stroke: '#8b5cf6', label: 'SPLG', on: true},
       ]},
       {name: 'Leveraged', on: true, tickers: [
         {ticker: 'UPRO', color: 'rgba(239,68,68,0.55)',   stroke: '#ef4444', label: 'UPRO', on: true},
-        {ticker: 'SPXL', color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'SPXL', on: false},
-        {ticker: 'SSO',  color: 'rgba(236,72,153,0.55)',  stroke: '#ec4899', label: 'SSO',  on: false},
-        {ticker: 'SH',   color: 'rgba(107,114,128,0.55)', stroke: '#6b7280', label: 'SH',   on: false},
-        {ticker: 'SPXS', color: 'rgba(156,163,175,0.55)', stroke: '#9ca3af', label: 'SPXS', on: false},
-        {ticker: 'SPXU', color: 'rgba(75,85,99,0.55)',    stroke: '#4b5563', label: 'SPXU', on: false},
+        {ticker: 'SPXL', color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'SPXL', on: true},
+        {ticker: 'SSO',  color: 'rgba(236,72,153,0.55)',  stroke: '#ec4899', label: 'SSO',  on: true},
+        {ticker: 'SH',   color: 'rgba(107,114,128,0.55)', stroke: '#6b7280', label: 'SH',   on: true},
+        {ticker: 'SPXS', color: 'rgba(156,163,175,0.55)', stroke: '#9ca3af', label: 'SPXS', on: true},
+        {ticker: 'SPXU', color: 'rgba(75,85,99,0.55)',    stroke: '#4b5563', label: 'SPXU', on: true},
       ]},
     ]
   },
@@ -176,10 +184,10 @@ var INDEX_CONFIG = {
       ]},
       {name: 'Leveraged', on: true, tickers: [
         {ticker: 'TQQQ', color: 'rgba(239,68,68,0.55)',   stroke: '#ef4444', label: 'TQQQ', on: true},
-        {ticker: 'QLD',  color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'QLD',  on: false},
-        {ticker: 'SQQQ', color: 'rgba(107,114,128,0.55)', stroke: '#6b7280', label: 'SQQQ', on: false},
-        {ticker: 'PSQ',  color: 'rgba(156,163,175,0.55)', stroke: '#9ca3af', label: 'PSQ',  on: false},
-        {ticker: 'QID',  color: 'rgba(75,85,99,0.55)',    stroke: '#4b5563', label: 'QID',  on: false},
+        {ticker: 'QLD',  color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'QLD',  on: true},
+        {ticker: 'SQQQ', color: 'rgba(107,114,128,0.55)', stroke: '#6b7280', label: 'SQQQ', on: true},
+        {ticker: 'PSQ',  color: 'rgba(156,163,175,0.55)', stroke: '#9ca3af', label: 'PSQ',  on: true},
+        {ticker: 'QID',  color: 'rgba(75,85,99,0.55)',    stroke: '#4b5563', label: 'QID',  on: true},
       ]},
     ]
   },
@@ -192,10 +200,10 @@ var INDEX_CONFIG = {
       ]},
       {name: 'Leveraged', on: true, tickers: [
         {ticker: 'TNA',  color: 'rgba(239,68,68,0.55)',   stroke: '#ef4444', label: 'TNA',  on: true},
-        {ticker: 'UWM',  color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'UWM',  on: false},
-        {ticker: 'TZA',  color: 'rgba(107,114,128,0.55)', stroke: '#6b7280', label: 'TZA',  on: false},
-        {ticker: 'RWM',  color: 'rgba(156,163,175,0.55)', stroke: '#9ca3af', label: 'RWM',  on: false},
-        {ticker: 'SRTY', color: 'rgba(75,85,99,0.55)',    stroke: '#4b5563', label: 'SRTY', on: false},
+        {ticker: 'UWM',  color: 'rgba(249,115,22,0.55)',  stroke: '#f97316', label: 'UWM',  on: true},
+        {ticker: 'TZA',  color: 'rgba(107,114,128,0.55)', stroke: '#6b7280', label: 'TZA',  on: true},
+        {ticker: 'RWM',  color: 'rgba(156,163,175,0.55)', stroke: '#9ca3af', label: 'RWM',  on: true},
+        {ticker: 'SRTY', color: 'rgba(75,85,99,0.55)',    stroke: '#4b5563', label: 'SRTY', on: true},
       ]},
     ]
   }
@@ -723,6 +731,146 @@ function fmt$(v){
   if(v >= 1e3) return (v/1e3).toFixed(0) + 'K';
   return v.toFixed(0);
 }
+
+// ====================================================================
+// PRESETS (localStorage)
+// ====================================================================
+var PRESET_KEY = '0dte_presets';
+
+function _getPresets(){
+  try { return JSON.parse(localStorage.getItem(PRESET_KEY)) || {}; } catch(e){ return {}; }
+}
+
+function _populatePresetSelect(){
+  var sel = document.getElementById('presetSelect');
+  var presets = _getPresets();
+  sel.innerHTML = '<option value="">Presets...</option>';
+  Object.keys(presets).sort().forEach(function(name){
+    var opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  });
+}
+
+function savePreset(){
+  var name = prompt('Preset name:');
+  if(!name || !name.trim()) return;
+  name = name.trim();
+  // Capture current state
+  var cfg = {
+    index: _activeIndex,
+    interval: _candleInterval,
+    notionalOn: document.getElementById('fgNotional').classList.contains('on'),
+    percentileOn: document.getElementById('fgPercentile').classList.contains('on'),
+    minNotional: parseFloat(document.getElementById('minNotional').value) || 500000,
+    minPercentile: parseInt(document.getElementById('minPercentile').value) || 85,
+    tickers: {}
+  };
+  // Save per-index ticker on/off state
+  Object.keys(INDEX_CONFIG).forEach(function(idx){
+    cfg.tickers[idx] = {};
+    INDEX_CONFIG[idx].groups.forEach(function(g){
+      g.tickers.forEach(function(t){
+        cfg.tickers[idx][t.ticker] = t.on;
+      });
+    });
+  });
+  var presets = _getPresets();
+  presets[name] = cfg;
+  localStorage.setItem(PRESET_KEY, JSON.stringify(presets));
+  _populatePresetSelect();
+  document.getElementById('presetSelect').value = name;
+}
+
+function loadPreset(){
+  var sel = document.getElementById('presetSelect');
+  var name = sel.value;
+  if(!name) return;
+  var presets = _getPresets();
+  var cfg = presets[name];
+  if(!cfg) return;
+
+  // Restore filter toggles
+  var fgN = document.getElementById('fgNotional');
+  var fgP = document.getElementById('fgPercentile');
+  fgN.classList.toggle('on', !!cfg.notionalOn);
+  fgN.querySelector('.flbl').classList.toggle('active', !!cfg.notionalOn);
+  fgP.classList.toggle('on', !!cfg.percentileOn);
+  fgP.querySelector('.flbl').classList.toggle('active', !!cfg.percentileOn);
+  document.getElementById('minNotional').value = cfg.minNotional || 500000;
+  document.getElementById('minPercentile').value = cfg.minPercentile || 85;
+
+  // Restore candle interval
+  if(cfg.interval && cfg.interval !== _candleInterval){
+    _candleInterval = cfg.interval;
+    var btns = document.getElementById('candleIntervalCtrl').querySelectorAll('button');
+    btns.forEach(function(b){ b.classList.remove('active'); });
+    btns.forEach(function(b){
+      var mins = {'1m':1,'5m':5,'1h':60,'1D':1440}[b.textContent];
+      if(mins === _candleInterval) b.classList.add('active');
+    });
+  }
+
+  // Restore per-index ticker states
+  if(cfg.tickers){
+    Object.keys(INDEX_CONFIG).forEach(function(idx){
+      if(!cfg.tickers[idx]) return;
+      INDEX_CONFIG[idx].groups.forEach(function(g){
+        var allOn = true;
+        g.tickers.forEach(function(t){
+          if(cfg.tickers[idx].hasOwnProperty(t.ticker)){
+            t.on = cfg.tickers[idx][t.ticker];
+          }
+          if(!t.on) allOn = false;
+        });
+        g.on = allOn;
+      });
+    });
+  }
+
+  // Switch index if different
+  if(cfg.index && cfg.index !== _activeIndex){
+    var idxBtn = document.querySelector('#indexTabs .idx-tab[onclick*="'+cfg.index+'"]');
+    if(idxBtn) setIndex(cfg.index, idxBtn);
+    else { _activeIndex = cfg.index; loadAll(); }
+  } else {
+    // Just rebuild left panel + reload
+    var list = document.getElementById('tickerList');
+    list.innerHTML = '';
+    TICKER_GROUPS.forEach(function(g, gi){
+      var hdr = document.createElement('div');
+      hdr.className = 'ticker-group-hdr';
+      hdr.innerHTML = '<input type="checkbox" '+(g.on?'checked':'')+' onchange="onGroupToggle('+gi+',this)">'
+        + '<span>'+g.name+'</span>';
+      list.appendChild(hdr);
+      g.tickers.forEach(function(t){
+        var row = document.createElement('div');
+        row.className = 'ticker-row';
+        row.setAttribute('data-group', gi);
+        row.innerHTML = '<input type="checkbox" class="ticker-check" data-ticker="'+t.ticker+'" '+(t.on?'checked':'')+' onchange="onTickerToggle(this)">'
+          + '<div class="ticker-dot" style="background:'+t.stroke+';"></div>'
+          + '<span class="ticker-label">'+t.label+'</span>';
+        list.appendChild(row);
+      });
+    });
+    applyClientFilter();
+  }
+}
+
+function deletePreset(){
+  var sel = document.getElementById('presetSelect');
+  var name = sel.value;
+  if(!name){ alert('Select a preset first'); return; }
+  if(!confirm('Delete preset "'+name+'"?')) return;
+  var presets = _getPresets();
+  delete presets[name];
+  localStorage.setItem(PRESET_KEY, JSON.stringify(presets));
+  _populatePresetSelect();
+}
+
+// Init presets dropdown on load
+_populatePresetSelect();
 </script>
 </body>
 </html>
