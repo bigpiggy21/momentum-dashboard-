@@ -12,16 +12,14 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 /* Header */
 .header{background:#0c0c14;padding:8px 12px;border-bottom:1px solid #1e1e2e;display:flex;align-items:center;gap:8px;height:48px;z-index:10;}
 .header-title{font-size:17px;font-weight:700;color:#f59e0b;white-space:nowrap;padding-left:8px;}
-.header input[type="text"]{background:#14141e;border:1px solid #2a2a3a;color:#e0e0e8;padding:5px 10px;border-radius:4px;font-size:13px;font-family:inherit;width:100px;font-weight:600;}
+.header input[type="text"]{background:#14141e;border:1px solid #2a2a3a;color:#e0e0e8;padding:5px 10px;border-radius:4px;font-size:13px;font-family:inherit;width:100px;font-weight:600;height:32px;}
 .header input[type="text"]:focus{border-color:#f59e0b;outline:none;}
-.header select,.header input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:5px 8px;border-radius:4px;font-size:12px;font-family:inherit;}
-.header select{width:52px;}
-.header input[type="number"]{width:62px;}
+.header select{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:5px 8px;border-radius:4px;font-size:12px;font-family:inherit;height:32px;}
 /* Divider */
 .hdr-sep{width:1px;height:24px;background:#334155;flex-shrink:0;}
 /* Layer toggle buttons */
 .layer-ctrl{display:inline-flex;border:1px solid #334155;border-radius:4px;overflow:hidden;}
-.layer-btn{background:#1e293b;color:#888;border:none;padding:5px 8px;cursor:pointer;font-size:10px;font-family:inherit;border-right:1px solid #334155;font-weight:700;letter-spacing:0.3px;white-space:nowrap;}
+.layer-btn{background:#1e293b;color:#888;border:none;padding:5px 10px;cursor:pointer;font-size:11px;font-family:inherit;border-right:1px solid #334155;font-weight:700;letter-spacing:0.3px;white-space:nowrap;height:32px;}
 .layer-btn:last-child{border-right:none;}
 .layer-btn:hover{color:#ccc;}
 .layer-btn.active.lyr-daily{background:#f59e0b22;color:#f59e0b;}
@@ -29,13 +27,19 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .layer-btn.active.lyr-rare{background:#a78bfa22;color:#c4b5fd;}
 .layer-btn.active.lyr-cb{background:#eab30822;color:#eab308;}
 .layer-btn.active.lyr-monster{background:#f9731622;color:#f97316;}
-.layer-btn.active.lyr-sweeps{background:#10b98122;color:#10b981;}
+.layer-btn.active.lyr-sweeps{background:#3b82f622;color:#3b82f6;}
+/* Sweep filter mode toggle ($ vs Pctl) */
+.sweep-filter{display:flex;align-items:center;gap:4px;}
+.sweep-mode-btn{background:#1e293b;color:#555;border:1px solid #334155;padding:5px 10px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:700;height:32px;border-radius:4px 0 0 4px;}
+.sweep-mode-btn:last-of-type{border-radius:0 4px 4px 0;border-left:none;}
+.sweep-mode-btn.active{background:#3b82f622;color:#3b82f6;border-color:#3b82f666;}
+.sweep-filter input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#e0e0e8;padding:5px 10px;border-radius:4px;font-size:13px;font-family:inherit;width:100px;height:32px;text-align:center;font-weight:600;}
+.sweep-filter input[type="number"]:focus{border-color:#3b82f6;outline:none;}
 /* Layer config inputs */
-.lyr-cfg{display:flex;align-items:center;gap:3px;font-size:10px;color:#555;}
-.lyr-cfg input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:3px;font-size:10px;font-family:inherit;width:38px;text-align:center;}
+.lyr-cfg{display:flex;align-items:center;gap:3px;font-size:11px;color:#555;}
+.lyr-cfg input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#e0e0e8;padding:5px 8px;border-radius:4px;font-size:13px;font-family:inherit;width:48px;text-align:center;height:32px;font-weight:600;}
+.lyr-cfg input[type="number"]:focus{border-color:#f59e0b;outline:none;}
 .lyr-cfg .cfg-label{font-weight:600;}
-.lyr-cfg .cfg-wide{width:64px;}
-.lyr-cfg .cfg-pct{width:42px;}
 
 /* Layout */
 .main{display:flex;height:calc(100vh - 48px);}
@@ -94,7 +98,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 
 /* Segmented control */
 .seg-ctrl{display:inline-flex;border:1px solid #334155;border-radius:4px;overflow:hidden;}
-.seg-ctrl button{background:#1e293b;color:#888;border:none;padding:5px 10px;cursor:pointer;font-size:11px;font-family:inherit;border-right:1px solid #334155;font-weight:600;}
+.seg-ctrl button{background:#1e293b;color:#888;border:none;padding:5px 10px;cursor:pointer;font-size:11px;font-family:inherit;border-right:1px solid #334155;font-weight:600;height:32px;}
 .seg-ctrl button:last-child{border-right:none;}
 .seg-ctrl button:hover{color:#ccc;}
 .seg-ctrl button.active{background:#f59e0b22;color:#f59e0b;}
@@ -120,30 +124,31 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
   <input type="text" id="tickerInput" placeholder="Ticker..." spellcheck="false">
   <div class="hdr-sep"></div>
   <div class="seg-ctrl" id="candleIntervalCtrl">
-    <button class="active" onclick="setCandleInterval(1,this)">1m</button>
+    <button onclick="setCandleInterval(1,this)">1m</button>
     <button onclick="setCandleInterval(5,this)">5m</button>
     <button onclick="setCandleInterval(60,this)">1h</button>
     <button onclick="setCandleInterval(240,this)">4h</button>
-    <button onclick="setCandleInterval(1440,this)">1D</button>
+    <button class="active" onclick="setCandleInterval(1440,this)">1D</button>
     <button onclick="setCandleInterval(2880,this)">2D</button>
     <button onclick="setCandleInterval(10080,this)">W</button>
     <button onclick="setCandleInterval(43200,this)">M</button>
     <button onclick="setCandleInterval(129600,this)">3M</button>
   </div>
   <div class="hdr-sep"></div>
-  <button class="layer-btn lyr-sweeps active" onclick="toggleLayer('sweeps',this)" style="border-radius:4px;border:1px solid #334155;">Sweeps</button>
-  <div class="lyr-cfg">
-    <span class="cfg-label" style="color:#10b981;">$</span><input type="number" class="cfg-wide" id="cfgMinNotional" value="500000" step="100000" min="0" onchange="onLayerCfgChange()">
-    <span class="cfg-label" style="color:#10b981;">Percentile</span><input type="number" class="cfg-pct" id="cfgPercentile" value="85" step="5" min="0" max="99" onchange="onLayerCfgChange()">
-  </div>
-  <div class="hdr-sep"></div>
   <div class="layer-ctrl" id="layerCtrl">
+    <button class="layer-btn lyr-sweeps active" onclick="toggleLayer('sweeps',this)">Sweeps</button>
     <button class="layer-btn lyr-daily active" onclick="toggleLayer('daily',this)">Daily</button>
     <button class="layer-btn lyr-single active" onclick="toggleLayer('single',this)">Single</button>
     <button class="layer-btn lyr-rare active" onclick="toggleLayer('rare',this)">Rare</button>
     <button class="layer-btn lyr-cb" onclick="toggleLayer('cb',this)">CB</button>
     <button class="layer-btn lyr-monster" onclick="toggleLayer('monster',this)">Monster</button>
   </div>
+  <div class="hdr-sep"></div>
+  <div class="sweep-filter">
+    <button class="sweep-mode-btn active" id="modeNotional" onclick="setSweepFilterMode('notional')">$</button><button class="sweep-mode-btn" id="modePctl" onclick="setSweepFilterMode('percentile')">Pctl</button>
+    <input type="number" id="cfgSweepValue" value="500000" step="100000" min="0" onchange="onLayerCfgChange()" title="Min notional ($)">
+  </div>
+  <div class="hdr-sep"></div>
   <div class="lyr-cfg">
     <span class="cfg-label" style="color:#f59e0b;">D</span><input type="number" id="cfgDailyFrom" value="1" min="1" onchange="onLayerCfgChange()">–<input type="number" id="cfgDailyTo" value="20" min="1" onchange="onLayerCfgChange()">
     <span class="cfg-label" style="color:#3b82f6;margin-left:3px;">S</span><input type="number" id="cfgSingleFrom" value="1" min="1" onchange="onLayerCfgChange()">–<input type="number" id="cfgSingleTo" value="10" min="1" onchange="onLayerCfgChange()">
@@ -387,7 +392,8 @@ var _activeWatchlist = 'Priority';// current watchlist key
 var _overlayGroups = [];         // [{name, on, tickers}] for current active ticker
 var _overlayTickers = [];        // flat array of overlay ticker objects
 
-var _candleInterval = 1;
+var _candleInterval = 1440;
+var _sweepFilterMode = 'notional';   // 'notional' | 'percentile'
 // Days of candle data per interval (for Polygon API)
 var INTERVAL_DAYS = {1:5, 5:30, 60:120, 240:365, 1440:730, 2880:730, 10080:1460, 43200:2520, 129600:3780};
 // Days of sweep data per interval (separate, much tighter to avoid loading millions of trades)
@@ -407,6 +413,7 @@ var _ctx = null;
 var _candles = [];
 var _initialLoad = true;
 var _loading = false;
+var _fetchController = null;   // AbortController — cancels in-flight fetches on ticker change
 var _sweepTimer = null;
 var _candleTimer = null;
 var _tickerPrices = {};  // {ticker: {price, change, changePct}}
@@ -677,6 +684,9 @@ function getDate(){
 function getDays(){ return INTERVAL_DAYS[_candleInterval] || 10; }
 
 function loadAll(resetView){
+  // Abort any in-flight fetches so stale responses don't overwrite current ticker
+  if(_fetchController) _fetchController.abort();
+  _fetchController = new AbortController();
   if(resetView) _initialLoad = true;
   fetchCandles();
   fetchSweepChart();
@@ -685,8 +695,9 @@ function loadAll(resetView){
 function fetchCandles(){
   var date = getDate();
   var days = getDays();
+  var signal = _fetchController ? _fetchController.signal : undefined;
   _setLoading(true);
-  fetch('/api/0dte/candles?ticker='+_activeTicker+'&date='+date+'&days='+days+'&interval='+_candleInterval)
+  fetch('/api/0dte/candles?ticker='+_activeTicker+'&date='+date+'&days='+days+'&interval='+_candleInterval, {signal: signal})
     .then(function(r){return r.json();})
     .then(function(d){
       var newCandles = d.candles || [];
@@ -720,7 +731,7 @@ function fetchCandles(){
       drawBubbles();
       _setLoading(false);
     })
-    .catch(function(e){ console.error('Candle fetch error:', e); _setLoading(false); });
+    .catch(function(e){ if(e.name === 'AbortError') return; console.error('Candle fetch error:', e); _setLoading(false); });
 }
 
 function fetchSweepChart(){
@@ -737,13 +748,14 @@ function fetchSweepChart(){
     if(t.on && t.ticker !== _activeTicker) tickers.push(t.ticker);
   });
 
-  // Fetch all tickers in parallel
+  // Fetch all tickers in parallel (with abort signal)
+  var signal = _fetchController ? _fetchController.signal : undefined;
   var promises = tickers.map(function(ticker){
     var url = '/api/sweeps/chart?ticker='+ticker
       +'&date_from='+dateFrom+'&date_to='+dateTo
       +'&daily_from='+_layerCfg.dailyFrom+'&daily_to='+_layerCfg.dailyTo
       +'&rank_from='+_layerCfg.singleFrom+'&rank_to='+_layerCfg.singleTo;
-    return fetch(url).then(function(r){ return r.json(); }).then(function(d){
+    return fetch(url, {signal: signal}).then(function(r){ return r.json(); }).then(function(d){
       return {ticker: ticker, sweeps: d.sweeps || [], events: d.clusterbombs || []};
     });
   });
@@ -761,7 +773,7 @@ function fetchSweepChart(){
       updateStats();
       updateFeed();
     })
-    .catch(function(e){ console.error('Sweep chart fetch error:', e); });
+    .catch(function(e){ if(e.name === 'AbortError') return; console.error('Sweep chart fetch error:', e); });
 }
 
 function _setLoading(on){
@@ -857,7 +869,7 @@ function drawBubbles(){
     };
   }
 
-  // ---- LAYER: Sweeps (green, percentile-sized individual trades) ----
+  // ---- LAYER: Sweeps (blue, sized by notional percentile within visible set) ----
   if(_activeLayers.sweeps && _chartSweeps.length > 0){
     var sortedN = _chartSweeps.map(function(s){ return s.notional; }).sort(function(a,b){ return a - b; });
     var totalS = sortedN.length;
@@ -868,9 +880,13 @@ function drawBubbles(){
     }
 
     _chartSweeps.forEach(function(s){
-      if(s.notional < _layerCfg.minNotional) return;
       var pct = computePct(s.notional);
-      if(pct < _layerCfg.percentile) return;
+      // Filter: $ mode OR percentile mode (mutually exclusive)
+      if(_sweepFilterMode === 'notional'){
+        if(s.notional < _layerCfg.minNotional) return;
+      } else {
+        if(pct < _layerCfg.percentile) return;
+      }
 
       var timeUnix;
       if(s.time && s.time.length >= 5){
@@ -887,7 +903,7 @@ function drawBubbles(){
       var p = pct / 100;
       var radius = _bubbleRadius(p);
       var alpha = _bubbleAlpha(p);
-      drawCircle(pos.x, pos.y, radius, 'rgba(16,185,129,' + alpha.toFixed(2) + ')', '#10b981', 1);
+      drawCircle(pos.x, pos.y, radius, 'rgba(59,130,246,' + alpha.toFixed(2) + ')', '#3b82f6', 1);
     });
   }
 
@@ -1067,9 +1083,8 @@ function onTickerToggle(el){
   var ticker = el.getAttribute('data-ticker');
   _overlayTickers.forEach(function(t){ if(t.ticker === ticker) t.on = el.checked; });
   syncGroupCheckboxes();
-  drawBubbles();
-  updateStats();
-  updateFeed();
+  // Re-fetch sweep data — the enabled ticker set changed
+  fetchSweepChart();
 }
 
 function onGroupToggle(gi, el){
@@ -1078,9 +1093,8 @@ function onGroupToggle(gi, el){
   g.tickers.forEach(function(t){ t.on = el.checked; });
   var rows = document.querySelectorAll('[data-group="'+gi+'"] .ticker-check');
   rows.forEach(function(cb){ cb.checked = el.checked; });
-  drawBubbles();
-  updateStats();
-  updateFeed();
+  // Re-fetch sweep data — the enabled ticker set changed
+  fetchSweepChart();
 }
 
 function syncGroupCheckboxes(){
@@ -1131,14 +1145,42 @@ function toggleLayer(layer, btn){
   updateStats();
 }
 
+function setSweepFilterMode(mode){
+  _sweepFilterMode = mode;
+  document.getElementById('modeNotional').classList.toggle('active', mode === 'notional');
+  document.getElementById('modePctl').classList.toggle('active', mode === 'percentile');
+  var inp = document.getElementById('cfgSweepValue');
+  if(mode === 'notional'){
+    inp.value = _layerCfg.minNotional || 500000;
+    inp.step = '100000';
+    inp.min = '0';
+    inp.max = '';
+    inp.title = 'Min notional ($)';
+    inp.placeholder = '500000';
+  } else {
+    inp.value = _layerCfg.percentile || 85;
+    inp.step = '5';
+    inp.min = '0';
+    inp.max = '99';
+    inp.title = 'Min percentile (0-99)';
+    inp.placeholder = '85';
+  }
+  drawBubbles();
+  updateStats();
+  updateFeed();
+}
+
 function onLayerCfgChange(){
-  _layerCfg.minNotional = parseFloat(document.getElementById('cfgMinNotional').value) || 0;
-  _layerCfg.percentile = parseInt(document.getElementById('cfgPercentile').value) || 0;
+  var val = parseFloat(document.getElementById('cfgSweepValue').value) || 0;
+  if(_sweepFilterMode === 'notional'){
+    _layerCfg.minNotional = val;
+  } else {
+    _layerCfg.percentile = Math.min(99, Math.max(0, Math.floor(val)));
+  }
   _layerCfg.dailyFrom = parseInt(document.getElementById('cfgDailyFrom').value) || 1;
   _layerCfg.dailyTo = parseInt(document.getElementById('cfgDailyTo').value) || 20;
   _layerCfg.singleFrom = parseInt(document.getElementById('cfgSingleFrom').value) || 1;
   _layerCfg.singleTo = parseInt(document.getElementById('cfgSingleTo').value) || 10;
-  // Sweeps layer uses client-side filtering — just redraw
   drawBubbles();
   updateStats();
   updateFeed();
@@ -1215,7 +1257,7 @@ function fmt$(v){
 // ====================================================================
 // PRESETS (localStorage)
 // ====================================================================
-var PRESET_KEY = '0dte_presets_v3';
+var PRESET_KEY = '0dte_presets_v4';
 
 function _getPresets(){
   try { return JSON.parse(localStorage.getItem(PRESET_KEY)) || {}; } catch(e){ return {}; }
@@ -1244,6 +1286,7 @@ function savePreset(){
     interval: _candleInterval,
     layers: JSON.parse(JSON.stringify(_activeLayers)),
     layerCfg: JSON.parse(JSON.stringify(_layerCfg)),
+    sweepFilterMode: _sweepFilterMode,
     tickers: {}
   };
   // Save overlay ticker on/off state
@@ -1277,8 +1320,9 @@ function loadPreset(){
   }
   if(cfg.layerCfg){
     _layerCfg = cfg.layerCfg;
-    document.getElementById('cfgMinNotional').value = _layerCfg.minNotional || 500000;
-    document.getElementById('cfgPercentile').value = _layerCfg.percentile || 85;
+    // Restore sweep filter mode
+    if(cfg.sweepFilterMode) _sweepFilterMode = cfg.sweepFilterMode;
+    setSweepFilterMode(_sweepFilterMode);
     document.getElementById('cfgDailyFrom').value = _layerCfg.dailyFrom || 1;
     document.getElementById('cfgDailyTo').value = _layerCfg.dailyTo || 20;
     document.getElementById('cfgSingleFrom').value = _layerCfg.singleFrom || 1;
