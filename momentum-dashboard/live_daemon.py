@@ -74,8 +74,8 @@ DEFAULT_BUFFER_FLUSH_SECONDS = 30
 DEFAULT_BUFFER_MAX_TRADES = 200
 
 # Reconnection backoff
-RECONNECT_MIN_WAIT = 5
-RECONNECT_MAX_WAIT = 120
+RECONNECT_MIN_WAIT = 2
+RECONNECT_MAX_WAIT = 60
 
 
 # ---------------------------------------------------------------------------
@@ -1736,7 +1736,7 @@ class UnifiedLiveDaemon:
     def _heartbeat_loop(self):
         """Print status every 30 minutes + stale-connection watchdog every 60s."""
         WATCHDOG_INTERVAL = 60       # check liveness every 60 seconds
-        STALE_THRESHOLD = 90         # force reconnect if no trades in 90 seconds
+        STALE_THRESHOLD = 600        # force reconnect if no trades in 10 minutes
         HEARTBEAT_INTERVAL = 1800    # print summary every 30 minutes
         last_heartbeat = time.time()
 
