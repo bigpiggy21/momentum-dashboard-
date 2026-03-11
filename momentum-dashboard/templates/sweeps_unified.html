@@ -520,6 +520,12 @@ td .cb-flag,td .monster-flag{font-size:8px;padding:0px 3px;margin-left:2px;}
         <input type="number" class="filter-input" id="trackerRareDays" value="20" min="5" max="365" title="Rare min dormancy days" oninput="debouncedTrackerRefresh()" style="width:36px;border-color:#a78bfa44;color:#a78bfa;">
       </div>
     </div>
+    <div class="filter-col" data-type="cb">
+      <button class="tracker-filter-btn flt-cb" id="filterCb" onclick="setTrackerTypeFilter('cb',this)" style="color:#eab308;border-color:#eab30844;">CB</button>
+    </div>
+    <div class="filter-col" data-type="monster">
+      <button class="tracker-filter-btn flt-monster" id="filterMonster" onclick="setTrackerTypeFilter('monster',this)" style="color:#f97316;border-color:#f9731644;">Monster</button>
+    </div>
     <div style="display:flex;align-items:center;gap:2px;align-self:center;flex-shrink:0;margin-left:auto;">
       <select class="profile-select" id="profileSelect" onchange="applyFilterProfile(this.value)" title="Filter profiles" style="max-width:62px;padding:2px 2px;">
         <option value="Default">Default</option>
@@ -1223,7 +1229,7 @@ function switchTrackerTab(tab, btn){
 
 // Cache all tracker events so favourites can look up enriched data
 var _allTrackerEvents = [];
-var _activeLayers = {daily: true, single: true, rare: true}; // multi-select toggles
+var _activeLayers = {daily: true, single: true, rare: true, cb: false, monster: false}; // multi-select toggles
 var _trackerOffset = 0;
 var _trackerTotal = 0;
 var _trackerPageSize = 200;
@@ -1231,23 +1237,25 @@ var _trackerPageSize = 200;
 function setTrackerTypeFilter(filter, btn){
   if(filter === 'all'){
     // "All" resets — enable all layers
-    _activeLayers = {daily: true, single: true, rare: true};
+    _activeLayers = {daily: true, single: true, rare: true, cb: false, monster: false};
   } else {
     // Map filter name to layer key
     var layerKey = filter === 'rare_sweep' ? 'rare' : filter;
     // Toggle this layer
     _activeLayers[layerKey] = !_activeLayers[layerKey];
     // If all are off, reset to all on
-    if(!_activeLayers.daily && !_activeLayers.single && !_activeLayers.rare){
-      _activeLayers = {daily: true, single: true, rare: true};
+    if(!_activeLayers.daily && !_activeLayers.single && !_activeLayers.rare && !_activeLayers.cb && !_activeLayers.monster){
+      _activeLayers = {daily: true, single: true, rare: true, cb: false, monster: false};
     }
   }
   // Update button active states — multi-select
-  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare;
+  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare && !_activeLayers.cb && !_activeLayers.monster;
   document.getElementById('filterAll').classList.toggle('active', allOn);
   document.getElementById('filterDaily').classList.toggle('active', _activeLayers.daily);
   document.getElementById('filterSingle').classList.toggle('active', _activeLayers.single);
   document.getElementById('filterRare').classList.toggle('active', _activeLayers.rare);
+  document.getElementById('filterCb').classList.toggle('active', _activeLayers.cb);
+  document.getElementById('filterMonster').classList.toggle('active', _activeLayers.monster);
   // Dim filter columns for inactive layers
   _syncFilterGroupDim();
   // Re-render from cached events (no API call)
@@ -1260,7 +1268,7 @@ function setTrackerTypeFilter(filter, btn){
 }
 
 function _syncFilterGroupDim(){
-  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare;
+  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare && !_activeLayers.cb && !_activeLayers.monster;
   document.querySelectorAll('.filter-col[data-type]').forEach(function(col){
     var dt = col.getAttribute('data-type');
     var layerKey = dt === 'rare_sweep' ? 'rare' : dt;
@@ -1348,7 +1356,7 @@ function deleteProfile(name){
 }
 
 function filterByType(events){
-  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare;
+  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare && !_activeLayers.cb && !_activeLayers.monster;
   if(allOn) return events;
   var df = parseInt(document.getElementById('trackerDailyFrom').value) || 1;
   var dt = parseInt(document.getElementById('trackerDailyTo').value) || 20;
@@ -1358,6 +1366,8 @@ function filterByType(events){
     if(_activeLayers.daily && ev.daily_rank != null && ev.daily_rank >= df && ev.daily_rank <= dt) return true;
     if(_activeLayers.single && ev.sweep_rank != null && ev.sweep_rank >= rf && ev.sweep_rank <= rt) return true;
     if(_activeLayers.rare && ev.is_rare == 1) return true;
+    if(_activeLayers.cb && (ev.event_type === 'clusterbomb' || ev.event_type === 'rare_sweep')) return true;
+    if(_activeLayers.monster && (ev.is_monster == 1 || ev.event_type === 'monster_sweep')) return true;
     return false;
   });
 }
@@ -1552,21 +1562,23 @@ function selectTrackerTicker(ticker){
   loadDetailTable();
 }
 
-var _layerCycle = ['daily','single','rare','all'];
-var _layerCycleIdx = 3; // start at 'all'
+var _layerCycle = ['daily','single','rare','cb','monster','all'];
+var _layerCycleIdx = 5; // start at 'all'
 function cycleLayerFilter(){
   _layerCycleIdx = (_layerCycleIdx + 1) % _layerCycle.length;
   var target = _layerCycle[_layerCycleIdx];
   if(target === 'all'){
-    _activeLayers = {daily: true, single: true, rare: true};
+    _activeLayers = {daily: true, single: true, rare: true, cb: false, monster: false};
   } else {
-    _activeLayers = {daily: target === 'daily', single: target === 'single', rare: target === 'rare'};
+    _activeLayers = {daily: target === 'daily', single: target === 'single', rare: target === 'rare', cb: target === 'cb', monster: target === 'monster'};
   }
-  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare;
+  var allOn = _activeLayers.daily && _activeLayers.single && _activeLayers.rare && !_activeLayers.cb && !_activeLayers.monster;
   document.getElementById('filterAll').classList.toggle('active', allOn);
   document.getElementById('filterDaily').classList.toggle('active', _activeLayers.daily);
   document.getElementById('filterSingle').classList.toggle('active', _activeLayers.single);
   document.getElementById('filterRare').classList.toggle('active', _activeLayers.rare);
+  document.getElementById('filterCb').classList.toggle('active', _activeLayers.cb);
+  document.getElementById('filterMonster').classList.toggle('active', _activeLayers.monster);
   _syncFilterGroupDim();
   var filtered = filterByType(_allTrackerEvents);
   document.getElementById('stocksCount').textContent = filtered.length + (_trackerTotal > _trackerOffset ? '+' : '');
@@ -1756,7 +1768,7 @@ function renderChart(ticker, chartData, containerId){
     chartInstance.remove();
     chartInstance = null;
   }
-  _layerSeries = {daily: {dot: null, text: null}, single: {dot: null, text: null}, rare: {dot: null, text: null}};
+  _layerSeries = {daily: {dot: null, text: null}, single: {dot: null, text: null}, rare: {dot: null, text: null}, cb: {dot: null, text: null, border: null}, monster: {dot: null, text: null, border: null}};
   container.innerHTML = '';
   // Re-inject cumulative legend overlay (cleared by innerHTML='')
   var _cumLegDiv = document.createElement('div');
@@ -2013,6 +2025,11 @@ function renderChart(ticker, chartData, containerId){
                           dotData: [], dotMarkers: [], textData: [], textMarkers: []};
   _layerSeries.rare = {dot: _addInvisibleSeries(), text: _addInvisibleSeries(),
                         dotData: [], dotMarkers: [], textData: [], textMarkers: []};
+  // CB layer (yellow + red border) and Monster layer (orange + red border)
+  _layerSeries.cb = {border: _addInvisibleSeries(), dot: _addInvisibleSeries(), text: _addInvisibleSeries(),
+                      borderData: [], borderMarkers: [], dotData: [], dotMarkers: [], textData: [], textMarkers: []};
+  _layerSeries.monster = {border: _addInvisibleSeries(), dot: _addInvisibleSeries(), text: _addInvisibleSeries(),
+                           borderData: [], borderMarkers: [], dotData: [], dotMarkers: [], textData: [], textMarkers: []};
 
   // Read rank ranges from filter inputs — bubbles only show within these ranges
   var _chartDailyFrom = parseInt(document.getElementById('trackerDailyFrom').value) || 1;
@@ -2122,6 +2139,55 @@ function renderChart(ticker, chartData, containerId){
         shape: 'circle', text: dailyLabel + '  [R]', size: 0,
       });
     }
+
+    // --- CB layer (yellow + red border) — clusterbombs and rare sweeps ---
+    var isCBEvent = cb.event_type === 'clusterbomb' || cb.event_type === 'rare_sweep';
+    if(isCBEvent){
+      // Red border ring (slightly larger)
+      _layerSeries.cb.borderData.push({time: timeVal, value: markerPrice});
+      _layerSeries.cb.borderMarkers.push({
+        time: timeVal, position: 'inBar', color: 'rgba(220, 38, 38, 0.9)',
+        shape: 'circle', text: '', size: 10,
+      });
+      // Yellow fill dot
+      _layerSeries.cb.dotData.push({time: timeVal, value: markerPrice});
+      _layerSeries.cb.dotMarkers.push({
+        time: timeVal, position: 'inBar', color: 'rgba(234, 179, 8, 0.85)',
+        shape: 'circle', text: '', size: 8,
+      });
+      // Text label
+      var cbLabel = dailyLabel + '  CB';
+      if(cb.sweep_count) cbLabel += ' (' + cb.sweep_count + ')';
+      _layerSeries.cb.textData.push({time: timeVal, value: textAnchor});
+      _layerSeries.cb.textMarkers.push({
+        time: timeVal, position: 'belowBar', color: '#eab308',
+        shape: 'circle', text: cbLabel, size: 0,
+      });
+    }
+
+    // --- MONSTER layer (orange + red border) ---
+    var isMonsterEvent = cb.is_monster == 1 || cb.event_type === 'monster_sweep';
+    if(isMonsterEvent){
+      // Red border ring (slightly larger)
+      _layerSeries.monster.borderData.push({time: timeVal, value: markerPrice});
+      _layerSeries.monster.borderMarkers.push({
+        time: timeVal, position: 'inBar', color: 'rgba(220, 38, 38, 0.9)',
+        shape: 'circle', text: '', size: 11,
+      });
+      // Orange fill dot
+      _layerSeries.monster.dotData.push({time: timeVal, value: markerPrice});
+      _layerSeries.monster.dotMarkers.push({
+        time: timeVal, position: 'inBar', color: 'rgba(249, 115, 22, 0.85)',
+        shape: 'circle', text: '', size: 9,
+      });
+      // Text label
+      var mLabel = (cb.max_notional ? fmt$(cb.max_notional) : dailyLabel) + '  [M]';
+      _layerSeries.monster.textData.push({time: timeVal, value: textAnchor});
+      _layerSeries.monster.textMarkers.push({
+        time: timeVal, position: 'belowBar', color: '#f97316',
+        shape: 'circle', text: mLabel, size: 0,
+      });
+    }
   });
 
   // Sort and apply each layer
@@ -2133,7 +2199,15 @@ function renderChart(ticker, chartData, containerId){
     L.textData.sort(sortFn); L.textMarkers.sort(sortFn);
     totalMarkers += L.dotMarkers.length;
   });
-  console.log('[Chart] ' + totalMarkers + ' markers across 3 layers (of ' + Object.keys(cbDates).length + ' event dates)');
+  // Sort CB and Monster layers (have border + dot + text)
+  ['cb','monster'].forEach(function(layer){
+    var L = _layerSeries[layer];
+    L.borderData.sort(sortFn); L.borderMarkers.sort(sortFn);
+    L.dotData.sort(sortFn); L.dotMarkers.sort(sortFn);
+    L.textData.sort(sortFn); L.textMarkers.sort(sortFn);
+    totalMarkers += L.dotMarkers.length;
+  });
+  console.log('[Chart] ' + totalMarkers + ' markers across 5 layers (of ' + Object.keys(cbDates).length + ' event dates)');
 
   // Apply current bubble filter (shows/hides layers)
   _applyBubbleFilter();
@@ -2345,8 +2419,8 @@ function toggleBubbles(){
 
 function _applyBubbleFilter(){
   _markerList = [];
-  var layers = ['daily','single','rare'];
-  layers.forEach(function(layer){
+  // Standard layers (dot + text only)
+  ['daily','single','rare'].forEach(function(layer){
     var L = _layerSeries[layer];
     if(!L || !L.dot || !L.text) return;
     var show = _bubblesOn && _activeLayers[layer];
@@ -2357,6 +2431,32 @@ function _applyBubbleFilter(){
       L.text.setMarkers(L.textMarkers);
       _markerList = _markerList.concat(L.dotMarkers);
     } else {
+      L.dot.setData([]);
+      L.dot.setMarkers([]);
+      L.text.setData([]);
+      L.text.setMarkers([]);
+    }
+  });
+  // Event layers (border + dot + text)
+  ['cb','monster'].forEach(function(layer){
+    var L = _layerSeries[layer];
+    if(!L || !L.dot || !L.text) return;
+    var show = _bubblesOn && _activeLayers[layer];
+    if(show && L.dotData.length > 0){
+      if(L.border && L.borderData){
+        L.border.setData(L.borderData);
+        L.border.setMarkers(L.borderMarkers);
+      }
+      L.dot.setData(L.dotData);
+      L.dot.setMarkers(L.dotMarkers);
+      L.text.setData(L.textData);
+      L.text.setMarkers(L.textMarkers);
+      _markerList = _markerList.concat(L.dotMarkers);
+    } else {
+      if(L.border){
+        L.border.setData([]);
+        L.border.setMarkers([]);
+      }
       L.dot.setData([]);
       L.dot.setMarkers([]);
       L.text.setData([]);
@@ -2543,6 +2643,8 @@ function _overlayChartInfo(canvas){
     {color: '#f59e0b', label: 'Top daily volume'},
     {color: '#3b82f6', label: 'Top single sweeps'},
     {color: '#c4b5fd', label: 'Rare sweeps'},
+    {color: '#eab308', label: 'Clusterbombs'},
+    {color: '#f97316', label: 'Monsters'},
   ];
   ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   var keyW = 0;
