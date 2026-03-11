@@ -46,8 +46,8 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 /* Watchlist dropdown */
 #watchlistSelect{width:100%;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:6px 10px;border-radius:4px;font-size:12px;font-family:inherit;margin-bottom:12px;}
 
-/* Ticker list */
-.ticker-list{max-height:280px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;}
+/* Ticker list — fills available space, scrollable */
+.ticker-list{flex:1;min-height:80px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;}
 .ticker-list::-webkit-scrollbar{width:6px;}
 .ticker-list::-webkit-scrollbar-track{background:#0a0a12;}
 .ticker-list::-webkit-scrollbar-thumb{background:#333;border-radius:3px;}
@@ -145,7 +145,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 
 <div class="main">
   <div class="left-panel" id="leftPanel">
-    <div class="panel-section">
+    <div class="panel-section" style="flex:1;display:flex;flex-direction:column;min-height:0;">
       <select id="watchlistSelect" onchange="onWatchlistChange()">
         <option value="">-- Select Watchlist --</option>
       </select>
@@ -167,7 +167,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
         <div class="stat-row"><span>Largest</span><span class="stat-val" id="statLargest">$0</span></div>
       </div>
     </div>
-    <div class="panel-section" style="flex:1;display:flex;flex-direction:column;min-height:0;">
+    <div class="panel-section" style="display:flex;flex-direction:column;min-height:0;max-height:200px;">
       <div class="panel-label">Recent Sweeps</div>
       <div class="feed" id="sweepFeed">
         <div style="color:#555;font-size:11px;">No data yet</div>
@@ -394,6 +394,7 @@ function resizeCanvas(){
 // MODE & TICKER MANAGEMENT
 // ====================================================================
 function setActiveTicker(ticker, source){
+  var tickerChanged = (_activeTicker !== ticker);
   _activeTicker = ticker;
 
   if(source === 'input'){
@@ -404,14 +405,20 @@ function setActiveTicker(ticker, source){
     _overlayTickers = [];
     document.getElementById('watchlistSelect').value = '';
     document.getElementById('overlaySection').style.display = 'none';
-    // Update ticker input display
     document.getElementById('tickerInput').value = ticker;
-    // Clear ticker list highlight
     highlightTickerList(null);
   } else if(source === 'watchlist-click'){
-    // Clicked a ticker in a flat watchlist — stay in watchlist mode but change active ticker
     document.getElementById('tickerInput').value = ticker;
     highlightTickerList(ticker);
+  }
+
+  // Clear old candles so chart resets price scale to new ticker's range
+  if(tickerChanged){
+    _candles = [];
+    _candleSeries.setData([]);
+    _allSweeps = [];
+    _sweeps = [];
+    if(_ctx) _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
   }
 
   loadAll(true);
