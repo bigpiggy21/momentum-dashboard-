@@ -16,6 +16,7 @@ Usage (standalone test):
 
 import json
 import os
+import queue
 import subprocess
 import sqlite3
 import sys
@@ -475,6 +476,13 @@ class UnifiedLiveDaemon:
         self._trade_window_start = 0      # epoch second of current window
         self._last_trade_ts = 0           # monotonic timestamp of last T.* message
 
+        # ── Inbound message queue ──
+        # WebSocket _on_message dumps raw strings here instantly.
+        # A separate consumer thread drains + processes them so the
+        # WS reader thread never blocks and Polygon's buffer won't overflow.
+        self._msg_queue = queue.Queue(maxsize=0)  # unbounded
+        self._msg_consumer_thread = None
+
         # ── Combined status ──
         self._status = {
             "running": False,
@@ -781,6 +789,7 @@ class UnifiedLiveDaemon:
     def _revive_sub_threads(self):
         """Check sub-threads and restart any that have died."""
         threads = [
+            ("_msg_consumer_thread", self._msg_consumer_loop, "live-msg-consumer"),
             ("_price_flush_thread", self._price_flush_loop, "live-price-flush"),
             ("_sweep_flush_thread", self._sweep_flush_loop, "live-sweep-flush"),
             ("_detection_thread", self._detection_loop, "live-detection"),
@@ -800,6 +809,8 @@ class UnifiedLiveDaemon:
 
         _daemon_log("daemon_start", "Unified daemon starting")
 
+        # Start message consumer FIRST — must be ready before WS connects
+        self._start_sub_thread("_msg_consumer_thread", self._msg_consumer_loop, "live-msg-consumer")
         # Start background timer threads (store references for health checks)
         self._start_sub_thread("_price_flush_thread", self._price_flush_loop, "live-price-flush")
         self._start_sub_thread("_sweep_flush_thread", self._sweep_flush_loop, "live-sweep-flush")
@@ -855,23 +866,38 @@ class UnifiedLiveDaemon:
         ws.send(json.dumps({"action": "auth", "params": self._api_key}))
 
     def _on_message(self, ws, message):
-        try:
-            msgs = json.loads(message)
-            if not isinstance(msgs, list):
-                msgs = [msgs]
+        # Absolute minimum work: shove raw string into queue and return.
+        # This keeps the WebSocket reader thread unblocked so Polygon's
+        # server-side buffer never overflows (which causes close 1008).
+        self._msg_queue.put_nowait(message)
 
-            for msg in msgs:
-                ev = msg.get("ev")
-                if ev == "status":
-                    self._handle_status_msg(ws, msg)
-                elif ev == "AM":
-                    self._handle_minute_bar(msg)
-                elif ev == "T":
-                    self._handle_trade(msg)
-        except json.JSONDecodeError:
-            pass
-        except Exception as e:
-            print(f"[LIVE] Message handler error: {e}", flush=True)
+    def _msg_consumer_loop(self):
+        """Drain the message queue and dispatch to handlers.
+
+        Runs on its own thread so the WS reader is never blocked by
+        JSON parsing, lock acquisitions, or any processing.
+        """
+        while not self._stop_event.is_set():
+            try:
+                raw = self._msg_queue.get(timeout=1.0)
+            except queue.Empty:
+                continue
+            try:
+                msgs = json.loads(raw)
+                if not isinstance(msgs, list):
+                    msgs = [msgs]
+                for msg in msgs:
+                    ev = msg.get("ev")
+                    if ev == "status":
+                        self._handle_status_msg(self._ws, msg)
+                    elif ev == "AM":
+                        self._handle_minute_bar(msg)
+                    elif ev == "T":
+                        self._handle_trade(msg)
+            except json.JSONDecodeError:
+                pass
+            except Exception as e:
+                print(f"[LIVE] Message consumer error: {e}", flush=True)
 
     def _on_error(self, ws, error):
         with self._lock:
@@ -1768,8 +1794,9 @@ class UnifiedLiveDaemon:
             af_pending = len(self._pending_fetch_tickers)
         af_total = s.get("auto_fetch_total_fetched", 0)
         af_str = f"{af_pending}q {af_total}done"
+        q_depth = self._msg_queue.qsize()
         now = datetime.now().strftime("%H:%M")
-        summary = (f"Up {uptime} {conn} | Prices: {prices:,} | "
+        summary = (f"Up {uptime} {conn} | Q: {q_depth} | Prices: {prices:,} | "
                    f"Sweeps: {sweeps:,} | Stock: {stock_str} | "
                    f"ETF: {etf_str} | AF: {af_str}")
         _daemon_log("heartbeat", summary)
