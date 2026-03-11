@@ -5333,41 +5333,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             hist = [r[0] for r in conn.execute(hist_sql, (tk, three_years_ago)).fetchall()]
             percentile_cache[tk] = hist  # sorted ascending
 
-        # 3) Compute SPY ratio for price normalisation using candle data
-        # For each non-ref ticker, fetch daily close on the target date to get a stable ratio
-        spy_ratio = {}
-        ref_ticker = "SPY"
-        spy_ratio[ref_ticker] = 1.0
-
-        # Fetch reference ticker's daily bar for the date
-        ref_close = None
-        try:
-            import urllib.request, json as _json
-            ref_url = f"{MASSIVE_BASE_URL}/aggs/ticker/{ref_ticker}/range/1/day/{date_str}/{date_str}?adjusted=true&sort=asc&apiKey={MASSIVE_API_KEY}"
-            with urllib.request.urlopen(ref_url, timeout=10) as resp:
-                ref_data = _json.loads(resp.read())
-                if ref_data.get("results"):
-                    ref_close = ref_data["results"][0]["c"]
-        except Exception:
-            pass
-
-        for tk in tickers:
-            if tk == ref_ticker:
-                continue
-            if not ref_close:
-                spy_ratio[tk] = 1.0
-                continue
-            try:
-                tk_url = f"{MASSIVE_BASE_URL}/aggs/ticker/{tk}/range/1/day/{date_str}/{date_str}?adjusted=true&sort=asc&apiKey={MASSIVE_API_KEY}"
-                with urllib.request.urlopen(tk_url, timeout=10) as resp:
-                    tk_data = _json.loads(resp.read())
-                    if tk_data.get("results"):
-                        tk_close = tk_data["results"][0]["c"]
-                        spy_ratio[tk] = tk_close / ref_close
-                    else:
-                        spy_ratio[tk] = 1.0
-            except Exception:
-                spy_ratio[tk] = 1.0
+        # Price normalisation now done on frontend: non-ref sweeps placed at
+        # SPY's candle close for the same timestamp (no ratio needed server-side)
 
         conn.close()
 
@@ -5431,7 +5398,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         self.send_json({
             "sweeps": sweeps,
-            "spy_ratio": spy_ratio,
             "tickers": tickers,
             "date": date_str,
             "total": len(sweeps),

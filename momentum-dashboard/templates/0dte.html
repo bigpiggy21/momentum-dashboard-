@@ -134,7 +134,7 @@ var _candleSeries = null;
 var _canvas = null;
 var _ctx = null;
 var _sweeps = [];       // all fetched sweeps
-var _spyRatio = {};     // {VOO: 0.915, ...}
+// Price normalisation: non-ref sweeps placed at SPY's price at same timestamp
 var _autoRefresh = false;
 var _sweepTimer = null;
 var _candleTimer = null;
@@ -269,7 +269,6 @@ function fetchSweeps(){
     .then(function(r){return r.json();})
     .then(function(d){
       _allSweeps = d.sweeps || [];
-      _spyRatio = d.spy_ratio || {};
       applyClientFilter();
       _setLoading(false);
     })
@@ -306,6 +305,10 @@ function drawBubbles(){
 
   var ts = _chart.timeScale();
 
+  // Build candle close lookup: time -> close price (for mapping non-ref tickers to SPY axis)
+  var candleCloseMap = {};
+  _candles.forEach(function(c){ candleCloseMap[c.time] = c.close; });
+
   // Build sorted candle time array for nearest-match lookup
   // LC timeToCoordinate only works for exact candle timestamps
   var candleTimes = _candles.map(function(c){ return c.time; });
@@ -339,12 +342,18 @@ function drawBubbles(){
     var x = ts.timeToCoordinate(candleT);
     if(x === null || x < 0 || x > _canvas.width) return;
 
-    // Normalise price to reference ticker axis
-    var ratio = _spyRatio[s.ticker] || 1;
-    var normPrice = ratio === 1 ? s.price : s.price / ratio;
+    // For non-ref tickers, place bubble at SPY's price at this timestamp
+    // (they track the same index, so the Y position = where SPY was trading)
+    var plotPrice;
+    if(s.ticker === REF_TICKER){
+      plotPrice = s.price;
+    } else {
+      plotPrice = candleCloseMap[candleT];
+      if(!plotPrice) return; // no matching SPY candle
+    }
 
     // Map price to y coordinate
-    var y = _candleSeries.priceToCoordinate(normPrice);
+    var y = _candleSeries.priceToCoordinate(plotPrice);
     if(y === null || y < 0 || y > _canvas.height) return;
 
     // Radius based on percentile (6px min, 25px max)
@@ -378,6 +387,8 @@ function onMouseMove(e){
   var ts = _chart.timeScale();
 
   var candleTimes2 = _candles.map(function(c){ return c.time; });
+  var candleCloseMap2 = {};
+  _candles.forEach(function(c){ candleCloseMap2[c.time] = c.close; });
   function nearest2(t){
     if(candleTimes2.length === 0) return null;
     var lo = 0, hi = candleTimes2.length - 1;
@@ -394,9 +405,9 @@ function onMouseMove(e){
     if(ct === null) continue;
     var x = ts.timeToCoordinate(ct);
     if(x === null) continue;
-    var ratio = _spyRatio[s.ticker] || 1;
-    var normPrice = ratio === 1 ? s.price : s.price / ratio;
-    var y = _candleSeries.priceToCoordinate(normPrice);
+    var plotPrice2 = (s.ticker === REF_TICKER) ? s.price : candleCloseMap2[ct];
+    if(!plotPrice2) continue;
+    var y = _candleSeries.priceToCoordinate(plotPrice2);
     if(y === null) continue;
     var dist = Math.sqrt((mx-x)*(mx-x) + (my-y)*(my-y));
     if(dist < closestDist){
