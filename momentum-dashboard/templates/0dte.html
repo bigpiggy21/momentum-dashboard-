@@ -1123,7 +1123,7 @@ function onMouseMove(e){
         var parts = [];
         parts.push('<span style="color:'+clr+';font-weight:bold">' + tkr + '</span>');
         parts.push(sw.date.slice(5)); // MM-DD
-        if(sw.time) parts.push(sw.time);
+        if(sw.time) parts.push(sw.time.slice(0,8)); // HH:MM:SS
         if(sw.size) parts.push(sw.size.toLocaleString() + ' shares');
         if(sw.price) parts.push('@ $' + Number(sw.price).toFixed(2));
         if(sw.notional) parts.push('= <b>$' + fmt$(sw.notional) + '</b>');
