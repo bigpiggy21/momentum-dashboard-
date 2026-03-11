@@ -2513,8 +2513,12 @@ function _overlayChartInfo(canvas){
   var ctx = canvas.getContext('2d');
   var ticker = _selectedTicker || _lastChartTicker || '';
   var name = _tickerNames[ticker] || '';
-  var notionalEl = document.getElementById('tsNotional');
-  var totalSweep = notionalEl ? notionalEl.textContent : '';
+  // Always compute all-time sweep volume from full events array
+  var allTimeNotional = 0;
+  if(_detailEvents && _detailEvents.length > 0){
+    _detailEvents.forEach(function(ev){ allTimeNotional += (ev.total_notional || 0); });
+  }
+  var totalSweep = allTimeNotional > 0 ? fmt$(allTimeNotional) : '';
   if(!ticker) return;
 
   var padX = 14, padY = 10;
@@ -2547,45 +2551,53 @@ function _overlayChartInfo(canvas){
     keyW += w;
   });
 
-  // Background: size to widest content
-  var contentW = Math.max(titleW, sweepW, keyW) + padX * 2;
-  var rows = 1;  // title
-  if(sweepLine) rows++;
-  if(keyItems.length) rows++;
-  var bgH = padY + 26 + (rows - 1) * (lineH + 4) + padY;
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-  ctx.fillRect(0, 0, contentW, bgH);
+  // Text stroke helper for legibility without background
+  ctx.lineJoin = 'round';
+  ctx.miterLimit = 2;
 
-  // Draw title
+  // Draw title with stroke outline
   ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'middle';
+  ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+  ctx.lineWidth = 4;
+  ctx.strokeText(titleLabel, padX, y + 13);
+  ctx.fillStyle = '#ffffff';
   ctx.fillText(titleLabel, padX, y + 13);
   y += 26;
 
-  // Draw sweep volume (smaller)
+  // Draw sweep volume (smaller) with stroke
   if(sweepLine){
     y += 2;
     ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+    ctx.strokeText(sweepLine, padX, y + lineH / 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.fillText(sweepLine, padX, y + lineH / 2);
     y += lineH + 2;
   }
 
-  // Draw key
+  // Draw key with stroke
   if(keyItems.length){
     y += 2;
     var kx = padX;
     keyItems.forEach(function(k){
-      // Dot
+      // Dot with dark outline
+      ctx.beginPath();
+      ctx.arc(kx + 4, y + lineH / 2, 5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fill();
       ctx.beginPath();
       ctx.arc(kx + 4, y + lineH / 2, 4, 0, Math.PI * 2);
       ctx.fillStyle = k.color;
       ctx.fill();
       kx += 13;
-      // Label
+      // Label with stroke
       ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.strokeText(k.label, kx, y + lineH / 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.fillText(k.label, kx, y + lineH / 2);
       kx += ctx.measureText(k.label).width + 14;
     });
