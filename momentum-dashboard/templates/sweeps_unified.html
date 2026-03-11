@@ -2510,33 +2510,86 @@ function cycleCrosshair(){
 })();
 
 function _overlayChartInfo(canvas){
-  // Draw ticker, name, and total sweep $ on the screenshot canvas
   var ctx = canvas.getContext('2d');
   var ticker = _selectedTicker || _lastChartTicker || '';
   var name = _tickerNames[ticker] || '';
   var notionalEl = document.getElementById('tsNotional');
   var totalSweep = notionalEl ? notionalEl.textContent : '';
+  if(!ticker) return;
 
-  // Build label: "NVDA  NVIDIA Corp  |  $2.4B"
-  var label = ticker;
-  if(name) label += '  ' + name;
-  if(totalSweep && totalSweep !== '$0' && totalSweep !== '—') label += '  |  ' + totalSweep;
+  var padX = 14, padY = 10;
+  var lineH = 16;  // line height for key rows
+  var y = padY;
 
-  if(!label) return;
-
-  // Semi-transparent background strip
+  // --- Title line: "NVDA  NVIDIA Corp" ---
   ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  var metrics = ctx.measureText(label);
-  var padX = 14, padY = 8;
-  var bgW = metrics.width + padX * 2;
-  var bgH = 28 + padY * 2;
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-  ctx.fillRect(0, 0, bgW, bgH);
+  var titleLabel = ticker;
+  if(name) titleLabel += '  ' + name;
+  var titleW = ctx.measureText(titleLabel).width;
 
-  // Text
+  // --- Sweep volume line ---
+  ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  var sweepLine = '';
+  if(totalSweep && totalSweep !== '$0' && totalSweep !== '\u2014')
+    sweepLine = 'Total darkpool sweep volume: ' + totalSweep;
+  var sweepW = sweepLine ? ctx.measureText(sweepLine).width : 0;
+
+  // --- Key items ---
+  var keyItems = [
+    {color: '#f59e0b', label: 'Top daily volume'},
+    {color: '#3b82f6', label: 'Top single sweeps'},
+    {color: '#c4b5fd', label: 'Rare sweeps'},
+  ];
+  ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  var keyW = 0;
+  keyItems.forEach(function(k){
+    var w = 10 + 5 + ctx.measureText(k.label).width + 14; // dot + gap + text + spacing
+    keyW += w;
+  });
+
+  // Background: size to widest content
+  var contentW = Math.max(titleW, sweepW, keyW) + padX * 2;
+  var rows = 1;  // title
+  if(sweepLine) rows++;
+  if(keyItems.length) rows++;
+  var bgH = padY + 26 + (rows - 1) * (lineH + 4) + padY;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+  ctx.fillRect(0, 0, contentW, bgH);
+
+  // Draw title
+  ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'middle';
-  ctx.fillText(label, padX, bgH / 2);
+  ctx.fillText(titleLabel, padX, y + 13);
+  y += 26;
+
+  // Draw sweep volume (smaller)
+  if(sweepLine){
+    y += 2;
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillText(sweepLine, padX, y + lineH / 2);
+    y += lineH + 2;
+  }
+
+  // Draw key
+  if(keyItems.length){
+    y += 2;
+    var kx = padX;
+    keyItems.forEach(function(k){
+      // Dot
+      ctx.beginPath();
+      ctx.arc(kx + 4, y + lineH / 2, 4, 0, Math.PI * 2);
+      ctx.fillStyle = k.color;
+      ctx.fill();
+      kx += 13;
+      // Label
+      ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillText(k.label, kx, y + lineH / 2);
+      kx += ctx.measureText(k.label).width + 14;
+    });
+  }
 }
 
 function saveChartPNG(){
