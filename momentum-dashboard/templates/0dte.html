@@ -1114,6 +1114,14 @@ function onMouseMove(e){
     tooltip.style.top = (my - 10) + 'px';
     var rows = [];
 
+    // Build percentile lookup for tooltip
+    var _tipSorted = _chartSweeps.map(function(s){ return s.notional; }).sort(function(a,b){ return a - b; });
+    function _tipPct(n){
+      var lo = 0, hi = _tipSorted.length;
+      while(lo < hi){ var mid = (lo+hi)>>1; if(_tipSorted[mid] < n) lo = mid+1; else hi = mid; }
+      return _tipSorted.length > 0 ? Math.min(99, Math.floor(lo / _tipSorted.length * 100)) : 0;
+    }
+
     hits.forEach(function(hit){
       if(hit.type === 'sweep'){
         var sw = hit.data;
@@ -1127,6 +1135,7 @@ function onMouseMove(e){
         if(sw.size) parts.push(sw.size.toLocaleString() + ' shares');
         if(sw.price) parts.push('@ $' + Number(sw.price).toFixed(2));
         if(sw.notional) parts.push('= <b>$' + fmt$(sw.notional) + '</b>');
+        if(sw.notional) parts.push('Pct: ' + _tipPct(sw.notional) + '%');
         if(sw.condition) parts.push(sw.condition);
         rows.push(parts.join('; '));
       } else {
