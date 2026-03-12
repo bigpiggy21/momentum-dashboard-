@@ -501,7 +501,7 @@ function registerIndicator(cfg){
     series: [],                        // LightweightCharts series (created on enable)
     createSeries: cfg.createSeries,    // fn(chart) → creates series objects, stores in .series
     compute: cfg.compute,              // fn(candles, ind) → sets data on series
-    remove: function(){                // cleanup
+    remove: cfg.remove || function(){  // cleanup (custom or default)
       var ind = _indicators[cfg.id];
       ind.series.forEach(function(s){ _chart.removeSeries(s); });
       ind.series = [];
@@ -536,10 +536,7 @@ function removeAllIndicatorSeries(){
   // Called on ticker change — removes series so they can be recreated with fresh data
   Object.keys(_indicators).forEach(function(id){
     var ind = _indicators[id];
-    if(ind.series.length > 0){
-      ind.series.forEach(function(s){ _chart.removeSeries(s); });
-      ind.series = [];
-    }
+    if(ind.enabled) ind.remove();
   });
 }
 
@@ -645,6 +642,192 @@ registerIndicator({
     ind.series[0].setData(basisData);
     ind.series[1].setData(upperData);
     ind.series[2].setData(lowerData);
+  }
+});
+
+// ====================================================================
+// BB DEVIATION SIGNALS — buy/sell markers + multi-TF table
+// Open below lower BB + close above = Buy (B)
+// Open above upper BB + close below = Sell (S)
+// ====================================================================
+var _bbDevTable = null;  // DOM element for multi-TF table
+var _bbDevFetchAbort = null; // AbortController for multi-TF fetches
+
+// Timeframe definitions for multi-TF table: {label, interval (Polygon), minutes}
+var _BB_DEV_TFS = [
+  {label:'1H',  interval:60,     mins:60},
+  {label:'4H',  interval:240,    mins:240},
+  {label:'D',   interval:1440,   mins:1440},
+  {label:'2D',  interval:2880,   mins:2880},
+  {label:'W',   interval:10080,  mins:10080},
+  {label:'M',   interval:43200,  mins:43200},
+  {label:'3M',  interval:129600, mins:129600},
+];
+
+// Map _candleInterval to minutes
+var _INTERVAL_MINS = {1:1, 5:5, 60:60, 240:240, 1440:1440, 2880:2880, 10080:10080, 43200:43200, 129600:129600};
+
+function _computeBBDev(candles){
+  // Returns array of {time, buy, sell} for each candle that has enough history
+  if(!candles || candles.length < 20) return [];
+  var period = 20, mult = 2.0;
+  var signals = [];
+  for(var i = period - 1; i < candles.length; i++){
+    var sum = 0;
+    for(var j = i - period + 1; j <= i; j++) sum += candles[j].close;
+    var sma = sum / period;
+    var sqSum = 0;
+    for(var j = i - period + 1; j <= i; j++){
+      var diff = candles[j].close - sma;
+      sqSum += diff * diff;
+    }
+    var std = Math.sqrt(sqSum / period);
+    var upper = sma + mult * std;
+    var lower = sma - mult * std;
+    var c = candles[i];
+    var buy = c.open < lower && c.close > lower;
+    var sell = c.open > upper && c.close < upper;
+    if(buy || sell) signals.push({time: c.time, buy: buy, sell: sell});
+  }
+  return signals;
+}
+
+function _createBBDevTable(){
+  if(_bbDevTable) return;
+  _bbDevTable = document.createElement('div');
+  _bbDevTable.id = 'bbDevTable';
+  _bbDevTable.style.cssText = 'position:absolute;top:50px;right:60px;z-index:30;background:rgba(0,9,37,0.85);border:1px solid #334155;border-radius:6px;font-size:11px;font-family:Consolas,monospace;padding:0;display:none;min-width:90px;box-shadow:0 4px 16px rgba(0,0,0,0.5);';
+  document.getElementById('chartContainer').appendChild(_bbDevTable);
+}
+
+function _destroyBBDevTable(){
+  if(_bbDevTable){
+    _bbDevTable.remove();
+    _bbDevTable = null;
+  }
+}
+
+function _renderBBDevTable(results){
+  // results: [{label, buy, sell, current}] — current = this is the chart's active TF
+  if(!_bbDevTable) return;
+  var currentMins = _INTERVAL_MINS[_candleInterval] || _candleInterval;
+  var html = '<table style="border-collapse:collapse;width:100%;">'
+    + '<tr style="border-bottom:1px solid #334155;"><td style="padding:4px 8px;color:#888;font-size:10px;font-weight:600;letter-spacing:0.5px;">TF</td>'
+    + '<td style="padding:4px 6px;color:#888;font-size:10px;text-align:center;">B</td>'
+    + '<td style="padding:4px 8px 4px 6px;color:#888;font-size:10px;text-align:center;">S</td></tr>';
+  results.forEach(function(r){
+    var buyBg = r.buy ? '#0b570f' : '#1a1a1a66';
+    var sellBg = r.sell ? '#700909' : '#1a1a1a66';
+    var rowBg = r.current ? 'rgba(245,158,11,0.08)' : 'transparent';
+    html += '<tr style="background:'+rowBg+';">'
+      + '<td style="padding:3px 8px;color:#c8c8d4;font-weight:'+(r.current?'700':'400')+';">'+r.label+'</td>'
+      + '<td style="padding:3px 6px;text-align:center;"><span style="display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:3px;background:'+buyBg+';color:#fff;font-size:9px;font-weight:700;">'+(r.buy?'B':'')+'</span></td>'
+      + '<td style="padding:3px 8px 3px 6px;text-align:center;"><span style="display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:3px;background:'+sellBg+';color:#fff;font-size:9px;font-weight:700;">'+(r.sell?'S':'')+'</span></td></tr>';
+  });
+  html += '</table>';
+  _bbDevTable.innerHTML = html;
+  _bbDevTable.style.display = 'block';
+}
+
+function _fetchMultiTFDevSignals(){
+  // Abort previous fetches
+  if(_bbDevFetchAbort) _bbDevFetchAbort.abort();
+  _bbDevFetchAbort = new AbortController();
+  var signal = _bbDevFetchAbort.signal;
+  var currentMins = _INTERVAL_MINS[_candleInterval] || _candleInterval;
+  var ticker = _activeTicker;
+  var date = getDate();
+
+  // Filter to TFs >= current TF
+  var tfs = _BB_DEV_TFS.filter(function(tf){ return tf.mins >= currentMins; });
+
+  // Build results array with placeholders
+  var results = tfs.map(function(tf){ return {label: tf.label, buy: false, sell: false, current: tf.mins === currentMins}; });
+
+  // For the current TF, compute from already-loaded candles (no extra fetch)
+  var currentTf = tfs.find(function(tf){ return tf.mins === currentMins; });
+  if(currentTf && _candles.length >= 20){
+    var sigs = _computeBBDev(_candles);
+    var last = sigs.length > 0 ? sigs[sigs.length - 1] : null;
+    var idx = tfs.indexOf(currentTf);
+    if(last && _candles.length > 0 && last.time === _candles[_candles.length - 1].time){
+      results[idx].buy = last.buy;
+      results[idx].sell = last.sell;
+    }
+  }
+
+  // Render immediately with current TF data, then fill in others
+  _renderBBDevTable(results);
+
+  // Fetch other TFs in parallel (only 25 bars needed each)
+  var otherTfs = tfs.filter(function(tf){ return tf.mins !== currentMins; });
+  var pending = otherTfs.length;
+  if(pending === 0) return;
+
+  otherTfs.forEach(function(tf){
+    var url = '/api/chart/candles?ticker='+ticker+'&date='+date+'&days=25&interval='+tf.interval;
+    fetch(url, {signal: signal})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var candles = d.candles || [];
+        if(candles.length >= 20){
+          var sigs = _computeBBDev(candles);
+          var last = sigs.length > 0 ? sigs[sigs.length - 1] : null;
+          var idx = tfs.indexOf(tf);
+          if(last && candles.length > 0 && last.time === candles[candles.length - 1].time){
+            results[idx].buy = last.buy;
+            results[idx].sell = last.sell;
+          }
+        }
+        pending--;
+        if(pending <= 0) _renderBBDevTable(results);
+      })
+      .catch(function(e){
+        if(e.name !== 'AbortError') console.warn('BB dev fetch error:', e);
+        pending--;
+        if(pending <= 0) _renderBBDevTable(results);
+      });
+  });
+}
+
+registerIndicator({
+  id: 'bb_dev',
+  name: 'BB Deviation Signals',
+  color: '#0b570f',
+  createSeries: function(chart){
+    var ind = _indicators['bb_dev'];
+    ind.series = []; // No LightweightCharts series — uses markers + DOM table
+    _createBBDevTable();
+  },
+  compute: function(candles, ind){
+    if(!candles || candles.length < 20){
+      _candleSeries.setMarkers([]);
+      return;
+    }
+    // Compute signals for current TF candles → markers
+    var signals = _computeBBDev(candles);
+    var markers = signals.map(function(s){
+      if(s.buy){
+        return {time: s.time, position: 'belowBar', color: '#0b570f', shape: 'arrowUp', text: 'B'};
+      } else {
+        return {time: s.time, position: 'aboveBar', color: '#700909', shape: 'arrowDown', text: 'S'};
+      }
+    });
+    // Sort markers by time (required by LightweightCharts)
+    markers.sort(function(a,b){ return a.time - b.time; });
+    _candleSeries.setMarkers(markers);
+    // Fetch multi-TF table
+    _fetchMultiTFDevSignals();
+  },
+  remove: function(){
+    var ind = _indicators['bb_dev'];
+    // Clear markers
+    if(_candleSeries) _candleSeries.setMarkers([]);
+    // Remove table
+    _destroyBBDevTable();
+    // Cancel pending fetches
+    if(_bbDevFetchAbort){ _bbDevFetchAbort.abort(); _bbDevFetchAbort = null; }
+    ind.series = [];
   }
 });
 
@@ -787,6 +970,7 @@ function rebuildCandleSeries(){
     _chart.timeScale().fitContent();
   }
   drawBubbles();
+  recomputeIndicators();
 }
 
 // Close chart settings dropdown when clicking outside
