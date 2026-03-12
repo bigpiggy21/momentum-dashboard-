@@ -399,6 +399,43 @@ class TickerBars:
             self.daily["c"] = bar["c"]
             self.daily["v"] += bar["v"]
 
+    def update_from_trade(self, price, volume, trade_ts):
+        """Update the current forming minute bar with a trade tick.
+
+        This gives sub-second candle updates between AM.* bar deliveries.
+        trade_ts is Unix seconds.
+        """
+        # Bucket to current minute
+        minute_ts = (trade_ts // 60) * 60
+
+        if self.minutes and self.minutes[-1]["t"] == minute_ts:
+            # Update existing minute bar
+            bar = self.minutes[-1]
+            bar["h"] = max(bar["h"], price)
+            bar["l"] = min(bar["l"], price)
+            bar["c"] = price
+            bar["v"] += volume
+        elif not self.minutes or minute_ts > self.minutes[-1]["t"]:
+            # New minute — create a fresh bar
+            bar = {"t": int(minute_ts), "o": price, "h": price,
+                   "l": price, "c": price, "v": volume}
+            self.minutes.append(bar)
+            self.last_minute_ts = int(minute_ts)
+        else:
+            return  # Old trade, ignore
+
+        # Also update hourly accumulator
+        if self._hour_accum:
+            self._hour_accum["h"] = max(self._hour_accum["h"], price)
+            self._hour_accum["l"] = min(self._hour_accum["l"], price)
+            self._hour_accum["c"] = price
+
+        # Also update daily bar
+        if self.daily:
+            self.daily["h"] = max(self.daily["h"], price)
+            self.daily["l"] = min(self.daily["l"], price)
+            self.daily["c"] = price
+
     def snapshot(self):
         return {
             "trade_date": self.trade_date,
@@ -1109,6 +1146,25 @@ class UnifiedLiveDaemon:
             self._trade_count = 0
             self._trade_window_start = now_sec
         self._trade_count += 1
+
+        # Update forming candle from every trade (for live chart updates)
+        price = msg.get("p", 0)
+        size = msg.get("s", 0)
+        ticker = msg.get("sym", "")
+        if price > 0 and ticker:
+            sip_ts = msg.get("t", 0)
+            if sip_ts > 1e17:
+                trade_sec = int(sip_ts / 1e9)
+            elif sip_ts > 1e14:
+                trade_sec = int(sip_ts / 1e6)
+            elif sip_ts > 1e11:
+                trade_sec = int(sip_ts / 1e3)
+            else:
+                trade_sec = int(sip_ts) if sip_ts else int(now)
+            with self._bars_lock:
+                tb = self._bars.get(ticker)
+                if tb:
+                    tb.update_from_trade(price, size, trade_sec)
 
         # Filter: dark pool intermarket sweep with significant notional
         exchange = msg.get("x", 0)
