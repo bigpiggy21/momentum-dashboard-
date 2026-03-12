@@ -1609,9 +1609,16 @@ class UnifiedLiveDaemon:
                 cancel_event=cancel_event,
             )
             if cancel_event.is_set():
-                print("[LIVE] Auto-fetch: cancelled", flush=True)
+                # Re-queue tickers so they're retried next cycle (not lost)
+                with self._pending_fetch_lock:
+                    self._pending_fetch_tickers.update(batch)
+                self._save_pending_queue()
                 with self._lock:
+                    self._status["auto_fetch_pending"] = \
+                        len(self._pending_fetch_tickers)
                     self._status["auto_fetch_last_result"] = "cancelled"
+                print(f"[LIVE] Auto-fetch: cancelled, "
+                      f"{len(batch)} tickers re-queued", flush=True)
                 return
 
             # --- Phase 2: Detection ---
