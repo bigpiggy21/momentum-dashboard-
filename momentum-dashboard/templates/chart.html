@@ -738,8 +738,8 @@ function _fetchMultiTFDevSignals(){
   var ticker = _activeTicker;
   var date = getDate();
 
-  // Filter to TFs >= current TF
-  var tfs = _BB_DEV_TFS.filter(function(tf){ return tf.mins >= currentMins; });
+  // Show all TFs (unlike TradingView, we fetch each TF independently)
+  var tfs = _BB_DEV_TFS;
 
   // Build results array with placeholders
   var results = tfs.map(function(tf){ return {label: tf.label, buy: false, sell: false, current: tf.mins === currentMins}; });
