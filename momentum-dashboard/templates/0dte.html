@@ -399,8 +399,7 @@ var _candleInterval = 1;
 var _sweepFilterMode = 'notional';   // 'notional' | 'percentile'
 // Days of candle data per interval (for Polygon API)
 var INTERVAL_DAYS = {1:5, 5:30, 60:120, 240:365, 1440:730, 2880:730, 10080:1460, 43200:2520, 129600:3780};
-// Days of sweep data per interval (separate, much tighter to avoid loading millions of trades)
-var SWEEP_DAYS =    {1:5, 5:30, 60:90,  240:180, 1440:365, 2880:365, 10080:730,  43200:1460, 129600:2520};
+// Sweep lookback now uses INTERVAL_DAYS directly (matched to candle range)
 
 // Layer system — 6 layers: raw sweeps + 5 event layers
 var _activeLayers = {sweeps:true, daily:false, single:false, rare:true, cb:true, monster:true};
@@ -566,9 +565,12 @@ function setActiveTicker(ticker, source){
   if(tickerChanged){
     _candles = [];
     _candleSeries.setData([]);
+    if(_dailyHistSeries) _dailyHistSeries.setData([]);
     _chartSweeps = [];
     _chartEvents = [];
     if(_ctx) _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
+    // Force price scale to re-auto-scale for new ticker's price range
+    _chart.priceScale('right').applyOptions({autoScale: true});
   }
 
   loadAll(true);
@@ -744,9 +746,10 @@ function fetchAnchorBars(){
     return;
   }
   _anchorReady = false;
-  var sweepDays = SWEEP_DAYS[_candleInterval] || 30;
+  var sweepDays = INTERVAL_DAYS[_candleInterval] || 30;
+  var pad = sweepDays <= 10 ? 2 : Math.round(sweepDays * 0.45);
   var end = new Date();
-  var start = new Date(end.getTime() - (sweepDays + 2) * 86400000);
+  var start = new Date(end.getTime() - (sweepDays + pad) * 86400000);
   var dateFrom = start.toISOString().slice(0,10);
   var dateTo = end.toISOString().slice(0,10);
   var signal = _fetchController ? _fetchController.signal : undefined;
@@ -797,6 +800,8 @@ function fetchCandles(){
       if(_initialLoad || _candles.length === 0){
         _candles = newCandles;
         _candleSeries.setData(_candles);
+        // Reset price scale auto-fit + time scale fit for new data
+        _chart.priceScale('right').applyOptions({autoScale: true});
         _chart.timeScale().fitContent();
         _initialLoad = false;
       } else {
@@ -827,9 +832,11 @@ function fetchCandles(){
 
 function fetchSweepChart(){
   // Fetch sweep chart data for active ticker + all enabled overlay tickers
-  var sweepDays = SWEEP_DAYS[_candleInterval] || 30;
+  // Use same lookback as candles (INTERVAL_DAYS) with weekend padding to match candle range
+  var sweepDays = INTERVAL_DAYS[_candleInterval] || 30;
+  var pad = sweepDays <= 10 ? 2 : Math.round(sweepDays * 0.45);
   var end = new Date();
-  var start = new Date(end.getTime() - (sweepDays + 2) * 86400000);
+  var start = new Date(end.getTime() - (sweepDays + pad) * 86400000);
   var dateFrom = start.toISOString().slice(0,10);
   var dateTo = end.toISOString().slice(0,10);
 
