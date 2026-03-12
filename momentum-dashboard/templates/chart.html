@@ -1721,12 +1721,12 @@ function drawBubbles(){
         if(priceCoord === null) return;
         var labelY = priceCoord + 20; // below the bar
         // Draw downward-pointing label (rounded rect with arrow on top pointing up toward bar)
-        var w = 18, h = 16, arrowH = 5, r = 3;
+        var w = 14, h = 16, arrowH = 5, r = 3;
         var lx = xCoord - w/2, ly = labelY;
         _ctx.beginPath();
         // Arrow point (top center, pointing up toward bar)
         _ctx.moveTo(xCoord, ly - arrowH);
-        _ctx.lineTo(xCoord + 5, ly);
+        _ctx.lineTo(xCoord + 4, ly);
         _ctx.lineTo(xCoord + w/2 - r, ly);
         _ctx.arcTo(xCoord + w/2, ly, xCoord + w/2, ly + r, r);
         _ctx.lineTo(xCoord + w/2, ly + h - r);
@@ -1735,7 +1735,7 @@ function drawBubbles(){
         _ctx.arcTo(xCoord - w/2, ly + h, xCoord - w/2, ly + h - r, r);
         _ctx.lineTo(xCoord - w/2, ly + r);
         _ctx.arcTo(xCoord - w/2, ly, xCoord - w/2 + r, ly, r);
-        _ctx.lineTo(xCoord - 5, ly);
+        _ctx.lineTo(xCoord - 4, ly);
         _ctx.closePath();
         _ctx.fillStyle = color;
         _ctx.fill();
@@ -1750,7 +1750,7 @@ function drawBubbles(){
         if(priceCoord === null) return;
         var labelY = priceCoord - 20; // above the bar
         // Draw upward label (rounded rect with arrow on bottom pointing down toward bar)
-        var w = 18, h = 16, arrowH = 5, r = 3;
+        var w = 14, h = 16, arrowH = 5, r = 3;
         var topY = labelY - h;
         _ctx.beginPath();
         // Top-left corner
@@ -1759,10 +1759,10 @@ function drawBubbles(){
         _ctx.arcTo(xCoord + w/2, topY, xCoord + w/2, topY + r, r);
         _ctx.lineTo(xCoord + w/2, topY + h - r);
         _ctx.arcTo(xCoord + w/2, topY + h, xCoord + w/2 - r, topY + h, r);
-        _ctx.lineTo(xCoord + 5, topY + h);
+        _ctx.lineTo(xCoord + 4, topY + h);
         // Arrow point (bottom center, pointing down toward bar)
         _ctx.lineTo(xCoord, topY + h + arrowH);
-        _ctx.lineTo(xCoord - 5, topY + h);
+        _ctx.lineTo(xCoord - 4, topY + h);
         _ctx.lineTo(xCoord - w/2 + r, topY + h);
         _ctx.arcTo(xCoord - w/2, topY + h, xCoord - w/2, topY + h - r, r);
         _ctx.lineTo(xCoord - w/2, topY + r);
