@@ -5616,9 +5616,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         Returns just the latest forming bar(s) from daemon memory.
         Designed for fast polling (1-2s) to give TradingView-style live candle updates.
         """
-        qs = urllib.parse.parse_qs(query or "")
-        ticker = (qs.get("ticker") or ["SPY"])[0].upper().strip()
-        interval = int((qs.get("interval") or ["1"])[0])
+        query = query or {}
+        ticker = (query.get("ticker") or ["SPY"])[0].upper().strip()
+        interval = int((query.get("interval") or ["1"])[0])
 
         if _live_daemon is None:
             self.send_json({"bars": [], "ticker": ticker})
