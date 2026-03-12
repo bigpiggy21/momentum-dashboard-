@@ -837,6 +837,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_sweep_detection_config()
         elif path == "/api/sweeps/fetch-progress":
             self.serve_sweep_fetch_progress()
+        elif path == "/api/sweeps/pending-queue":
+            self.serve_pending_queue()
         elif path == "/api/sweeps/live/status":
             self.serve_live_sweep_status()
         elif path == "/api/sweeps/live/events":
@@ -939,6 +941,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_sweep_fetch()
         elif path == "/api/sweeps/fetch-cancel":
             self.serve_sweep_fetch_cancel()
+        elif path == "/api/sweeps/fetch-queue":
+            self.serve_sweep_fetch_queue()
         elif path == "/api/sweeps/redetect":
             self.serve_sweep_redetect()
         elif path == "/api/sweeps/detection-config":
@@ -3574,6 +3578,169 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "log_lines": _sweep_fetch_progress["log_lines"][-20:],
             }
         self.send_json(data)
+
+    def serve_pending_queue(self):
+        """GET /api/sweeps/pending-queue — return the pending fetch queue."""
+        queue_path = os.path.join(os.path.dirname(__file__), "pending_fetch_queue.json")
+        try:
+            with open(queue_path, "r", encoding="utf-8") as f:
+                tickers = json.load(f)
+            if not isinstance(tickers, list):
+                tickers = []
+        except (FileNotFoundError, json.JSONDecodeError):
+            tickers = []
+        self.send_json({"ok": True, "tickers": tickers, "count": len(tickers)})
+
+    def serve_sweep_fetch_queue(self):
+        """POST /api/sweeps/fetch-queue — fetch all tickers from pending queue with 10y lookback."""
+        queue_path = os.path.join(os.path.dirname(__file__), "pending_fetch_queue.json")
+        try:
+            with open(queue_path, "r", encoding="utf-8") as f:
+                tickers = json.load(f)
+            if not isinstance(tickers, list) or not tickers:
+                self.send_json({"ok": False, "error": "Queue is empty"})
+                return
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.send_json({"ok": False, "error": "No pending queue file found"})
+            return
+
+        # Optional: accept body params to override defaults
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+        except Exception:
+            body = {}
+
+        lookback_years = body.get("lookback_years", 10)
+        start_date = (datetime.now() - timedelta(days=lookback_years * 365)).strftime("%Y-%m-%d")
+        end_date = datetime.now().strftime("%Y-%m-%d")
+
+        # Guard: reject if a fetch is already running
+        with _sweep_fetch_lock:
+            if _sweep_fetch_progress["running"]:
+                self.send_json({"ok": False, "error": "A fetch is already running. Cancel it first."})
+                return
+
+        # Clear the queue file now that we're starting
+        try:
+            with open(queue_path, "w", encoding="utf-8") as f:
+                json.dump([], f)
+        except Exception:
+            pass
+
+        # Reuse the same fetch pipeline
+        def _progress_cb(ticker, date_str, n_sweeps, total_sweeps, completed, total_jobs):
+            with _sweep_fetch_lock:
+                _sweep_fetch_progress["completed"] = completed
+                _sweep_fetch_progress["total"] = total_jobs
+                _sweep_fetch_progress["sweeps_found"] = total_sweeps
+                _sweep_fetch_progress["current_ticker"] = ticker
+                _sweep_fetch_progress["current_date"] = date_str
+                rate = completed / max((time.time() - _sweep_fetch_progress.get("_t0", time.time())), 0.1)
+                _sweep_fetch_progress["rate"] = round(rate, 1)
+                line = f"[{completed}/{total_jobs}] {ticker} {date_str} — {n_sweeps} sweeps ({rate:.1f}/s)"
+                lines = _sweep_fetch_progress["log_lines"]
+                lines.append(line)
+                if len(lines) > 50:
+                    _sweep_fetch_progress["log_lines"] = lines[-50:]
+                if completed == 1 or completed % 50 == 0:
+                    pct = int(completed / max(total_jobs, 1) * 100)
+                    print(f"  [QUEUE] [{completed}/{total_jobs}] {pct}% {ticker} {date_str} — {total_sweeps} sweeps ({rate:.1f}/s)", flush=True)
+
+        def _run():
+            _sweep_fetch_cancel.clear()
+            with _sweep_fetch_lock:
+                _sweep_fetch_progress.update({
+                    "running": True, "completed": 0, "total": 0,
+                    "sweeps_found": 0, "current_ticker": "", "current_date": "",
+                    "rate": 0.0, "phase": "fetching", "log_lines": [
+                        f"Queue fetch: {len(tickers)} tickers ({start_date} → {end_date})"
+                    ],
+                    "_t0": time.time(),
+                })
+            try:
+                from sweep_engine import get_detection_config as _get_cfg, detect_rare_sweep_days, detect_monster_sweeps, detect_ranked_sweeps, detect_ranked_daily
+                stats = fetch_and_store_sweeps(tickers, start_date, end_date,
+                                               progress_callback=_progress_cb,
+                                               cancel_event=_sweep_fetch_cancel)
+                if _sweep_fetch_cancel.is_set():
+                    # Re-queue cancelled tickers
+                    remaining = [t for t in tickers if t not in stats.get("completed_tickers", set())]
+                    if remaining:
+                        try:
+                            with open(queue_path, "r", encoding="utf-8") as f:
+                                existing = json.load(f)
+                        except Exception:
+                            existing = []
+                        merged = sorted(set(existing + remaining))
+                        with open(queue_path, "w", encoding="utf-8") as f:
+                            json.dump(merged, f)
+                    _clear_fetch_job()
+                    with _sweep_fetch_lock:
+                        _sweep_fetch_progress["phase"] = "cancelled"
+                        _sweep_fetch_progress["running"] = False
+                        _sweep_fetch_progress["log_lines"].append(
+                            f"Queue fetch cancelled. {len(remaining)} tickers re-queued.")
+                    print(f"[QUEUE] Fetch cancelled, {len(remaining)} tickers re-queued", flush=True)
+                    return
+
+                # Detection pass (same as regular fetch)
+                with _sweep_fetch_lock:
+                    _sweep_fetch_progress["phase"] = "detecting"
+                    _sweep_fetch_progress["log_lines"].append("Detecting clusterbombs & rare sweeps...")
+                cfg = _get_cfg()
+                _cb_keys = ("min_sweeps", "min_notional", "min_total", "rarity_days", "rare_min_notional")
+                _sp = {k: cfg["stock"][k] for k in _cb_keys if k in cfg["stock"]}
+                detect_clusterbombs(tickers=tickers, **_sp)
+                detect_rare_sweep_days(
+                    min_notional=cfg["stock"].get("rare_min_notional", cfg["stock"]["min_notional"]),
+                    rarity_days=cfg["stock"]["rarity_days"],
+                    tickers=tickers,
+                )
+                _sm = cfg["stock"].get("monster_min_notional")
+                if _sm:
+                    detect_monster_sweeps(monster_min_notional=float(_sm), tickers=tickers)
+                detect_ranked_daily(rank_limit=100,
+                                    min_sweeps=int(cfg["stock"].get("min_sweeps_daily", 1)),
+                                    tickers=tickers, exclude_etfs=True, etf_only=False)
+                detect_ranked_sweeps(rank_limit=100, tickers=tickers,
+                                     exclude_etfs=True, etf_only=False)
+                # ETF detection pass
+                ecfg = cfg.get("etf", {})
+                detect_ranked_daily(rank_limit=100, min_sweeps=1,
+                                    tickers=tickers, exclude_etfs=False, etf_only=True)
+                detect_rare_sweep_days(
+                    min_notional=float(ecfg.get("rare_min_notional", 1_000_000)),
+                    rarity_days=int(ecfg.get("rarity_days", 20)),
+                    tickers=tickers, exclude_etfs=False, etf_only=True,
+                )
+                detect_ranked_sweeps(rank_limit=100, tickers=tickers,
+                                     exclude_etfs=False, etf_only=True)
+                from sweep_engine import backfill_event_ticker_prices
+                backfill_event_ticker_prices(tickers=tickers)
+                _clear_fetch_job()
+                with _sweep_fetch_lock:
+                    _sweep_fetch_progress["phase"] = "done"
+                    _sweep_fetch_progress["running"] = False
+                    elapsed = time.time() - _sweep_fetch_progress.get("_t0", time.time())
+                    _sweep_fetch_progress["log_lines"].append(
+                        f"Queue complete: {stats.get('sweeps_found',0)} sweeps, "
+                        f"{stats.get('inserted',0)} inserted in {elapsed:.0f}s")
+                _tracker_cache.clear()
+                print(f"[QUEUE] Fetch + detect complete: {stats}", flush=True)
+            except Exception as e:
+                with _sweep_fetch_lock:
+                    _sweep_fetch_progress["phase"] = "error"
+                    _sweep_fetch_progress["running"] = False
+                    _sweep_fetch_progress["log_lines"].append(f"Error: {e}")
+                print(f"[QUEUE] Fetch error: {e}", flush=True)
+                import traceback; traceback.print_exc()
+
+        _save_fetch_job(tickers, start_date, end_date)
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        self.send_json({"ok": True, "message": f"Queue fetch started: {len(tickers)} tickers from {start_date}",
+                        "tickers": len(tickers)})
 
     # ------------------------------------------------------------------
     # Live sweep scanner endpoints

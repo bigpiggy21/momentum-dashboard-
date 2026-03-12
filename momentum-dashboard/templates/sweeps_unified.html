@@ -397,6 +397,7 @@ td .cb-flag,td .monster-flag{font-size:8px;padding:0px 3px;margin-left:2px;}
 <div class="filter-divider"></div>
 <button class="btn-configure" onclick="toggleSettingsPanel()" title="Detection settings &amp; scheduler">&#x2699; Configure</button>
 <button class="btn-action" id="btnFetch" onclick="fetchSweeps()">&#x1F4E1; Fetch</button>
+<button class="btn-action" id="btnQueueFetch" onclick="fetchQueue()" title="Fetch all tickers in pending queue (10y lookback)" style="background:#2a4a6a;border-color:#3a6a9a;">&#x1F4CB; Queue <span id="queueCount" style="font-size:10px;opacity:0.7;"></span></button>
 <button class="btn-secondary" onclick="loadAll()" title="Refresh all data">&#x21BB;</button>
 <div class="filter-divider"></div>
 <div style="position:relative;display:inline-block;">
@@ -3042,6 +3043,54 @@ function fetchSweeps(){
   });
 }
 
+// Queue fetch — fetch all pending tickers from queue file
+function fetchQueue(){
+  var btn = document.getElementById('btnQueueFetch');
+  btn.disabled = true;
+  btn.textContent = '⏳ Starting...';
+  fetch('/api/sweeps/fetch-queue', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({})
+  })
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.ok){
+      document.getElementById('fetchProgress').style.display = '';
+      document.getElementById('fetchTitle').textContent = 'Queue fetch: ' + d.tickers + ' tickers (10y lookback)...';
+      document.getElementById('fetchFill').style.width = '2%';
+      document.getElementById('fetchLog').textContent = d.message + '\n';
+      document.getElementById('btnFetch').disabled = true;
+      showToast(d.message);
+      pollFetchProgress();
+    } else {
+      showToast('Queue: ' + d.error);
+      btn.disabled = false;
+      btn.textContent = '📋 Queue';
+      refreshQueueCount();
+    }
+  })
+  .catch(function(e){
+    showToast('Queue fetch failed: '+e);
+    btn.disabled = false;
+    btn.textContent = '📋 Queue';
+  });
+}
+
+function refreshQueueCount(){
+  fetch('/api/sweeps/pending-queue').then(function(r){return r.json();}).then(function(d){
+    var span = document.getElementById('queueCount');
+    var btn = document.getElementById('btnQueueFetch');
+    if(d.count > 0){
+      span.textContent = '(' + d.count + ')';
+      btn.style.display = '';
+    } else {
+      span.textContent = '(0)';
+      btn.style.opacity = '0.5';
+    }
+  }).catch(function(){});
+}
+
 var _pollTimer = null;
 function pollFetchProgress(){
   _pollTimer = setTimeout(function(){
@@ -3105,6 +3154,10 @@ function fetchDone(phase){
     document.getElementById('fetchProgress').style.display = 'none';
   }, 3000);
   loadAll();
+  // Re-enable queue button and refresh count
+  var qBtn = document.getElementById('btnQueueFetch');
+  if(qBtn){ qBtn.disabled = false; qBtn.innerHTML = '&#x1F4CB; Queue <span id="queueCount" style="font-size:10px;opacity:0.7;"></span>'; }
+  refreshQueueCount();
 }
 
 // detectClusterbombs removed — Fetch auto-detects after fetching sweep data
@@ -3584,6 +3637,9 @@ loadFilterProfiles();
     }
   }).catch(function(){});
 })();
+
+// Load queue count on page load
+refreshQueueCount();
 </script>
 </body>
 </html>
