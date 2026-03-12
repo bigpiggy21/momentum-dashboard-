@@ -2457,6 +2457,11 @@ function fetchLiveBar(){
     .then(function(d){
       var bars = d.bars || [];
       if(bars.length === 0) return;
+      // Debug: log timestamps to see if they match
+      var lastCandle = _candles.length > 0 ? _candles[_candles.length - 1] : null;
+      if(lastCandle && bars.length > 0){
+        console.log('[LIVE] chart last:', lastCandle.time, 'live bar:', bars[bars.length-1].time, 'close:', bars[bars.length-1].close);
+      }
       var changed = false;
       bars.forEach(function(b){
         if(_candles.length === 0) return;
