@@ -64,7 +64,7 @@ INTERMARKET_SWEEP_CONDITION = 14
 # Condition 41 appears on closing crosses, VWAP fills, late blocks, QCTs, etc.
 MIN_SWEEP_NOTIONAL = 500_000  # $500K
 
-DEFAULT_WS_URL = "wss://delayed.polygon.io/stocks"
+DEFAULT_WS_URL = "wss://socket.polygon.io/stocks"
 
 # Price defaults
 DEFAULT_FLUSH_INTERVAL = 2   # minutes
