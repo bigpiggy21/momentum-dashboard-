@@ -404,6 +404,24 @@ var _chartSweeps = [];       // individual sweep trades
 var _chartEvents = [];       // clusterbomb/rare/monster events with ranks
 var _tickerColorMap = {};    // ticker → {stroke} for tooltip coloring
 
+// Anchor price system: for overlay tickers on larger timeframes, we fetch
+// finer-grained bars of the ACTIVE ticker so we can plot overlay sweeps at
+// "where was the active ticker when this trade happened?" instead of candle close.
+// Maps chart interval → anchor bar interval (Polygon multiplier/unit).
+// null = no anchor needed (1m/5m candles are already fine-grained enough).
+var ANCHOR_RESOLUTION = {
+  1: null, 5: null,               // 1m/5m: no anchor needed
+  60: {mult:1, unit:'minute'},    // 1h chart → 1-min anchor bars
+  240: {mult:5, unit:'minute'},   // 4h chart → 5-min anchor bars
+  1440: {mult:1, unit:'hour'},    // 1D chart → hourly anchor bars
+  2880: {mult:1, unit:'hour'},    // 2D chart → hourly anchor bars
+  10080: {mult:1, unit:'day'},    // W chart → daily anchor bars
+  43200: {mult:1, unit:'day'},    // M chart → daily anchor bars
+  129600: {mult:1, unit:'day'}    // 3M chart → daily anchor bars
+};
+var _anchorBars = [];   // [{time: unixSec, close: price}, ...] sorted by time
+var _anchorReady = false;
+
 var _chart = null;
 var _candleSeries = null;
 var _canvas = null;
@@ -681,6 +699,58 @@ function getDate(){
 }
 function getDays(){ return INTERVAL_DAYS[_candleInterval] || 10; }
 
+// Anchor price lookup: binary search for nearest bar close at a given unix timestamp
+function _anchorPriceAt(unixTs){
+  if(_anchorBars.length === 0) return null;
+  var lo = 0, hi = _anchorBars.length - 1;
+  while(lo < hi){
+    var mid = (lo + hi + 1) >> 1;
+    if(_anchorBars[mid].time <= unixTs) lo = mid;
+    else hi = mid - 1;
+  }
+  // lo = largest bar time <= unixTs
+  return _anchorBars[lo].close;
+}
+
+function fetchAnchorBars(){
+  var res = ANCHOR_RESOLUTION[_candleInterval];
+  if(!res){
+    // No anchor needed for this timeframe — use candle close (already fine)
+    _anchorBars = [];
+    _anchorReady = true;
+    drawBubbles(); // redraw in case sweeps loaded first
+    return;
+  }
+  _anchorReady = false;
+  var sweepDays = SWEEP_DAYS[_candleInterval] || 30;
+  var end = new Date();
+  var start = new Date(end.getTime() - (sweepDays + 2) * 86400000);
+  var dateFrom = start.toISOString().slice(0,10);
+  var dateTo = end.toISOString().slice(0,10);
+  var signal = _fetchController ? _fetchController.signal : undefined;
+
+  var url = '/api/0dte/candles?ticker='+_activeTicker
+    +'&date='+dateTo+'&days='+sweepDays+'&interval='
+    + (res.unit === 'minute' ? res.mult : (res.unit === 'hour' ? res.mult * 60 : res.mult * 1440));
+
+  fetch(url, {signal: signal})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var bars = d.candles || [];
+      // Sort by time ascending
+      bars.sort(function(a,b){ return a.time - b.time; });
+      _anchorBars = bars.map(function(b){ return {time: b.time, close: b.close}; });
+      _anchorReady = true;
+      drawBubbles(); // redraw with anchor prices
+    })
+    .catch(function(e){
+      if(e.name === 'AbortError') return;
+      console.error('Anchor fetch error:', e);
+      _anchorReady = true; // fallback to candle close
+      drawBubbles();
+    });
+}
+
 function loadAll(resetView){
   // Abort any in-flight fetches so stale responses don't overwrite current ticker
   if(_fetchController) _fetchController.abort();
@@ -688,6 +758,7 @@ function loadAll(resetView){
   if(resetView) _initialLoad = true;
   fetchCandles();
   fetchSweepChart();
+  fetchAnchorBars();  // fetch finer-grained bars for overlay y-positioning
 }
 
 function fetchCandles(){
@@ -909,9 +980,15 @@ function drawBubbles(){
       }
       timeUnix = Math.floor(timeUnix / 60) * 60;
 
-      // Use exact trade price only for the active ticker (its price scale matches the chart).
-      // Overlay tickers trade at different prices, so snap them to candle close.
-      var usePrice = (s.ticker === _activeTicker && s.price) ? Number(s.price) : undefined;
+      // Active ticker: use exact trade price (its scale matches the chart).
+      // Overlay tickers: use anchor bars (finer-grained active ticker price at trade time).
+      // Fallback: candle close (getXY default when no override price given).
+      var usePrice;
+      if(s.ticker === _activeTicker && s.price){
+        usePrice = Number(s.price);
+      } else if(s.ticker !== _activeTicker && _anchorReady && _anchorBars.length > 0){
+        usePrice = _anchorPriceAt(timeUnix);
+      }
       var pos = getXY(timeUnix, usePrice);
       if(!pos) return;
 
@@ -1092,8 +1169,15 @@ function onMouseMove(e){
       if(ct2 === null) continue;
       var x2 = ts.timeToCoordinate(ct2);
       if(x2 === null) continue;
-      // Exact trade price only for active ticker; overlay tickers snap to candle close
-      var pp = (s.ticker === _activeTicker && s.price) ? Number(s.price) : candleCloseMap2[ct2];
+      // Match drawBubbles positioning: active ticker = exact price, overlay = anchor price, fallback = candle close
+      var pp;
+      if(s.ticker === _activeTicker && s.price){
+        pp = Number(s.price);
+      } else if(s.ticker !== _activeTicker && _anchorReady && _anchorBars.length > 0){
+        pp = _anchorPriceAt(timeUnix) || candleCloseMap2[ct2];
+      } else {
+        pp = candleCloseMap2[ct2];
+      }
       if(!pp) continue;
       var y2 = _candleSeries.priceToCoordinate(pp);
       if(y2 === null) continue;
