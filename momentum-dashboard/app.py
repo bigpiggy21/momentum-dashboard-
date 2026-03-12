@@ -855,6 +855,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_ticker_names()
         elif path == "/api/chart/candles" or path == "/api/0dte/candles":
             self.serve_chart_candles(query)
+        elif path == "/api/chart/bb-signals":
+            self.serve_bb_signals(query)
         elif path == "/api/chart/sweeps" or path == "/api/0dte/sweeps":
             self.serve_chart_sweeps(query)
         elif path == "/api/analysis/river":
@@ -5605,6 +5607,134 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         self.send_json({"candles": all_bars, "ticker": ticker,
                         "live_bars": live_appended})
+
+    def serve_bb_signals(self, query=None):
+        """GET /api/chart/bb-signals?ticker=SPY — BB deviation signals from CSV cache.
+        Returns buy/sell for last bar across multiple timeframes, computed locally.
+        """
+        import numpy as np
+        qs = urllib.parse.parse_qs(query or "")
+        ticker = (qs.get("ticker") or ["SPY"])[0].upper().strip()
+
+        # Load CSV cache
+        safe = ticker.replace(":", "_").replace("/", "_")
+        daily_path = os.path.join("cache", f"{safe}_day.csv")
+        hourly_path = os.path.join("cache", f"{safe}_hour.csv")
+
+        results = []
+        period = 20
+        mult = 2.0
+
+        def bb_dev_last(closes, opens):
+            """Compute BB deviation for the last bar given close + open arrays."""
+            if len(closes) < period:
+                return {"buy": False, "sell": False}
+            c = closes[-period:]
+            sma = float(np.mean(c))
+            std = float(np.std(c, ddof=0))
+            upper = sma + mult * std
+            lower = sma - mult * std
+            last_open = opens[-1]
+            last_close = closes[-1]
+            buy = float(last_open) < lower and float(last_close) > lower
+            sell = float(last_open) > upper and float(last_close) < upper
+            return {"buy": buy, "sell": sell}
+
+        def aggregate_simple(df, n):
+            """Aggregate bars by grouping every n rows."""
+            if df is None or len(df) < n:
+                return None
+            # Trim to exact multiple
+            trim = len(df) - (len(df) % n)
+            df2 = df.iloc[-trim:].copy()
+            groups = np.arange(len(df2)) // n
+            agg = df2.groupby(groups).agg(
+                open=("open", "first"), high=("high", "max"),
+                low=("low", "min"), close=("close", "last")
+            )
+            return agg
+
+        def aggregate_weekly(df):
+            """Aggregate daily bars into weekly (Mon–Fri)."""
+            if df is None or len(df) == 0:
+                return None
+            df2 = df.copy()
+            df2["week"] = df2["timestamp"].dt.isocalendar().year.astype(str) + "-" + df2["timestamp"].dt.isocalendar().week.astype(str).str.zfill(2)
+            agg = df2.groupby("week").agg(
+                open=("open", "first"), high=("high", "max"),
+                low=("low", "min"), close=("close", "last")
+            )
+            return agg
+
+        def aggregate_monthly(df, n_months=1):
+            """Aggregate daily bars into N-month bars."""
+            if df is None or len(df) == 0:
+                return None
+            df2 = df.copy()
+            df2["month"] = df2["timestamp"].dt.to_period("M")
+            monthly = df2.groupby("month").agg(
+                open=("open", "first"), high=("high", "max"),
+                low=("low", "min"), close=("close", "last")
+            )
+            if n_months > 1:
+                return aggregate_simple(monthly.reset_index(drop=True), n_months)
+            return monthly
+
+        # Load daily
+        daily_df = None
+        if os.path.exists(daily_path):
+            try:
+                daily_df = pd.read_csv(daily_path, parse_dates=["timestamp"])
+                daily_df = daily_df.sort_values("timestamp").reset_index(drop=True)
+            except Exception:
+                daily_df = None
+
+        # Load hourly
+        hourly_df = None
+        if os.path.exists(hourly_path):
+            try:
+                hourly_df = pd.read_csv(hourly_path, parse_dates=["timestamp"])
+                hourly_df = hourly_df.sort_values("timestamp").reset_index(drop=True)
+            except Exception:
+                hourly_df = None
+
+        # Timeframe definitions: (label, source, aggregation)
+        tf_defs = []
+
+        # Hourly-based TFs
+        if hourly_df is not None and len(hourly_df) >= period:
+            # 1H
+            tf_defs.append(("1H", hourly_df["close"].values, hourly_df["open"].values))
+            # 4H
+            agg4 = aggregate_simple(hourly_df[["open","high","low","close"]], 4)
+            if agg4 is not None and len(agg4) >= period:
+                tf_defs.append(("4H", agg4["close"].values, agg4["open"].values))
+
+        # Daily-based TFs
+        if daily_df is not None and len(daily_df) >= period:
+            tf_defs.append(("D", daily_df["close"].values, daily_df["open"].values))
+            # 2D
+            agg2d = aggregate_simple(daily_df[["open","high","low","close"]], 2)
+            if agg2d is not None and len(agg2d) >= period:
+                tf_defs.append(("2D", agg2d["close"].values, agg2d["open"].values))
+            # Weekly
+            aggw = aggregate_weekly(daily_df)
+            if aggw is not None and len(aggw) >= period:
+                tf_defs.append(("W", aggw["close"].values, aggw["open"].values))
+            # Monthly
+            aggm = aggregate_monthly(daily_df, 1)
+            if aggm is not None and len(aggm) >= period:
+                tf_defs.append(("M", aggm["close"].values, aggm["open"].values))
+            # 3M
+            agg3m = aggregate_monthly(daily_df, 3)
+            if agg3m is not None and len(agg3m) >= period:
+                tf_defs.append(("3M", agg3m["close"].values, agg3m["open"].values))
+
+        for label, closes, opens in tf_defs:
+            sig = bb_dev_last(closes, opens)
+            results.append({"tf": label, "buy": sig["buy"], "sell": sig["sell"]})
+
+        self.send_json({"ticker": ticker, "signals": results})
 
     def serve_chart_sweeps(self, query=None):
         """GET /api/chart/sweeps — darkpool sweeps for multiple tickers with percentile sizing."""

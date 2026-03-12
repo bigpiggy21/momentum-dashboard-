@@ -653,18 +653,7 @@ registerIndicator({
 var _bbDevTable = null;  // DOM element for multi-TF table
 var _bbDevFetchAbort = null; // AbortController for multi-TF fetches
 
-// Timeframe definitions for multi-TF table: {label, interval (Polygon), minutes}
-var _BB_DEV_TFS = [
-  {label:'1H',  interval:60,     mins:60},
-  {label:'4H',  interval:240,    mins:240},
-  {label:'D',   interval:1440,   mins:1440},
-  {label:'2D',  interval:2880,   mins:2880},
-  {label:'W',   interval:10080,  mins:10080},
-  {label:'M',   interval:43200,  mins:43200},
-  {label:'3M',  interval:129600, mins:129600},
-];
-
-// Map _candleInterval to minutes
+// Map _candleInterval to minutes (for highlighting current TF in dev table)
 var _INTERVAL_MINS = {1:1, 5:5, 60:60, 240:240, 1440:1440, 2880:2880, 10080:10080, 43200:43200, 129600:129600};
 
 function _computeBBDev(candles){
@@ -730,64 +719,25 @@ function _renderBBDevTable(results){
 }
 
 function _fetchMultiTFDevSignals(){
-  // Abort previous fetches
+  // Single server-side endpoint — uses CSV cache, no Polygon API calls
   if(_bbDevFetchAbort) _bbDevFetchAbort.abort();
   _bbDevFetchAbort = new AbortController();
   var signal = _bbDevFetchAbort.signal;
   var currentMins = _INTERVAL_MINS[_candleInterval] || _candleInterval;
-  var ticker = _activeTicker;
-  var date = getDate();
 
-  // Show all TFs (unlike TradingView, we fetch each TF independently)
-  var tfs = _BB_DEV_TFS;
-
-  // Build results array with placeholders
-  var results = tfs.map(function(tf){ return {label: tf.label, buy: false, sell: false, current: tf.mins === currentMins}; });
-
-  // For the current TF, compute from already-loaded candles (no extra fetch)
-  var currentTf = tfs.find(function(tf){ return tf.mins === currentMins; });
-  if(currentTf && _candles.length >= 20){
-    var sigs = _computeBBDev(_candles);
-    var last = sigs.length > 0 ? sigs[sigs.length - 1] : null;
-    var idx = tfs.indexOf(currentTf);
-    if(last && _candles.length > 0 && last.time === _candles[_candles.length - 1].time){
-      results[idx].buy = last.buy;
-      results[idx].sell = last.sell;
-    }
-  }
-
-  // Render immediately with current TF data, then fill in others
-  _renderBBDevTable(results);
-
-  // Fetch other TFs in parallel (only 25 bars needed each)
-  var otherTfs = tfs.filter(function(tf){ return tf.mins !== currentMins; });
-  var pending = otherTfs.length;
-  if(pending === 0) return;
-
-  otherTfs.forEach(function(tf){
-    var url = '/api/chart/candles?ticker='+ticker+'&date='+date+'&days=25&interval='+tf.interval;
-    fetch(url, {signal: signal})
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        var candles = d.candles || [];
-        if(candles.length >= 20){
-          var sigs = _computeBBDev(candles);
-          var last = sigs.length > 0 ? sigs[sigs.length - 1] : null;
-          var idx = tfs.indexOf(tf);
-          if(last && candles.length > 0 && last.time === candles[candles.length - 1].time){
-            results[idx].buy = last.buy;
-            results[idx].sell = last.sell;
-          }
-        }
-        pending--;
-        if(pending <= 0) _renderBBDevTable(results);
-      })
-      .catch(function(e){
-        if(e.name !== 'AbortError') console.warn('BB dev fetch error:', e);
-        pending--;
-        if(pending <= 0) _renderBBDevTable(results);
+  fetch('/api/chart/bb-signals?ticker='+_activeTicker, {signal: signal})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var sigs = d.signals || [];
+      var tfMinsMap = {'1H':60,'4H':240,'D':1440,'2D':2880,'W':10080,'M':43200,'3M':129600};
+      var results = sigs.map(function(s){
+        return {label: s.tf, buy: s.buy, sell: s.sell, current: (tfMinsMap[s.tf]||0) === currentMins};
       });
-  });
+      _renderBBDevTable(results);
+    })
+    .catch(function(e){
+      if(e.name !== 'AbortError') console.warn('BB dev fetch error:', e);
+    });
 }
 
 registerIndicator({
