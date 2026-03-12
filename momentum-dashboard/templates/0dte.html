@@ -409,6 +409,7 @@ var _layerCfg = {minNotional:500000, percentile:85, dailyFrom:1, dailyTo:20, sin
 var _chartSweeps = [];       // individual sweep trades
 var _chartEvents = [];       // clusterbomb/rare/monster events with ranks
 var _tickerColorMap = {};    // ticker → {stroke} for tooltip coloring
+var _evMetaCache = {};       // date → {sweep_rank, daily_rank, is_rare, is_cb, is_monster} built in drawBubbles
 
 // Anchor price system: for overlay tickers on larger timeframes, we fetch
 // finer-grained bars of the ACTIVE ticker so we can plot overlay sweeps at
@@ -957,6 +958,10 @@ function drawBubbles(){
   // Fallback for tickers not in overlay
   var _defaultStroke = '#60a5fa';
 
+  // Track drawn bubble positions for overlay layers
+  var _drawnBubbles = [];
+  var _largestPerDate = {};  // date → index into _drawnBubbles
+
   // ---- LAYER: Sweeps (per-ticker color, sized by notional percentile) ----
   if(_activeLayers.sweeps && _chartSweeps.length > 0){
     var sortedN = _chartSweeps.map(function(s){ return s.notional; }).sort(function(a,b){ return a - b; });
@@ -1006,105 +1011,126 @@ function drawBubbles(){
       // Parse stroke hex to rgb for fill with dynamic alpha
       var r = parseInt(stroke.slice(1,3),16), g = parseInt(stroke.slice(3,5),16), b = parseInt(stroke.slice(5,7),16);
       drawCircle(pos.x, pos.y, radius, 'rgba('+r+','+g+','+b+',' + (alpha * 0.75).toFixed(2) + ')', stroke, 1);
+
+      // Track for overlays
+      var bIdx = _drawnBubbles.length;
+      _drawnBubbles.push({x: pos.x, y: pos.y, radius: radius, date: s.date, ticker: s.ticker, notional: s.notional, _isLargestForDate: false});
+      var prevLargest = _largestPerDate[s.date];
+      if(prevLargest == null || s.notional > _drawnBubbles[prevLargest].notional){
+        if(prevLargest != null) _drawnBubbles[prevLargest]._isLargestForDate = false;
+        _drawnBubbles[bIdx]._isLargestForDate = true;
+        _largestPerDate[s.date] = bIdx;
+      }
     });
   }
 
-  // ---- LAYER: CB (yellow + red border, percentile-sized by notional) ----
+  // Build event metadata lookup: date → {sweep_rank, daily_rank, is_rare, is_cb, is_monster, total_notional}
+  _evMetaCache = {};
+  var _evMeta = _evMetaCache;
+  _chartEvents.forEach(function(ev){
+    var prev = _evMeta[ev.date];
+    if(!prev){
+      _evMeta[ev.date] = {
+        sweep_rank: ev.sweep_rank, daily_rank: ev.daily_rank,
+        is_rare: ev.is_rare, is_cb: ev.event_type === 'clusterbomb',
+        is_monster: ev.is_monster || ev.event_type === 'monster_sweep',
+        total_notional: ev.total_notional || 0, sweep_count: ev.sweep_count || 0,
+      };
+    } else {
+      if(ev.sweep_rank != null && (prev.sweep_rank == null || ev.sweep_rank < prev.sweep_rank)) prev.sweep_rank = ev.sweep_rank;
+      if(ev.daily_rank != null && (prev.daily_rank == null || ev.daily_rank < prev.daily_rank)) prev.daily_rank = ev.daily_rank;
+      prev.is_rare = prev.is_rare || ev.is_rare;
+      prev.is_cb = prev.is_cb || ev.event_type === 'clusterbomb';
+      prev.is_monster = prev.is_monster || ev.is_monster || ev.event_type === 'monster_sweep';
+      prev.total_notional = Math.max(prev.total_notional, ev.total_notional || 0);
+      prev.sweep_count = Math.max(prev.sweep_count, ev.sweep_count || 0);
+    }
+  });
+
+  // ---- OVERLAY: Single rank number on biggest sweep per date ----
+  if(_activeLayers.single){
+    // For each date with a sweep_rank, find the largest sweep and draw rank number on it
+    _drawnBubbles.forEach(function(b){
+      var meta = _evMeta[b.date];
+      if(!meta || meta.sweep_rank == null) return;
+      if(meta.sweep_rank < _layerCfg.singleFrom || meta.sweep_rank > _layerCfg.singleTo) return;
+      // Only draw on the biggest sweep for this date (highest notional)
+      if(!b._isLargestForDate) return;
+      _ctx.font = 'bold 10px -apple-system, sans-serif';
+      _ctx.textAlign = 'center'; _ctx.textBaseline = 'middle';
+      _ctx.fillStyle = '#000';
+      _ctx.fillText('#' + meta.sweep_rank, b.x, b.y);
+    });
+  }
+
+  // ---- OVERLAY: CB 💣 emoji on clusterbomb day bubbles ----
   if(_activeLayers.cb){
-    var cbNotionals = [];
-    _chartEvents.forEach(function(ev){
-      if(ev.event_type === 'clusterbomb' || ev.event_type === 'rare_sweep')
-        cbNotionals.push(ev.total_notional || 0);
-    });
-    var cbPct = buildPctLookup(cbNotionals);
-
-    _chartEvents.forEach(function(ev){
-      if(ev.event_type !== 'clusterbomb' && ev.event_type !== 'rare_sweep') return;
-      var pos = getXY(dateToUnix(ev.date));
-      if(!pos) return;
-      var p = cbPct(ev.total_notional || 0);
-      var innerR = _bubbleRadius(p) * 0.6;
-      var outerR = innerR + 4;
-      drawCircle(pos.x, pos.y, outerR, 'rgba(220,38,38,0.20)', 'rgba(220,38,38,0.95)', 2);
-      drawCircle(pos.x, pos.y, innerR, 'rgba(234,179,8,' + _bubbleAlpha(p).toFixed(2) + ')', '#eab308', 1);
-      var label = 'CB';
-      if(ev.sweep_count) label += ' (' + ev.sweep_count + ')';
-      drawLabel(pos.x, pos.y + innerR - 2, label, '#eab308');
+    _drawnBubbles.forEach(function(b){
+      var meta = _evMeta[b.date];
+      if(!meta || !meta.is_cb) return;
+      _ctx.font = Math.max(10, Math.round(b.radius * 0.9)) + 'px serif';
+      _ctx.textAlign = 'center'; _ctx.textBaseline = 'middle';
+      _ctx.fillText('\uD83D\uDCA3', b.x, b.y);
     });
   }
 
-  // ---- LAYER: Monster (orange + red border, percentile-sized by max_notional) ----
+  // ---- OVERLAY: Monster 💥 emoji on monster day bubbles ----
   if(_activeLayers.monster){
-    var mNotionals = [];
-    _chartEvents.forEach(function(ev){
-      if(ev.is_monster || ev.event_type === 'monster_sweep')
-        mNotionals.push(ev.max_notional || ev.total_notional || 0);
-    });
-    var mPct = buildPctLookup(mNotionals);
-
-    _chartEvents.forEach(function(ev){
-      if(!ev.is_monster && ev.event_type !== 'monster_sweep') return;
-      var pos = getXY(dateToUnix(ev.date));
-      if(!pos) return;
-      var val = ev.max_notional || ev.total_notional || 0;
-      var p = mPct(val);
-      var innerR = _bubbleRadius(p) * 0.7;
-      var outerR = innerR + 4;
-      drawCircle(pos.x, pos.y, outerR, 'rgba(220,38,38,0.15)', 'rgba(220,38,38,0.95)', 2);
-      drawCircle(pos.x, pos.y, innerR, 'rgba(249,115,22,' + _bubbleAlpha(p).toFixed(2) + ')', '#f97316', 1);
-      var label = val ? fmt$(val) + ' [M]' : '[M]';
-      drawLabel(pos.x, pos.y + innerR, label, '#f97316');
+    _drawnBubbles.forEach(function(b){
+      var meta = _evMeta[b.date];
+      if(!meta || !meta.is_monster) return;
+      _ctx.font = Math.max(10, Math.round(b.radius * 0.9)) + 'px serif';
+      _ctx.textAlign = 'center'; _ctx.textBaseline = 'middle';
+      _ctx.fillText('\uD83D\uDCA5', b.x, b.y);
     });
   }
 
-  // ---- LAYER: Daily (amber, rank→percentile→exponential curve) ----
-  if(_activeLayers.daily){
+  // ---- OVERLAY: Rare purple R ----
+  if(_activeLayers.rare){
+    _drawnBubbles.forEach(function(b){
+      var meta = _evMeta[b.date];
+      if(!meta || !meta.is_rare) return;
+      _ctx.font = 'bold ' + Math.max(9, Math.round(b.radius * 0.7)) + 'px -apple-system, sans-serif';
+      _ctx.textAlign = 'center'; _ctx.textBaseline = 'middle';
+      _ctx.fillStyle = '#c4b5fd';
+      _ctx.fillText('R', b.x, b.y);
+    });
+  }
+
+  // ---- LAYER: Daily volume histogram at bottom ----
+  if(_activeLayers.daily && _chartEvents.length > 0){
+    var histH = 50;  // max bar height in pixels
+    var histBottom = _canvas.height - 4;
+    // Collect daily totals from events with daily_rank
+    var dailyBars = [];
     _chartEvents.forEach(function(ev){
       var dr = ev.daily_rank;
       if(dr == null) return;
       if(dr < _layerCfg.dailyFrom || dr > _layerCfg.dailyTo) return;
-      var pos = getXY(dateToUnix(ev.date));
-      if(!pos) return;
-      var p = rankToP(dr, _layerCfg.dailyFrom, _layerCfg.dailyTo);
-      var radius = _bubbleRadius(p);
-      var alpha = _bubbleAlpha(p);
-      drawCircle(pos.x, pos.y, radius, 'rgba(245,158,11,' + alpha.toFixed(2) + ')', '#f59e0b', 1);
-      drawLabel(pos.x, pos.y, 'D#' + dr, '#f59e0b');
+      dailyBars.push({date: ev.date, notional: ev.total_notional || 0, rank: dr, count: ev.sweep_count || 0});
     });
-  }
-
-  // ---- LAYER: Single (blue, rank→percentile→exponential curve) ----
-  if(_activeLayers.single){
-    _chartEvents.forEach(function(ev){
-      var sr = ev.sweep_rank;
-      if(sr == null) return;
-      if(sr < _layerCfg.singleFrom || sr > _layerCfg.singleTo) return;
-      var pos = getXY(dateToUnix(ev.date));
-      if(!pos) return;
-      var p = rankToP(sr, _layerCfg.singleFrom, _layerCfg.singleTo);
-      var radius = _bubbleRadius(p);
-      var alpha = _bubbleAlpha(p);
-      drawCircle(pos.x, pos.y - 2, radius, 'rgba(59,130,246,' + alpha.toFixed(2) + ')', '#3b82f6', 1);
-      drawLabel(pos.x, pos.y - 2, 'S#' + sr, '#3b82f6');
-    });
-  }
-
-  // ---- LAYER: Rare (purple, percentile-sized by notional) ----
-  if(_activeLayers.rare){
-    var rareN = [];
-    _chartEvents.forEach(function(ev){ if(ev.is_rare) rareN.push(ev.total_notional || 0); });
-    var rarePct = buildPctLookup(rareN);
-
-    _chartEvents.forEach(function(ev){
-      if(!ev.is_rare) return;
-      var pos = getXY(dateToUnix(ev.date));
-      if(!pos) return;
-      var p = rarePct(ev.total_notional || 0);
-      var radius = _bubbleRadius(p) * 0.6;
-      var alpha = _bubbleAlpha(p);
-      drawCircle(pos.x, pos.y + 2, radius, 'rgba(167,139,250,' + alpha.toFixed(2) + ')', '#a78bfa', 1);
-      drawLabel(pos.x, pos.y + 2, '[R]', '#c4b5fd');
-    });
+    if(dailyBars.length > 0){
+      var maxN = Math.max.apply(null, dailyBars.map(function(d){ return d.notional; }));
+      dailyBars.forEach(function(d){
+        var candleT = nearestCandleTime(dateToUnix(d.date));
+        if(candleT === null) return;
+        var x = ts.timeToCoordinate(candleT);
+        if(x === null || x < 0 || x > _canvas.width) return;
+        var barH = maxN > 0 ? Math.max(4, (d.notional / maxN) * histH) : 4;
+        var barW = 8;
+        // Bar fill — amber gradient
+        _ctx.fillStyle = 'rgba(245,158,11,0.35)';
+        _ctx.fillRect(x - barW/2, histBottom - barH, barW, barH);
+        _ctx.strokeStyle = 'rgba(245,158,11,0.7)';
+        _ctx.lineWidth = 1;
+        _ctx.strokeRect(x - barW/2, histBottom - barH, barW, barH);
+        // Rank label above bar
+        _ctx.font = 'bold 9px -apple-system, sans-serif';
+        _ctx.textAlign = 'center'; _ctx.textBaseline = 'bottom';
+        _ctx.fillStyle = '#f59e0b';
+        _ctx.fillText('D#' + d.rank, x, histBottom - barH - 2);
+      });
+    }
   }
 }
 
@@ -1249,7 +1275,17 @@ function onMouseMove(e){
         if(sw.price) parts.push('@ $' + Number(sw.price).toFixed(2));
         if(sw.notional) parts.push('= <b>$' + fmt$(sw.notional) + '</b>');
         if(sw.notional) parts.push('Pct: ' + _tipPct(sw.notional) + '%');
-        if(sw.condition) parts.push(sw.condition);
+        // Add event metadata tags from _evMetaCache
+        var swMeta = _evMetaCache[sw.date];
+        if(swMeta){
+          var mtags = [];
+          if(swMeta.sweep_rank != null) mtags.push('<span style="color:#3b82f6">S#' + swMeta.sweep_rank + '</span>');
+          if(swMeta.daily_rank != null) mtags.push('<span style="color:#f59e0b">D#' + swMeta.daily_rank + '</span>');
+          if(swMeta.is_cb) mtags.push('<span style="color:#eab308">\uD83D\uDCA3</span>');
+          if(swMeta.is_monster) mtags.push('<span style="color:#f97316">\uD83D\uDCA5</span>');
+          if(swMeta.is_rare) mtags.push('<span style="color:#c4b5fd">R</span>');
+          if(mtags.length) parts.push(mtags.join(' '));
+        }
         rows.push(parts.join('; '));
       } else {
         var ev2 = hit.data;

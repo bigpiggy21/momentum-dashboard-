@@ -5661,6 +5661,66 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         # Price normalisation now done on frontend: non-ref sweeps placed at
         # SPY's candle close for the same timestamp (no ratio needed server-side)
 
+        # 3) Load event metadata (ranks, types) from clusterbomb_events for these tickers+dates
+        event_meta = {}  # (ticker, date) → {sweep_rank, daily_rank, is_rare, is_cb, is_monster, event_type}
+        try:
+            meta_sql = f"""
+                SELECT ticker, event_date, event_type, is_rare, is_monster,
+                       sweep_rank, daily_rank, total_notional, sweep_count
+                FROM clusterbomb_events
+                WHERE ticker IN ({placeholders})
+                  AND event_date >= ? AND event_date <= ?
+            """
+            meta_rows = conn.execute(meta_sql, tickers + [from_str, date_str]).fetchall()
+            for mr in meta_rows:
+                key = (mr["ticker"], mr["event_date"])
+                prev = event_meta.get(key)
+                # Multiple events can exist per (ticker, date) — merge them
+                if prev is None:
+                    event_meta[key] = {
+                        "sweep_rank": mr["sweep_rank"],
+                        "daily_rank": mr["daily_rank"],
+                        "is_rare": bool(mr["is_rare"]),
+                        "is_cb": mr["event_type"] == "clusterbomb",
+                        "is_monster": bool(mr["is_monster"]) or mr["event_type"] == "monster_sweep",
+                        "total_notional": mr["total_notional"] or 0,
+                        "sweep_count": mr["sweep_count"] or 0,
+                    }
+                else:
+                    # Merge: keep best ranks, OR the flags
+                    if mr["sweep_rank"] and (prev["sweep_rank"] is None or mr["sweep_rank"] < prev["sweep_rank"]):
+                        prev["sweep_rank"] = mr["sweep_rank"]
+                    if mr["daily_rank"] and (prev["daily_rank"] is None or mr["daily_rank"] < prev["daily_rank"]):
+                        prev["daily_rank"] = mr["daily_rank"]
+                    prev["is_rare"] = prev["is_rare"] or bool(mr["is_rare"])
+                    prev["is_cb"] = prev["is_cb"] or (mr["event_type"] == "clusterbomb")
+                    prev["is_monster"] = prev["is_monster"] or bool(mr["is_monster"]) or mr["event_type"] == "monster_sweep"
+                    prev["total_notional"] = max(prev["total_notional"], mr["total_notional"] or 0)
+                    prev["sweep_count"] = max(prev["sweep_count"], mr["sweep_count"] or 0)
+        except Exception:
+            pass
+
+        # 3b) Build daily aggregate for histogram (all DP sweeps per date, not just filtered)
+        daily_agg = {}  # date → {notional, count, tickers}
+        try:
+            daily_sql = f"""
+                SELECT trade_date, SUM(notional) as total_notional, COUNT(*) as cnt
+                FROM sweep_trades
+                WHERE ticker IN ({placeholders})
+                  AND trade_date >= ? AND trade_date <= ?
+                  AND is_darkpool = 1 AND is_sweep = 1
+                GROUP BY trade_date
+                ORDER BY trade_date
+            """
+            daily_rows = conn.execute(daily_sql, tickers + [from_str, date_str]).fetchall()
+            for dr in daily_rows:
+                daily_agg[dr["trade_date"]] = {
+                    "notional": dr["total_notional"],
+                    "count": dr["cnt"],
+                }
+        except Exception:
+            pass
+
         conn.close()
 
         # 4) Build response with percentiles
@@ -5710,6 +5770,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             time_unix = (time_unix // 60) * 60
 
             pct = _percentile(r["ticker"], r["notional"])
+            meta = event_meta.get((r["ticker"], r["trade_date"]), {})
             sweeps.append({
                 "ticker": r["ticker"],
                 "time_unix": time_unix,
@@ -5719,6 +5780,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 "size": r["size"],
                 "notional": r["notional"],
                 "percentile": pct,
+                "sweep_rank": meta.get("sweep_rank"),
+                "daily_rank": meta.get("daily_rank"),
+                "is_rare": meta.get("is_rare", False),
+                "is_cb": meta.get("is_cb", False),
+                "is_monster": meta.get("is_monster", False),
             })
 
         self.send_json({
@@ -5726,6 +5792,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             "tickers": tickers,
             "date": date_str,
             "total": len(sweeps),
+            "daily_agg": daily_agg,
         })
 
     def send_json(self, data):
