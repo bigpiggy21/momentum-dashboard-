@@ -1119,9 +1119,10 @@ function drawBubbles(){
     });
   }
 
-  // ---- OVERLAY: CB 💣 emoji on clusterbomb day bubbles ----
+  // ---- OVERLAY: CB 💣 emoji on largest bubble per clusterbomb day ----
   if(_activeLayers.cb){
     _drawnBubbles.forEach(function(b){
+      if(!b._isLargestForDate) return;
       var meta = _evMeta[b.date];
       if(!meta || !meta.is_cb) return;
       _ctx.font = Math.max(10, Math.round(b.radius * 0.9)) + 'px serif';
@@ -1130,9 +1131,10 @@ function drawBubbles(){
     });
   }
 
-  // ---- OVERLAY: Monster 💥 emoji on monster day bubbles ----
+  // ---- OVERLAY: Monster 💥 emoji on largest bubble per monster day ----
   if(_activeLayers.monster){
     _drawnBubbles.forEach(function(b){
+      if(!b._isLargestForDate) return;
       var meta = _evMeta[b.date];
       if(!meta || !meta.is_monster) return;
       _ctx.font = Math.max(10, Math.round(b.radius * 0.9)) + 'px serif';
@@ -1141,9 +1143,10 @@ function drawBubbles(){
     });
   }
 
-  // ---- OVERLAY: Rare purple R ----
+  // ---- OVERLAY: Rare purple R on largest bubble per rare day ----
   if(_activeLayers.rare){
     _drawnBubbles.forEach(function(b){
+      if(!b._isLargestForDate) return;
       var meta = _evMeta[b.date];
       if(!meta || !meta.is_rare) return;
       _ctx.font = 'bold ' + Math.max(9, Math.round(b.radius * 0.7)) + 'px -apple-system, sans-serif';
