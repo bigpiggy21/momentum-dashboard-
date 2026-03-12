@@ -410,6 +410,7 @@ var _chartSweeps = [];       // individual sweep trades
 var _chartEvents = [];       // clusterbomb/rare/monster events with ranks
 var _tickerColorMap = {};    // ticker → {stroke} for tooltip coloring
 var _evMetaCache = {};       // date → {sweep_rank, daily_rank, is_rare, is_cb, is_monster} built in drawBubbles
+var _dailyHistSeries = null; // LightweightCharts histogram series for daily volume
 
 // Anchor price system: for overlay tickers on larger timeframes, we fetch
 // finer-grained bars of the ACTIVE ticker so we can plot overlay sweeps at
@@ -500,6 +501,20 @@ function initChart(){
     upColor:'transparent', downColor:'#b22833',
     borderUpColor:'#056656', borderDownColor:'#b22833',
     wickUpColor:'#056656', wickDownColor:'#b22833',
+  });
+
+  // Daily DP volume histogram — separate price scale on right
+  _dailyHistSeries = _chart.addHistogramSeries({
+    priceScaleId: 'dp_volume',
+    color: 'rgba(245,158,11,0.4)',
+    priceFormat: {type:'volume'},
+    lastValueVisible: false,
+    priceLineVisible: false,
+  });
+  _chart.priceScale('dp_volume').applyOptions({
+    scaleMargins: {top: 0.8, bottom: 0},
+    borderVisible: true,
+    borderColor: '#1e1e2e',
   });
 
   _canvas = document.getElementById('bubbleCanvas');
@@ -852,6 +867,7 @@ function fetchSweepChart(){
         r.events.forEach(function(e){ e.ticker = r.ticker; _chartEvents.push(e); });
       });
       drawBubbles();
+      updateDailyHist();
       updateStats();
       updateFeed();
     })
@@ -861,6 +877,46 @@ function fetchSweepChart(){
 function _setLoading(on){
   _loading = on;
   document.getElementById('tickerInput').style.borderColor = on ? '#f59e0b' : '#2a2a3a';
+}
+
+// ====================================================================
+// DAILY DP VOLUME HISTOGRAM (LightweightCharts series)
+// ====================================================================
+function updateDailyHist(){
+  if(!_dailyHistSeries || !_chart) return;
+  if(!_activeLayers.daily || _chartEvents.length === 0){
+    _dailyHistSeries.setData([]);
+    return;
+  }
+  // Build date→candle_time map so histogram bars align with candles
+  var dateToCandleTime = {};
+  _candles.forEach(function(c){
+    // Convert unix ts to YYYY-MM-DD for matching
+    var d = new Date(c.time * 1000);
+    var key = d.getUTCFullYear() + '-' + String(d.getUTCMonth()+1).padStart(2,'0') + '-' + String(d.getUTCDate()).padStart(2,'0');
+    dateToCandleTime[key] = c.time;
+  });
+
+  // Aggregate daily totals from events with daily_rank in range
+  var dailyMap = {}; // candle time → {notional, rank}
+  _chartEvents.forEach(function(ev){
+    var dr = ev.daily_rank;
+    if(dr == null) return;
+    if(dr < _layerCfg.dailyFrom || dr > _layerCfg.dailyTo) return;
+    var candleT = dateToCandleTime[ev.date];
+    if(!candleT) return; // no matching candle on chart
+    var prev = dailyMap[candleT];
+    if(!prev || ev.total_notional > prev.notional){
+      dailyMap[candleT] = {notional: ev.total_notional || 0, rank: dr};
+    }
+  });
+  // Build sorted data array
+  var data = [];
+  Object.keys(dailyMap).map(Number).sort(function(a,b){return a-b;}).forEach(function(t){
+    var d = dailyMap[t];
+    data.push({time: t, value: d.notional, color: 'rgba(245,158,11,0.35)'});
+  });
+  _dailyHistSeries.setData(data);
 }
 
 // ====================================================================
@@ -1097,41 +1153,6 @@ function drawBubbles(){
     });
   }
 
-  // ---- LAYER: Daily volume histogram at bottom ----
-  if(_activeLayers.daily && _chartEvents.length > 0){
-    var histH = 50;  // max bar height in pixels
-    var histBottom = _canvas.height - 4;
-    // Collect daily totals from events with daily_rank
-    var dailyBars = [];
-    _chartEvents.forEach(function(ev){
-      var dr = ev.daily_rank;
-      if(dr == null) return;
-      if(dr < _layerCfg.dailyFrom || dr > _layerCfg.dailyTo) return;
-      dailyBars.push({date: ev.date, notional: ev.total_notional || 0, rank: dr, count: ev.sweep_count || 0});
-    });
-    if(dailyBars.length > 0){
-      var maxN = Math.max.apply(null, dailyBars.map(function(d){ return d.notional; }));
-      dailyBars.forEach(function(d){
-        var candleT = nearestCandleTime(dateToUnix(d.date));
-        if(candleT === null) return;
-        var x = ts.timeToCoordinate(candleT);
-        if(x === null || x < 0 || x > _canvas.width) return;
-        var barH = maxN > 0 ? Math.max(4, (d.notional / maxN) * histH) : 4;
-        var barW = 8;
-        // Bar fill — amber gradient
-        _ctx.fillStyle = 'rgba(245,158,11,0.35)';
-        _ctx.fillRect(x - barW/2, histBottom - barH, barW, barH);
-        _ctx.strokeStyle = 'rgba(245,158,11,0.7)';
-        _ctx.lineWidth = 1;
-        _ctx.strokeRect(x - barW/2, histBottom - barH, barW, barH);
-        // Rank label above bar
-        _ctx.font = 'bold 9px -apple-system, sans-serif';
-        _ctx.textAlign = 'center'; _ctx.textBaseline = 'bottom';
-        _ctx.fillStyle = '#f59e0b';
-        _ctx.fillText('D#' + d.rank, x, histBottom - barH - 2);
-      });
-    }
-  }
 }
 
 // ====================================================================
@@ -1380,6 +1401,7 @@ function _syncIntervalButtons(){
 function toggleLayer(layer, btn){
   _activeLayers[layer] = !_activeLayers[layer];
   btn.classList.toggle('active', _activeLayers[layer]);
+  if(layer === 'daily') updateDailyHist();
   drawBubbles();
   updateStats();
 }
