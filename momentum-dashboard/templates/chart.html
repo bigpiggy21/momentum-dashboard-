@@ -652,6 +652,7 @@ registerIndicator({
 // ====================================================================
 var _bbDevTable = null;  // DOM element for multi-TF table
 var _bbDevFetchAbort = null; // AbortController for multi-TF fetches
+var _bbDevSignals = [];  // [{time, buy, sell}] — stored for canvas drawing in drawBubbles()
 
 // Map _candleInterval to minutes (for highlighting current TF in dev table)
 var _INTERVAL_MINS = {1:1, 5:5, 60:60, 240:240, 1440:1440, 2880:2880, 10080:10080, 43200:43200, 129600:129600};
@@ -751,28 +752,20 @@ registerIndicator({
   },
   compute: function(candles, ind){
     if(!candles || candles.length < 20){
-      _candleSeries.setMarkers([]);
+      _bbDevSignals = [];
+      drawBubbles(); // redraw canvas without signals
       return;
     }
-    // Compute signals for current TF candles → markers
-    var signals = _computeBBDev(candles);
-    var markers = signals.map(function(s){
-      if(s.buy){
-        return {time: s.time, position: 'belowBar', color: '#0b570f', shape: 'arrowUp', text: 'B'};
-      } else {
-        return {time: s.time, position: 'aboveBar', color: '#700909', shape: 'arrowDown', text: 'S'};
-      }
-    });
-    // Sort markers by time (required by LightweightCharts)
-    markers.sort(function(a,b){ return a.time - b.time; });
-    _candleSeries.setMarkers(markers);
+    // Compute signals — stored for canvas drawing in drawBubbles()
+    _bbDevSignals = _computeBBDev(candles);
+    drawBubbles(); // redraw canvas with signals
     // Fetch multi-TF table
     _fetchMultiTFDevSignals();
   },
   remove: function(){
     var ind = _indicators['bb_dev'];
-    // Clear markers
-    if(_candleSeries) _candleSeries.setMarkers([]);
+    _bbDevSignals = [];
+    drawBubbles(); // clear signals from canvas
     // Remove table
     _destroyBBDevTable();
     // Cancel pending fetches
@@ -1700,6 +1693,89 @@ function drawBubbles(){
       _ctx.fillStyle = '#a855f6';
       _ctx.globalAlpha = 1.0;
       _ctx.fillText('R', b.x, b.y);
+    });
+  }
+
+  // --- BB Deviation Signals (canvas-drawn labels) ---
+  if(_bbDevSignals.length > 0 && _indicators['bb_dev'] && _indicators['bb_dev'].enabled){
+    var ts2 = _chart.timeScale();
+    _bbDevSignals.forEach(function(sig){
+      var xCoord = ts2.timeToCoordinate(sig.time);
+      if(xCoord === null || xCoord < 0 || xCoord > _canvas.width) return;
+
+      // Find the candle to position above/below
+      var candle = null;
+      for(var ci = 0; ci < _candles.length; ci++){
+        if(_candles[ci].time === sig.time){ candle = _candles[ci]; break; }
+      }
+      if(!candle) return;
+
+      var isBuy = sig.buy;
+      var color = isBuy ? '#0b570f' : '#700909';
+      var text = isBuy ? 'B' : 'S';
+      var priceCoord;
+
+      if(isBuy){
+        // Below bar — use low price
+        priceCoord = _candleSeries.priceToCoordinate(candle.low);
+        if(priceCoord === null) return;
+        var labelY = priceCoord + 20; // below the bar
+        // Draw downward-pointing label (rounded rect with arrow on top pointing up toward bar)
+        var w = 18, h = 16, arrowH = 5, r = 3;
+        var lx = xCoord - w/2, ly = labelY;
+        _ctx.beginPath();
+        // Arrow point (top center, pointing up toward bar)
+        _ctx.moveTo(xCoord, ly - arrowH);
+        _ctx.lineTo(xCoord + 5, ly);
+        _ctx.lineTo(xCoord + w/2 - r, ly);
+        _ctx.arcTo(xCoord + w/2, ly, xCoord + w/2, ly + r, r);
+        _ctx.lineTo(xCoord + w/2, ly + h - r);
+        _ctx.arcTo(xCoord + w/2, ly + h, xCoord + w/2 - r, ly + h, r);
+        _ctx.lineTo(xCoord - w/2 + r, ly + h);
+        _ctx.arcTo(xCoord - w/2, ly + h, xCoord - w/2, ly + h - r, r);
+        _ctx.lineTo(xCoord - w/2, ly + r);
+        _ctx.arcTo(xCoord - w/2, ly, xCoord - w/2 + r, ly, r);
+        _ctx.lineTo(xCoord - 5, ly);
+        _ctx.closePath();
+        _ctx.fillStyle = color;
+        _ctx.fill();
+        // White bold text
+        _ctx.font = 'bold 11px -apple-system, sans-serif';
+        _ctx.textAlign = 'center'; _ctx.textBaseline = 'middle';
+        _ctx.fillStyle = '#ffffff';
+        _ctx.fillText(text, xCoord, ly + h/2);
+      } else {
+        // Above bar — use high price
+        priceCoord = _candleSeries.priceToCoordinate(candle.high);
+        if(priceCoord === null) return;
+        var labelY = priceCoord - 20; // above the bar
+        // Draw upward label (rounded rect with arrow on bottom pointing down toward bar)
+        var w = 18, h = 16, arrowH = 5, r = 3;
+        var topY = labelY - h;
+        _ctx.beginPath();
+        // Top-left corner
+        _ctx.moveTo(xCoord - w/2 + r, topY);
+        _ctx.lineTo(xCoord + w/2 - r, topY);
+        _ctx.arcTo(xCoord + w/2, topY, xCoord + w/2, topY + r, r);
+        _ctx.lineTo(xCoord + w/2, topY + h - r);
+        _ctx.arcTo(xCoord + w/2, topY + h, xCoord + w/2 - r, topY + h, r);
+        _ctx.lineTo(xCoord + 5, topY + h);
+        // Arrow point (bottom center, pointing down toward bar)
+        _ctx.lineTo(xCoord, topY + h + arrowH);
+        _ctx.lineTo(xCoord - 5, topY + h);
+        _ctx.lineTo(xCoord - w/2 + r, topY + h);
+        _ctx.arcTo(xCoord - w/2, topY + h, xCoord - w/2, topY + h - r, r);
+        _ctx.lineTo(xCoord - w/2, topY + r);
+        _ctx.arcTo(xCoord - w/2, topY, xCoord - w/2 + r, topY, r);
+        _ctx.closePath();
+        _ctx.fillStyle = color;
+        _ctx.fill();
+        // White bold text
+        _ctx.font = 'bold 11px -apple-system, sans-serif';
+        _ctx.textAlign = 'center'; _ctx.textBaseline = 'middle';
+        _ctx.fillStyle = '#ffffff';
+        _ctx.fillText(text, xCoord, topY + h/2);
+      }
     });
   }
 
