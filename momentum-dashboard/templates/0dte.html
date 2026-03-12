@@ -909,8 +909,10 @@ function drawBubbles(){
       }
       timeUnix = Math.floor(timeUnix / 60) * 60;
 
-      // Use exact trade price for y-position on intraday timeframes
-      var pos = getXY(timeUnix, s.price ? Number(s.price) : undefined);
+      // Use exact trade price only for the active ticker (its price scale matches the chart).
+      // Overlay tickers trade at different prices, so snap them to candle close.
+      var usePrice = (s.ticker === _activeTicker && s.price) ? Number(s.price) : undefined;
+      var pos = getXY(timeUnix, usePrice);
       if(!pos) return;
 
       var p = pct / 100;
@@ -1090,8 +1092,8 @@ function onMouseMove(e){
       if(ct2 === null) continue;
       var x2 = ts.timeToCoordinate(ct2);
       if(x2 === null) continue;
-      // Use exact trade price for hit-test (matches drawBubbles placement)
-      var pp = (s.price ? Number(s.price) : null) || candleCloseMap2[ct2];
+      // Exact trade price only for active ticker; overlay tickers snap to candle close
+      var pp = (s.ticker === _activeTicker && s.price) ? Number(s.price) : candleCloseMap2[ct2];
       if(!pp) continue;
       var y2 = _candleSeries.priceToCoordinate(pp);
       if(y2 === null) continue;
