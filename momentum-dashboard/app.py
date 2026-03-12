@@ -855,6 +855,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_ticker_names()
         elif path == "/api/chart/candles" or path == "/api/0dte/candles":
             self.serve_chart_candles(query)
+        elif path == "/api/chart/live-bar":
+            self.serve_chart_live_bar(query)
         elif path == "/api/chart/bb-signals":
             self.serve_bb_signals(query)
         elif path == "/api/chart/sweeps" or path == "/api/0dte/sweeps":
@@ -5607,6 +5609,42 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         self.send_json({"candles": all_bars, "ticker": ticker,
                         "live_bars": live_appended})
+
+    def serve_chart_live_bar(self, query=None):
+        """GET /api/chart/live-bar?ticker=SPY&interval=1 — lightweight live bar from daemon.
+
+        Returns just the latest forming bar(s) from daemon memory.
+        Designed for fast polling (1-2s) to give TradingView-style live candle updates.
+        """
+        qs = urllib.parse.parse_qs(query or "")
+        ticker = (qs.get("ticker") or ["SPY"])[0].upper().strip()
+        interval = int((qs.get("interval") or ["1"])[0])
+
+        if _live_daemon is None:
+            self.send_json({"bars": [], "ticker": ticker})
+            return
+
+        # Map interval string to minutes
+        interval_map = {"1": 1, "5": 5, "15": 15, "30": 30, "60": 60, "1440": 1440}
+        mins = interval_map.get(str(interval), interval)
+
+        live_bars = _live_daemon.get_live_bars(ticker, mins)
+        if not live_bars:
+            self.send_json({"bars": [], "ticker": ticker})
+            return
+
+        # Return only the last 2 bars (current forming + previous completed)
+        tail = live_bars[-2:] if len(live_bars) > 1 else live_bars
+        out = []
+        for lb in tail:
+            out.append({
+                "time": lb["t"],
+                "open": lb["o"], "high": lb["h"],
+                "low": lb["l"], "close": lb["c"],
+                "volume": lb.get("v", 0),
+            })
+
+        self.send_json({"bars": out, "ticker": ticker})
 
     def serve_bb_signals(self, query=None):
         """GET /api/chart/bb-signals?ticker=SPY — BB deviation signals from CSV cache.

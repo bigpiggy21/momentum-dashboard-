@@ -505,6 +505,7 @@ var _loading = false;
 var _fetchController = null;   // AbortController — cancels in-flight fetches on ticker change
 var _sweepTimer = null;
 var _candleTimer = null;
+var _liveBarTimer = null;
 var _tickerPrices = {};  // {ticker: {price, change, changePct}}
 
 // ====================================================================
@@ -2441,14 +2442,54 @@ function onLayerCfgChange(){
 function _startLiveTimers(){
   clearInterval(_sweepTimer);
   clearInterval(_candleTimer);
+  clearInterval(_liveBarTimer);
   _candleTimer = setInterval(fetchCandles, 60000);
   _sweepTimer = setInterval(fetchSweepChart, 30000);
+  // Fast live-bar polling: 1s for 1m, 2s for 5m, 5s for ≥15m
+  var liveMs = _candleInterval <= 1 ? 1000 : _candleInterval <= 5 ? 2000 : 5000;
+  _liveBarTimer = setInterval(fetchLiveBar, liveMs);
+}
+
+function fetchLiveBar(){
+  if(!_activeTicker || !_candleSeries) return;
+  fetch('/api/chart/live-bar?ticker='+_activeTicker+'&interval='+_candleInterval)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var bars = d.bars || [];
+      if(bars.length === 0) return;
+      var changed = false;
+      bars.forEach(function(b){
+        if(_candles.length === 0) return;
+        var lastCandle = _candles[_candles.length - 1];
+        if(b.time > lastCandle.time){
+          // New bar — append
+          _candles.push(b);
+          _updateSeriesBar(b);
+          changed = true;
+        } else if(b.time === lastCandle.time){
+          // Update forming candle if price changed
+          if(b.close !== lastCandle.close || b.high !== lastCandle.high || b.low !== lastCandle.low){
+            lastCandle.high = Math.max(lastCandle.high, b.high);
+            lastCandle.low = Math.min(lastCandle.low, b.low);
+            lastCandle.close = b.close;
+            lastCandle.volume = b.volume;
+            _updateSeriesBar(lastCandle);
+            changed = true;
+          }
+        }
+      });
+      if(changed) drawBubbles();
+    })
+    .catch(function(){});
 }
 
 document.addEventListener('visibilitychange', function(){
   if(!document.hidden){
     _startLiveTimers();
     fetchCandles();
+  } else {
+    // Stop fast polling when tab is hidden to save resources
+    clearInterval(_liveBarTimer);
   }
 });
 
