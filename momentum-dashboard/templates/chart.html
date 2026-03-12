@@ -49,6 +49,9 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .chart-area{flex:1;position:relative;overflow:hidden;}
 #chartContainer{width:100%;height:100%;position:relative;}
 #bubbleCanvas{position:absolute;top:0;left:0;pointer-events:none;z-index:5;}
+#tickerOverlay{position:absolute;top:8px;left:60px;z-index:6;pointer-events:none;font-family:'Inter',sans-serif;}
+#tickerOverlay .overlay-ticker{font-size:26px;font-weight:700;color:rgba(255,255,255,0.35);letter-spacing:1px;}
+#tickerOverlay .overlay-name{font-size:13px;font-weight:400;color:rgba(255,255,255,0.2);margin-top:1px;}
 #tooltipDiv{position:absolute;display:none;background:rgba(0,0,0,0.92);border:1px solid #334155;border-radius:4px;padding:5px 8px;font-size:11px;color:#c8c8d4;pointer-events:none;z-index:10;white-space:nowrap;line-height:1.5;}
 
 /* Left panel sections */
@@ -199,6 +202,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
     <button class="collapse-btn" id="collapseBtn" onclick="togglePanel()">&#x25C0;</button>
     <div id="chartContainer"></div>
     <canvas id="bubbleCanvas"></canvas>
+    <div id="tickerOverlay"></div>
     <div id="tooltipDiv"></div>
   </div>
 </div>
@@ -408,6 +412,7 @@ var _layerCfg = {minNotional:500000, percentile:85, dailyFrom:1, dailyTo:20, sin
 var _chartSweeps = [];       // individual sweep trades
 var _chartEvents = [];       // clusterbomb/rare/monster events with ranks
 var _tickerColorMap = {};    // ticker → {stroke} for tooltip coloring
+var _tickerNames = {};       // ticker → company name cache
 var _evMetaCache = {};       // date → {sweep_rank, daily_rank, is_rare, is_cb, is_monster} built in drawBubbles
 var _dailyHistSeries = null; // LightweightCharts histogram series for daily volume
 
@@ -469,6 +474,12 @@ var _tickerPrices = {};  // {ticker: {price, change, changePct}}
   // Build initial watchlist view
   buildWatchlistView();
 
+  // Fetch ticker names for overlay
+  fetch('/api/ticker-names').then(function(r){return r.json();}).then(function(d){
+    _tickerNames = d || {};
+    updateTickerOverlay();
+  }).catch(function(){});
+
   // Init chart
   initChart();
   loadAll(true);
@@ -476,6 +487,14 @@ var _tickerPrices = {};  // {ticker: {price, change, changePct}}
   // Always-live: auto-refresh candles every 60s, sweeps every 30s
   _startLiveTimers();
 })();
+
+function updateTickerOverlay(){
+  var el = document.getElementById('tickerOverlay');
+  if(!el) return;
+  var name = _tickerNames[_activeTicker] || '';
+  el.innerHTML = '<div class="overlay-ticker">' + _activeTicker + '</div>'
+    + (name ? '<div class="overlay-name">' + name + '</div>' : '');
+}
 
 // ====================================================================
 // CHART
@@ -560,6 +579,7 @@ function setActiveTicker(ticker, source){
 
   // Build overlay for this ticker
   buildOverlayForTicker(ticker);
+  updateTickerOverlay();
 
   // Clear old candles so chart resets price scale to new ticker's range
   if(tickerChanged){
@@ -690,7 +710,7 @@ function onWatchlistChange(){
 function fetchTickerPrices(tickers){
   // Fetch last daily candle for each ticker to get price + change
   tickers.forEach(function(ticker){
-    fetch('/api/0dte/candles?ticker='+ticker+'&date='+getDate()+'&days=2&interval=1440')
+    fetch('/api/chart/candles?ticker='+ticker+'&date='+getDate()+'&days=2&interval=1440')
       .then(function(r){ return r.json(); })
       .then(function(d){
         var candles = d.candles || [];
@@ -754,7 +774,7 @@ function fetchAnchorBars(){
   var dateTo = end.toISOString().slice(0,10);
   var signal = _fetchController ? _fetchController.signal : undefined;
 
-  var url = '/api/0dte/candles?ticker='+_activeTicker
+  var url = '/api/chart/candles?ticker='+_activeTicker
     +'&date='+dateTo+'&days='+sweepDays+'&interval='
     + (res.unit === 'minute' ? res.mult : (res.unit === 'hour' ? res.mult * 60 : res.mult * 1440));
 
@@ -791,7 +811,7 @@ function fetchCandles(){
   var days = getDays();
   var signal = _fetchController ? _fetchController.signal : undefined;
   _setLoading(true);
-  fetch('/api/0dte/candles?ticker='+_activeTicker+'&date='+date+'&days='+days+'&interval='+_candleInterval, {signal: signal})
+  fetch('/api/chart/candles?ticker='+_activeTicker+'&date='+date+'&days='+days+'&interval='+_candleInterval, {signal: signal})
     .then(function(r){return r.json();})
     .then(function(d){
       var newCandles = d.candles || [];
@@ -1545,7 +1565,7 @@ function fmt$(v){
 // ====================================================================
 // PRESETS (localStorage)
 // ====================================================================
-var PRESET_KEY = '0dte_presets_v4';
+var PRESET_KEY = 'chart_presets_v4';
 
 function _getPresets(){
   try { return JSON.parse(localStorage.getItem(PRESET_KEY)) || {}; } catch(e){ return {}; }

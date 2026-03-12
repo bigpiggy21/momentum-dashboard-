@@ -767,8 +767,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_page("hvc.html")
         elif path == "/sweeps":
             self.serve_page("sweeps_unified.html")
-        elif path == "/0dte":
-            self.serve_page("0dte.html")
+        elif path == "/chart" or path == "/0dte":
+            self.serve_page("chart.html")
         elif path == "/etf-sweeps":
             self.send_response(302)
             self.send_header("Location", "/sweeps?asset=etf")
@@ -853,10 +853,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_etf_categories()
         elif path == "/api/ticker-names":
             self.serve_ticker_names()
-        elif path == "/api/0dte/candles":
-            self.serve_0dte_candles(query)
-        elif path == "/api/0dte/sweeps":
-            self.serve_0dte_sweeps(query)
+        elif path == "/api/chart/candles" or path == "/api/0dte/candles":
+            self.serve_chart_candles(query)
+        elif path == "/api/chart/sweeps" or path == "/api/0dte/sweeps":
+            self.serve_chart_sweeps(query)
         elif path == "/api/analysis/river":
             self.serve_analysis_river(query)
         elif path == "/api/analysis/heatmap":
@@ -5516,8 +5516,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     # 0DTE DARKPOOL FLOW
     # ====================================================================
 
-    def serve_0dte_candles(self, query=None):
-        """GET /api/0dte/candles — fetch candles from Polygon for a ticker."""
+    def serve_chart_candles(self, query=None):
+        """GET /api/chart/candles — fetch candles from Polygon for a ticker."""
         query = query or {}
         ticker = query.get("ticker", ["SPY"])[0]
         date_str = query.get("date", [None])[0]
@@ -5606,8 +5606,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_json({"candles": all_bars, "ticker": ticker,
                         "live_bars": live_appended})
 
-    def serve_0dte_sweeps(self, query=None):
-        """GET /api/0dte/sweeps — darkpool sweeps for multiple tickers with percentile sizing."""
+    def serve_chart_sweeps(self, query=None):
+        """GET /api/chart/sweeps — darkpool sweeps for multiple tickers with percentile sizing."""
         query = query or {}
         tickers_str = query.get("tickers", ["SPY,VOO"])[0]
         tickers = [t.strip() for t in tickers_str.split(",") if t.strip()]
