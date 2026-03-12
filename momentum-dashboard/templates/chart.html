@@ -498,6 +498,7 @@ function registerIndicator(cfg){
   _indicators[cfg.id] = {
     id: cfg.id, name: cfg.name, enabled: false,
     color: cfg.color || '#888',        // swatch color for menu
+    hotkey: cfg.hotkey || null,        // keyboard shortcut (e.g. 'b', 'd')
     series: [],                        // LightweightCharts series (created on enable)
     createSeries: cfg.createSeries,    // fn(chart) → creates series objects, stores in .series
     compute: cfg.compute,              // fn(candles, ind) → sets data on series
@@ -556,13 +557,27 @@ function buildIndMenu(){
   var html = '';
   Object.keys(_indicators).forEach(function(id){
     var ind = _indicators[id];
+    var hkHint = ind.hotkey ? '<span style="color:#555;font-size:10px;margin-left:auto;text-transform:uppercase;">'+ind.hotkey+'</span>' : '';
     html += '<div class="ind-item' + (ind.enabled ? ' active' : '') + '" onclick="toggleIndicator(\'' + id + '\')">'
       + '<span class="ind-check">' + (ind.enabled ? '&#x2713;' : '') + '</span>'
       + '<span class="ind-swatch" style="background:' + ind.color + ';"></span>'
-      + '<span class="ind-label">' + ind.name + '</span></div>';
+      + '<span class="ind-label">' + ind.name + '</span>' + hkHint + '</div>';
   });
   menu.innerHTML = html;
 }
+
+// Keyboard shortcuts for indicators
+document.addEventListener('keydown', function(e){
+  // Skip if typing in an input
+  if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+  var key = e.key.toLowerCase();
+  Object.keys(_indicators).forEach(function(id){
+    if(_indicators[id].hotkey === key){
+      e.preventDefault();
+      toggleIndicator(id);
+    }
+  });
+});
 
 function toggleIndMenu(){
   var menu = document.getElementById('indMenu');
@@ -590,6 +605,7 @@ registerIndicator({
   id: 'bb',
   name: 'Bollinger Bands (20, 2)',
   color: '#ff8c00',
+  hotkey: 'b',
   createSeries: function(chart){
     var ind = _indicators['bb'];
     // Basis (20 SMA) — orange solid line
@@ -745,6 +761,7 @@ registerIndicator({
   id: 'bb_dev',
   name: 'BB Deviation Signals',
   color: '#0b570f',
+  hotkey: 'd',
   createSeries: function(chart){
     var ind = _indicators['bb_dev'];
     ind.series = []; // No LightweightCharts series — uses markers + DOM table
@@ -1721,7 +1738,7 @@ function drawBubbles(){
         if(priceCoord === null) return;
         var labelY = priceCoord + 20; // below the bar
         // Draw downward-pointing label (rounded rect with arrow on top pointing up toward bar)
-        var w = 14, h = 16, arrowH = 5, r = 3;
+        var w = 12, h = 14, arrowH = 4, r = 2;
         var lx = xCoord - w/2, ly = labelY;
         _ctx.beginPath();
         // Arrow point (top center, pointing up toward bar)
@@ -1740,7 +1757,7 @@ function drawBubbles(){
         _ctx.fillStyle = color;
         _ctx.fill();
         // White bold text
-        _ctx.font = 'bold 11px -apple-system, sans-serif';
+        _ctx.font = 'bold 10px -apple-system, sans-serif';
         _ctx.textAlign = 'center'; _ctx.textBaseline = 'middle';
         _ctx.fillStyle = '#ffffff';
         _ctx.fillText(text, xCoord, ly + h/2);
@@ -1750,7 +1767,7 @@ function drawBubbles(){
         if(priceCoord === null) return;
         var labelY = priceCoord - 20; // above the bar
         // Draw upward label (rounded rect with arrow on bottom pointing down toward bar)
-        var w = 14, h = 16, arrowH = 5, r = 3;
+        var w = 12, h = 14, arrowH = 4, r = 2;
         var topY = labelY - h;
         _ctx.beginPath();
         // Top-left corner
@@ -1771,7 +1788,7 @@ function drawBubbles(){
         _ctx.fillStyle = color;
         _ctx.fill();
         // White bold text
-        _ctx.font = 'bold 11px -apple-system, sans-serif';
+        _ctx.font = 'bold 10px -apple-system, sans-serif';
         _ctx.textAlign = 'center'; _ctx.textBaseline = 'middle';
         _ctx.fillStyle = '#ffffff';
         _ctx.fillText(text, xCoord, topY + h/2);
