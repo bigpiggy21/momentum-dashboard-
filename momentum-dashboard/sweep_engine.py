@@ -1652,25 +1652,45 @@ def detect_clusterbombs(
         }
         events.append(event)
 
-    # Store events
+    # Store events — UPDATE existing rows to preserve ranking columns,
+    # INSERT only if no row exists yet.
     for ev in events:
-        try:
-            c.execute("""
-                INSERT OR REPLACE INTO clusterbomb_events
-                (ticker, event_date, sweep_count, total_notional, max_notional,
-                 avg_price, min_price, max_price, direction, is_rare,
-                 threshold_notional, threshold_sweeps, threshold_total,
-                 sweep_ids, detected_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                ev["ticker"], ev["event_date"], ev["sweep_count"],
-                ev["total_notional"], ev["max_notional"], ev["avg_price"],
-                ev["min_price"], ev["max_price"], ev["direction"], ev["is_rare"],
-                ev["threshold_notional"], ev["threshold_sweeps"],
-                ev["threshold_total"], ev["sweep_ids"], ev["detected_at"]
-            ))
-        except sqlite3.IntegrityError:
-            pass
+        # Try UPDATE first (preserves daily_rank, sweep_rank, event_type, is_monster)
+        c.execute("""
+            UPDATE clusterbomb_events SET
+                sweep_count = ?, total_notional = ?, max_notional = ?,
+                avg_price = ?, min_price = ?, max_price = ?,
+                direction = ?, is_rare = ?,
+                threshold_notional = ?, threshold_sweeps = ?, threshold_total = ?,
+                sweep_ids = ?, detected_at = ?
+            WHERE ticker = ? AND event_date = ?
+        """, (
+            ev["sweep_count"], ev["total_notional"], ev["max_notional"],
+            ev["avg_price"], ev["min_price"], ev["max_price"],
+            ev["direction"], ev["is_rare"],
+            ev["threshold_notional"], ev["threshold_sweeps"],
+            ev["threshold_total"], ev["sweep_ids"], ev["detected_at"],
+            ev["ticker"], ev["event_date"]
+        ))
+        if c.rowcount == 0:
+            # No existing row — INSERT new event
+            try:
+                c.execute("""
+                    INSERT INTO clusterbomb_events
+                    (ticker, event_date, sweep_count, total_notional, max_notional,
+                     avg_price, min_price, max_price, direction, is_rare,
+                     threshold_notional, threshold_sweeps, threshold_total,
+                     sweep_ids, detected_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    ev["ticker"], ev["event_date"], ev["sweep_count"],
+                    ev["total_notional"], ev["max_notional"], ev["avg_price"],
+                    ev["min_price"], ev["max_price"], ev["direction"], ev["is_rare"],
+                    ev["threshold_notional"], ev["threshold_sweeps"],
+                    ev["threshold_total"], ev["sweep_ids"], ev["detected_at"]
+                ))
+            except sqlite3.IntegrityError:
+                pass
 
     conn.commit()
     conn.close()
