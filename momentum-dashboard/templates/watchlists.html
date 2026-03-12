@@ -12,6 +12,7 @@
 ::-webkit-scrollbar-thumb{background:#2a2a3a;border-radius:4px;}
 ::-webkit-scrollbar-thumb:hover{background:#3a3a4a;}
 *{scrollbar-width:thin;scrollbar-color:#2a2a3a #0a0a10;}
+html,body{height:100%;overflow:hidden;}
 body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-serif;font-size:14px;}
 /* Modal */
 .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:999;justify-content:center;align-items:center;}
@@ -20,13 +21,21 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 .modal h2{font-size:17px;color:#fff;margin-bottom:18px;display:flex;align-items:center;gap:8px;}
 .modal-close{float:right;background:none;border:none;color:#666;font-size:22px;cursor:pointer;padding:4px;}.modal-close:hover{color:#fff;}
 
-.main{display:flex;height:calc(100vh - 52px);}
+.main{display:flex;height:calc(100vh - 52px);overflow:hidden;}
 
 .panel-left{width:200px;border-right:1px solid #1e1e2e;display:flex;flex-direction:column;background:#0a0a10;}
-.ph{padding:8px 10px;font-size:11px;font-weight:700;color:#555;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #1a1a24;display:flex;justify-content:space-between;align-items:center;}
+.ph{padding:6px 10px;font-size:11px;font-weight:700;color:#555;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #1a1a24;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
 .ph button{background:none;color:#f59e0b;border:none;font-size:16px;cursor:pointer;font-weight:700;line-height:1;}
 .ph button:hover{color:#fff;}
-.wl-list{flex:1;overflow-y:auto;}
+
+/* Move toolbar — sits below header, above list */
+.move-bar{display:flex;align-items:center;gap:2px;padding:3px 8px;border-bottom:1px solid #1a1a24;background:#0c0c14;flex-shrink:0;}
+.move-bar button{background:#161622;border:1px solid #2a2a3a;color:#888;cursor:pointer;font-size:12px;padding:2px 8px;border-radius:3px;font-weight:600;line-height:1;}
+.move-bar button:hover{color:#f59e0b;border-color:#f59e0b44;background:#1a1a28;}
+.move-bar button:disabled{opacity:0.25;cursor:default;}
+.move-bar .label{font-size:10px;color:#444;margin-left:4px;}
+
+.wl-list{flex:1;overflow-y:auto;min-height:0;}
 .wi{padding:7px 12px;cursor:pointer;border-bottom:1px solid #111118;display:flex;justify-content:space-between;align-items:center;}
 .wi:hover{background:#111118;}
 .wi.active{background:#161622;border-left:2px solid #f59e0b;padding-left:8px;}
@@ -35,12 +44,9 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 .wi-del{color:#333;cursor:pointer;font-size:14px;padding:0 4px;display:none;}
 .wi:hover .wi-del{display:block;}
 .wi-del:hover{color:#ef4444;}
-.wi-arrows{display:none;gap:1px;margin-left:auto;margin-right:4px;}
-.wi:hover .wi-arrows{display:inline-flex;}
-.wi-arrows button{background:none;border:none;color:#555;cursor:pointer;font-size:13px;padding:0 2px;line-height:1;}
-.wi-arrows button:hover{color:#f59e0b;}
 
 .panel-mid{width:180px;border-right:1px solid #1e1e2e;display:flex;flex-direction:column;background:#0a0a10;}
+.gi-list{flex:1;overflow-y:auto;min-height:0;}
 .gi{padding:6px 12px;cursor:pointer;border-bottom:1px solid #111118;display:flex;justify-content:space-between;align-items:center;font-size:13px;}
 .gi:hover{background:#111118;}
 .gi.active{background:#161622;border-left:2px solid #f59e0b;padding-left:8px;}
@@ -48,14 +54,10 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 .gi-del{color:#333;cursor:pointer;font-size:13px;padding:0 2px;margin-left:4px;display:none;}
 .gi:hover .gi-del{display:inline;}
 .gi-del:hover{color:#ef4444;}
-.gi-arrows{display:none;gap:1px;margin-left:auto;margin-right:4px;}
-.gi:hover .gi-arrows{display:inline-flex;}
-.gi-arrows button{background:none;border:none;color:#555;cursor:pointer;font-size:13px;padding:0 2px;line-height:1;}
-.gi-arrows button:hover{color:#f59e0b;}
 
 .panel-right{flex:1;display:flex;flex-direction:column;overflow:hidden;}
-.tk-hdr{padding:8px 12px;font-size:11px;font-weight:700;color:#555;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #1a1a24;background:#0e0e16;}
-.tk-body{flex:1;overflow-y:auto;padding:6px 10px;}
+.tk-hdr{padding:6px 12px;font-size:11px;font-weight:700;color:#555;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #1a1a24;background:#0e0e16;flex-shrink:0;}
+.tk-body{flex:1;overflow-y:auto;padding:6px 10px;min-height:0;}
 .tr{display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:3px;font-size:15px;font-family:'Consolas',monospace;}
 .tr:hover{background:#161622;}
 .tr .tn{color:#d0d0d8;font-weight:600;width:75px;}
@@ -65,16 +67,16 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 .tr .tx{color:#444;cursor:pointer;margin-left:8px;font-size:16px;padding:0 4px;}
 .tr .tx:hover{color:#ef4444;}
 
-.paste{border-top:1px solid #1e1e2e;padding:8px 10px;background:#0a0a10;}
-.paste textarea{width:100%;height:48px;background:#0e0e16;color:#d0d0d8;border:1px solid #2a2a3a;border-radius:4px;padding:4px 6px;font-size:12px;font-family:'Consolas',monospace;outline:none;resize:vertical;}
+.paste{border-top:1px solid #1e1e2e;padding:6px 10px;background:#0a0a10;flex-shrink:0;}
+.paste textarea{width:100%;height:40px;background:#0e0e16;color:#d0d0d8;border:1px solid #2a2a3a;border-radius:4px;padding:4px 6px;font-size:12px;font-family:'Consolas',monospace;outline:none;resize:none;}
 .paste textarea:focus{border-color:#f59e0b;}
 .paste textarea::placeholder{color:#444;font-family:'Segoe UI',sans-serif;}
-.paste-row{display:flex;justify-content:space-between;align-items:center;margin-top:4px;}
+.paste-row{display:flex;justify-content:space-between;align-items:center;margin-top:3px;}
 .paste-hint{font-size:10px;color:#444;}
 .paste-row button{background:#1e293b;color:#f59e0b;border:1px solid #334155;padding:2px 8px;border-radius:3px;font-size:11px;cursor:pointer;font-weight:600;}
 .paste-row button:hover{background:#334155;}
 
-.save-bar{padding:6px 12px;background:#111118;border-top:1px solid #1e1e2e;display:none;text-align:right;}
+.save-bar{padding:5px 12px;background:#111118;border-top:1px solid #1e1e2e;display:none;text-align:right;flex-shrink:0;}
 .save-bar button{background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44;padding:4px 14px;border-radius:3px;font-size:13px;cursor:pointer;font-weight:600;}
 .save-bar button:hover{background:#f59e0b33;}
 
@@ -107,12 +109,22 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
 <!-- Watchlists -->
 <div class="panel-left">
 <div class="ph"><span>Watchlists</span><button onclick="newWL()" title="New watchlist">+</button></div>
+<div class="move-bar" id="wlMoveBar">
+  <button onclick="moveWL(aw,-1)" title="Move selected watchlist up" id="wlUp">&uarr;</button>
+  <button onclick="moveWL(aw,1)" title="Move selected watchlist down" id="wlDown">&darr;</button>
+  <span class="label">Reorder</span>
+</div>
 <div class="wl-list" id="wlList"></div>
 </div>
 <!-- Groups -->
 <div class="panel-mid">
 <div class="ph"><span>Groups</span><button onclick="addGrpPrompt()" title="New group">+</button></div>
-<div id="grpList" style="flex:1;overflow-y:auto;"></div>
+<div class="move-bar" id="grpMoveBar">
+  <button onclick="moveGrp(ag,-1)" title="Move selected group up" id="grpUp">&uarr;</button>
+  <button onclick="moveGrp(ag,1)" title="Move selected group down" id="grpDown">&darr;</button>
+  <span class="label">Reorder</span>
+</div>
+<div class="gi-list" id="grpList"></div>
 </div>
 <!-- Tickers -->
 <div class="panel-right">
@@ -135,40 +147,44 @@ function closeLogoModal(){document.getElementById('logoModal').classList.remove(
 
 var D=[],aw=null,ag=null,dirty=false;
 
-function load(){fetch('/api/watchlists').then(function(r){return r.json();}).then(function(d){D=d;rWL();if(D.length)selWL(0);});}
+function load(){fetch('/api/watchlists').then(function(r){return r.json();}).then(function(d){D=d;rWL();if(D.length)selWL(0);updateMoveBtns();});}
 
 function rWL(){
   var el=document.getElementById('wlList');
   el.innerHTML=D.map(function(w,i){
     var c=0;w.groups.forEach(function(g){c+=g.tickers.length;});
-    return '<div class="wi'+(aw===i?' active':'')+'" onclick="selWL('+i+')"><div><div class="nm">'+w.name+'</div><div class="mt">'+w.groups.length+'g · '+c+'t</div></div><span class="wi-arrows"><button onclick="event.stopPropagation();moveWL('+i+',-1)" title="Move up">&uarr;</button><button onclick="event.stopPropagation();moveWL('+i+',1)" title="Move down">&darr;</button></span><span class="wi-del" onclick="event.stopPropagation();delWL('+i+')" title="Delete watchlist">×</span></div>';
+    return '<div class="wi'+(aw===i?' active':'')+'" onclick="selWL('+i+')"><div><div class="nm">'+w.name+'</div><div class="mt">'+w.groups.length+'g · '+c+'t</div></div><span class="wi-del" onclick="event.stopPropagation();delWL('+i+')" title="Delete watchlist">&times;</span></div>';
   }).join('');
+  updateMoveBtns();
 }
+
 function moveWL(i,dir){
+  if(i===null||i===undefined)return;
   var j=i+dir;if(j<0||j>=D.length)return;
   var tmp=D[i];D[i]=D[j];D[j]=tmp;
   if(aw===i)aw=j;else if(aw===j)aw=i;
   markDirty();rWL();rGrp();
 }
 
-function selWL(i){aw=i;ag=null;rWL();rGrp();document.getElementById('tkBody').innerHTML='<div class="empty">Select a group</div>';document.getElementById('tkHdr').textContent='Tickers';}
+function selWL(i){aw=i;ag=null;rWL();rGrp();document.getElementById('tkBody').innerHTML='<div class="empty">Select a group</div>';document.getElementById('tkHdr').textContent='Tickers';updateMoveBtns();}
 
 function rGrp(){
-  if(aw===null)return;
+  if(aw===null){document.getElementById('grpList').innerHTML='';updateMoveBtns();return;}
   var el=document.getElementById('grpList');
   el.innerHTML=D[aw].groups.map(function(g,i){
-    return '<div class="gi'+(ag===i?' active':'')+'" onclick="selGrp('+i+')"><span>'+g.name+'</span><span><span class="cnt">'+g.tickers.length+'</span><span class="gi-arrows"><button onclick="event.stopPropagation();moveGrp('+i+',-1)" title="Move up">&uarr;</button><button onclick="event.stopPropagation();moveGrp('+i+',1)" title="Move down">&darr;</button></span><span class="gi-del" onclick="event.stopPropagation();delGrp('+i+')" title="Delete group">×</span></span></div>';
+    return '<div class="gi'+(ag===i?' active':'')+'" onclick="selGrp('+i+')"><span>'+g.name+'</span><span><span class="cnt">'+g.tickers.length+'</span><span class="gi-del" onclick="event.stopPropagation();delGrp('+i+')" title="Delete group">&times;</span></span></div>';
   }).join('');
+  updateMoveBtns();
 }
 function moveGrp(i,dir){
-  if(aw===null)return;
+  if(aw===null||i===null||i===undefined)return;
   var gs=D[aw].groups;var j=i+dir;if(j<0||j>=gs.length)return;
   var tmp=gs[i];gs[i]=gs[j];gs[j]=tmp;
   if(ag===i)ag=j;else if(ag===j)ag=i;
   markDirty();rGrp();
 }
 
-function selGrp(i){ag=i;rGrp();rTk();}
+function selGrp(i){ag=i;rGrp();rTk();updateMoveBtns();}
 
 function rTk(){
   if(aw===null||ag===null)return;
@@ -179,8 +195,21 @@ function rTk(){
   el.innerHTML=g.tickers.map(function(t,i){
     var tc=t.type==='etf'?'te':t.type==='index'?'ti':'ts';
     var ap=t.api!==t.display?t.api:'';
-    return '<div class="tr"><span class="tn">'+t.display+'</span><span class="ta">'+ap+'</span><span class="tt '+tc+'">'+(t.type||'stock').toUpperCase()+'</span><span class="tx" onclick="rmTk('+i+')" title="Remove">×</span></div>';
+    return '<div class="tr"><span class="tn">'+t.display+'</span><span class="ta">'+ap+'</span><span class="tt '+tc+'">'+(t.type||'stock').toUpperCase()+'</span><span class="tx" onclick="rmTk('+i+')" title="Remove">&times;</span></div>';
   }).join('');
+}
+
+function updateMoveBtns(){
+  var wlUp=document.getElementById('wlUp');
+  var wlDown=document.getElementById('wlDown');
+  wlUp.disabled = aw===null || aw<=0;
+  wlDown.disabled = aw===null || aw>=D.length-1;
+
+  var grpUp=document.getElementById('grpUp');
+  var grpDown=document.getElementById('grpDown');
+  var gs = aw!==null ? D[aw].groups : [];
+  grpUp.disabled = ag===null || ag<=0;
+  grpDown.disabled = ag===null || ag>=gs.length-1;
 }
 
 function doPaste(){

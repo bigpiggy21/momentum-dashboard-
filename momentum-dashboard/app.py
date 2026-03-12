@@ -5094,6 +5094,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 lines.append('Edited via TBD Technologies watchlist manager.')
                 lines.append('"""')
                 lines.append('')
+                lines.append(f'DISPLAY_NAME = "{wl["name"]}"')
+                lines.append('')
                 lines.append(f'{var_name} = [')
                 for grp in wl.get('groups', []):
                     lines.append(f'    ("{grp["name"]}", [')
