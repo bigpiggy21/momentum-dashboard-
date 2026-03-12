@@ -862,17 +862,8 @@ function _setLoading(on){
 
 // Exponential sizing curve: p ∈ [0,1] → radius. Same curve for ALL layers.
 // p=0 → 3px (barely visible), p=0.5 → ~12px, p=1 → 30px
-// Re-scale percentile within visible range for better differentiation
-// When filtering at e.g. 95%, raw p values 0.95-0.99 map to 0.0-1.0
-var _bubbleFloor = 0; // set by drawBubbles based on active filter
-function _bubbleRadius(p){
-  var scaled = _bubbleFloor > 0 ? Math.min(1, (p - _bubbleFloor) / (1 - _bubbleFloor)) : p;
-  return 3 + Math.pow(scaled, 1.8) * 27;
-}
-function _bubbleAlpha(p){
-  var scaled = _bubbleFloor > 0 ? Math.min(1, (p - _bubbleFloor) / (1 - _bubbleFloor)) : p;
-  return 0.30 + scaled * 0.55;
-}
+function _bubbleRadius(p){ return 3 + Math.pow(p, 2.5) * 32; }
+function _bubbleAlpha(p){ return 0.30 + p * 0.55; }
 
 function drawBubbles(){
   if(!_ctx || !_chart || !_candleSeries) {
@@ -969,9 +960,6 @@ function drawBubbles(){
       while(lo < hi){ var mid = (lo+hi)>>1; if(sortedN[mid] < notional) lo = mid+1; else hi = mid; }
       return Math.min(99, Math.floor(lo / totalS * 100));
     }
-
-    // Set bubble floor for size re-scaling within visible range
-    _bubbleFloor = (_sweepFilterMode === 'percentile') ? (_layerCfg.percentile / 100) : 0;
 
     _chartSweeps.forEach(function(s){
       var pct = computePct(s.notional);
