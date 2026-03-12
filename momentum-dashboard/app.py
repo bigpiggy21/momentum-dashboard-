@@ -5651,8 +5651,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         Returns buy/sell for last bar across multiple timeframes, computed locally.
         """
         import numpy as np
-        qs = urllib.parse.parse_qs(query or "")
-        ticker = (qs.get("ticker") or ["SPY"])[0].upper().strip()
+        query = query or {}
+        ticker = (query.get("ticker") or ["SPY"])[0].upper().strip()
 
         # Load CSV cache
         safe = ticker.replace(":", "_").replace("/", "_")
