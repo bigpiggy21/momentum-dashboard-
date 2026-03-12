@@ -432,6 +432,8 @@ var _chartEvents = [];       // clusterbomb/rare/monster events with ranks
 var _tickerColorMap = {};    // ticker → {stroke} for tooltip coloring
 var _tickerNames = {};       // ticker → company name cache
 var _evMetaCache = {};       // date → {sweep_rank, daily_rank, is_rare, is_cb, is_monster} built in drawBubbles
+var _drawnBubbles = [];      // [{x, y, radius, type, data, ...}] — global for tooltip hit-testing
+var _largestPerDate = {};    // date → index into _drawnBubbles (for emoji placement)
 var _dailyHistSeries = null; // LightweightCharts histogram series for daily volume
 
 // Anchor price system: for overlay tickers on larger timeframes, we fetch
@@ -1223,9 +1225,9 @@ function drawBubbles(){
   // Fallback for tickers not in overlay
   var _defaultStroke = '#60a5fa';
 
-  // Track drawn bubble positions for overlay layers
-  var _drawnBubbles = [];
-  var _largestPerDate = {};  // date → index into _drawnBubbles
+  // Reset drawn bubble positions for overlay layers + tooltip hit-testing
+  _drawnBubbles = [];
+  _largestPerDate = {};
 
   // ---- LAYER: Sweeps (per-ticker color, sized by notional percentile) ----
   if(_activeLayers.sweeps && _chartSweeps.length > 0){
@@ -1279,7 +1281,7 @@ function drawBubbles(){
 
       // Track for overlays
       var bIdx = _drawnBubbles.length;
-      _drawnBubbles.push({x: pos.x, y: pos.y, radius: radius, date: s.date, ticker: s.ticker, notional: s.notional, _isLargestForDate: false});
+      _drawnBubbles.push({x: pos.x, y: pos.y, radius: radius, date: s.date, ticker: s.ticker, notional: s.notional, _isLargestForDate: false, type: 'sweep', data: s});
       var prevLargest = _largestPerDate[s.date];
       if(prevLargest == null || s.notional > _drawnBubbles[prevLargest].notional){
         if(prevLargest != null) _drawnBubbles[prevLargest]._isLargestForDate = false;
@@ -1393,97 +1395,20 @@ function onMouseMove(e){
   var my = e.clientY - rect.top;
   var tooltip = document.getElementById('tooltipDiv');
 
-  var anyLayer = _activeLayers.sweeps || _activeLayers.daily || _activeLayers.single || _activeLayers.rare || _activeLayers.cb || _activeLayers.monster;
-  if(!anyLayer || (_chartEvents.length === 0 && _chartSweeps.length === 0)){
+  if(_drawnBubbles.length === 0){
     tooltip.style.display = 'none';
     return;
   }
 
-  var ts = _chart.timeScale();
-  var candleTimes2 = _candles.map(function(c){ return c.time; });
-  var candleCloseMap2 = {};
-  _candles.forEach(function(c){ candleCloseMap2[c.time] = c.close; });
-
-  function nearest2(t){
-    if(candleTimes2.length === 0) return null;
-    var lo = 0, hi = candleTimes2.length - 1;
-    while(lo < hi){ var mid = (lo+hi)>>1; if(candleTimes2[mid]<t) lo=mid+1; else hi=mid; }
-    var best = candleTimes2[lo];
-    if(lo > 0 && Math.abs(candleTimes2[lo-1]-t) < Math.abs(best-t)) best = candleTimes2[lo-1];
-    return best;
-  }
-
-  function dateToUnix2(d){ return Math.floor(new Date(d + 'T20:00:00Z').getTime() / 1000); }
-
   var hitRadius = 30;
-  var hits = []; // collect ALL bubbles within range
+  var hits = [];
 
-  // Hit-test events (daily/single/rare/cb/monster)
-  for(var i = 0; i < _chartEvents.length; i++){
-    var ev = _chartEvents[i];
-    var ct = nearest2(dateToUnix2(ev.date));
-    if(ct === null) continue;
-    var x = ts.timeToCoordinate(ct);
-    if(x === null) continue;
-    var plotPrice2 = candleCloseMap2[ct];
-    if(!plotPrice2) continue;
-    var y = _candleSeries.priceToCoordinate(plotPrice2);
-    if(y === null) continue;
-    var dist = Math.sqrt((mx-x)*(mx-x) + (my-y)*(my-y));
+  // Hit-test only actually-drawn bubbles (respects all filters: percentile, notional, overlay on/off)
+  for(var i = 0; i < _drawnBubbles.length; i++){
+    var b = _drawnBubbles[i];
+    var dist = Math.sqrt((mx - b.x) * (mx - b.x) + (my - b.y) * (my - b.y));
     if(dist < hitRadius){
-      hits.push({type:'event', data:ev, dist:dist});
-    }
-  }
-
-  // Hit-test individual sweeps (apply same filter as drawBubbles)
-  if(_activeLayers.sweeps && _chartSweeps.length > 0){
-    // Build percentile lookup for filtering (same as drawBubbles)
-    var _hitSorted = _chartSweeps.map(function(s){ return s.notional; }).sort(function(a,b){ return a - b; });
-    var _hitTotal = _hitSorted.length;
-    function _hitPct(notional){
-      var lo = 0, hi = _hitTotal;
-      while(lo < hi){ var mid = (lo+hi)>>1; if(_hitSorted[mid] < notional) lo = mid+1; else hi = mid; }
-      return Math.min(99, Math.floor(lo / _hitTotal * 100));
-    }
-
-    for(var j = 0; j < _chartSweeps.length; j++){
-      var s = _chartSweeps[j];
-
-      // Apply the same filter as drawBubbles
-      if(_sweepFilterMode === 'notional'){
-        if(s.notional < _layerCfg.minNotional) continue;
-      } else {
-        if(_hitPct(s.notional) < _layerCfg.percentile) continue;
-      }
-
-      var timeUnix;
-      if(s.time && s.time.length >= 5){
-        var dt = new Date(s.date + 'T' + s.time + 'Z');
-        timeUnix = Math.floor(dt.getTime() / 1000);
-      } else {
-        timeUnix = Math.floor(new Date(s.date + 'T20:00:00Z').getTime() / 1000);
-      }
-      timeUnix = Math.floor(timeUnix / 60) * 60;
-      var ct2 = nearest2(timeUnix);
-      if(ct2 === null) continue;
-      var x2 = ts.timeToCoordinate(ct2);
-      if(x2 === null) continue;
-      // Match drawBubbles positioning: active ticker = exact price, overlay = anchor price, fallback = candle close
-      var pp;
-      if(s.ticker === _activeTicker && s.price){
-        pp = Number(s.price);
-      } else if(s.ticker !== _activeTicker && _anchorReady && _anchorBars.length > 0){
-        pp = _anchorPriceAt(timeUnix) || candleCloseMap2[ct2];
-      } else {
-        pp = candleCloseMap2[ct2];
-      }
-      if(!pp) continue;
-      var y2 = _candleSeries.priceToCoordinate(pp);
-      if(y2 === null) continue;
-      var d2 = Math.sqrt((mx-x2)*(mx-x2) + (my-y2)*(my-y2));
-      if(d2 < hitRadius){
-        hits.push({type:'sweep', data:s, dist:d2});
-      }
+      hits.push({type: b.type || 'sweep', data: b.data || b, dist: dist});
     }
   }
 
