@@ -2195,11 +2195,23 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
 
     if _processed_tickers:
         _ph = ",".join("?" * len(_processed_tickers))
+        # Only clean up events within the date range we actually processed.
+        # Without this guard, incremental runs (date_from=today) would wipe
+        # ALL historical rankings for any ticker that has a new event today.
+        _cleanup_where = f"ticker IN ({_ph}) AND sweep_rank IS NOT NULL"
+        _cleanup_params = list(_processed_tickers)
+        if date_from:
+            _cleanup_where += " AND event_date >= ?"
+            _cleanup_params.append(date_from)
+        if date_to:
+            _cleanup_where += " AND event_date <= ?"
+            _cleanup_params.append(date_to)
+
         stale_rows = c.execute(f"""
             SELECT id, ticker, event_date, event_type, sweep_rank, daily_rank
             FROM clusterbomb_events
-            WHERE ticker IN ({_ph}) AND sweep_rank IS NOT NULL
-        """, list(_processed_tickers)).fetchall()
+            WHERE {_cleanup_where}
+        """, _cleanup_params).fetchall()
 
         nulled = 0
         deleted = 0
@@ -2370,11 +2382,23 @@ def detect_ranked_daily(rank_limit=100, min_sweeps=2, tickers=None,
 
     if _processed_tickers:
         _ph = ",".join("?" * len(_processed_tickers))
+        # Only clean up events within the date range we actually processed.
+        # Without this guard, incremental runs (date_from=today) would wipe
+        # ALL historical rankings for any ticker that has a new event today.
+        _cleanup_where = f"ticker IN ({_ph}) AND daily_rank IS NOT NULL"
+        _cleanup_params = list(_processed_tickers)
+        if date_from:
+            _cleanup_where += " AND event_date >= ?"
+            _cleanup_params.append(date_from)
+        if date_to:
+            _cleanup_where += " AND event_date <= ?"
+            _cleanup_params.append(date_to)
+
         stale_rows = c.execute(f"""
             SELECT id, ticker, event_date, event_type, daily_rank, sweep_rank
             FROM clusterbomb_events
-            WHERE ticker IN ({_ph}) AND daily_rank IS NOT NULL
-        """, list(_processed_tickers)).fetchall()
+            WHERE {_cleanup_where}
+        """, _cleanup_params).fetchall()
 
         nulled = 0
         deleted = 0
