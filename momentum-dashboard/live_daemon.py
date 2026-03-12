@@ -691,6 +691,32 @@ class UnifiedLiveDaemon:
             "error": full["error"],
         }
 
+    def get_live_prices(self, tickers=None):
+        """Return live prices from in-memory minute bars.
+
+        Returns dict: {ticker: {price, prev_close, change_pct, volume, updated_at}}
+        - price: latest minute bar close (real-time, 15-min delayed on Starter plan)
+        - prev_close: previous day's close from OHLC cache (for % change calc)
+        - If daemon has no data for a ticker, it's omitted from results.
+        """
+        result = {}
+        with self._bars_lock:
+            bar_tickers = set(self._bars.keys())
+            if tickers:
+                bar_tickers = bar_tickers & set(tickers)
+            for ticker in bar_tickers:
+                tb = self._bars[ticker]
+                if tb.daily and tb.daily.get("c"):
+                    result[ticker] = {
+                        "price": round(tb.daily["c"], 4),
+                        "open": round(tb.daily["o"], 4),
+                        "high": round(tb.daily["h"], 4),
+                        "low": round(tb.daily["l"], 4),
+                        "volume": tb.daily.get("v", 0),
+                        "updated_at": tb.last_minute_ts,
+                    }
+        return result
+
     def update_config(self, price_cfg=None, sweep_cfg=None):
         """Hot-reload config on a running daemon (no restart needed).
 

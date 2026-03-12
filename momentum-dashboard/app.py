@@ -839,6 +839,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_sweep_fetch_progress()
         elif path == "/api/sweeps/pending-queue":
             self.serve_pending_queue()
+        elif path == "/api/prices/live":
+            self.serve_live_prices(query)
         elif path == "/api/sweeps/live/status":
             self.serve_live_sweep_status()
         elif path == "/api/sweeps/live/events":
@@ -3590,6 +3592,59 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except (FileNotFoundError, json.JSONDecodeError):
             tickers = []
         self.send_json({"ok": True, "tickers": tickers, "count": len(tickers)})
+
+    def serve_live_prices(self, query):
+        """GET /api/prices/live?tickers=SPY,AAPL — return live prices from daemon + prev close from OHLC cache."""
+        global _live_daemon
+        tickers_param = query.get("tickers", [""])[0]
+        tickers = [t.strip().upper() for t in tickers_param.split(",") if t.strip()] if tickers_param else None
+
+        result = {}
+
+        # 1. Get live prices from daemon's in-memory minute bars
+        if _live_daemon is not None:
+            live = _live_daemon.get_live_prices(tickers)
+            for ticker, data in live.items():
+                result[ticker] = data
+
+        # 2. Enrich with prev_close from OHLC cache (for % change)
+        from sweep_engine import _load_daily_prices
+        target_tickers = tickers if tickers else list(result.keys())
+        for ticker in target_tickers:
+            df = _load_daily_prices(ticker)
+            if df is not None and len(df) >= 1:
+                try:
+                    prev_close = float(df.iloc[-1]["close"])
+                    # If we also have a second-to-last row, that's a better prev_close
+                    # (last row might be today's partial data from CSV flush)
+                    if len(df) >= 2:
+                        last_date = str(df.iloc[-1]["timestamp"])[:10]
+                        from datetime import datetime as _dt
+                        today = _dt.now().strftime("%Y-%m-%d")
+                        if last_date == today:
+                            prev_close = float(df.iloc[-2]["close"])
+                        else:
+                            prev_close = float(df.iloc[-1]["close"])
+                    if ticker in result:
+                        result[ticker]["prev_close"] = round(prev_close, 4)
+                        price = result[ticker]["price"]
+                        result[ticker]["change_pct"] = round((price / prev_close - 1) * 100, 2) if prev_close > 0 else 0
+                    else:
+                        # No live data — fall back to OHLC cache price
+                        cache_price = float(df.iloc[-1]["close"])
+                        result[ticker] = {
+                            "price": round(cache_price, 4),
+                            "prev_close": round(prev_close, 4),
+                            "change_pct": round((cache_price / prev_close - 1) * 100, 2) if prev_close > 0 else 0,
+                            "volume": 0,
+                            "updated_at": 0,
+                            "source": "cache",
+                        }
+                except Exception:
+                    pass
+
+        self.send_json({"ok": True, "prices": result, "count": len(result),
+                        "source": "live" if _live_daemon else "cache"})
 
     def serve_sweep_fetch_queue(self):
         """POST /api/sweeps/fetch-queue — fetch all tickers from pending queue with 10y lookback."""

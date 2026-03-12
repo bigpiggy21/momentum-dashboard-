@@ -1414,6 +1414,8 @@ function loadTrackerPanels(){
       renderTrackerCards('trackerStocksBody', filtered, false);
       renderLoadMoreBtn();
       hideLoading();
+      // Start live price polling after cards are rendered
+      startLivePricePoll();
     })
     .catch(function(e){
       console.error('Tracker error:', e);
@@ -1575,6 +1577,78 @@ function renderTrackerCards(containerId, events, showRemove){
       + '</div>';
   });
   body.innerHTML = html;
+}
+
+// ====================================================================
+// LIVE PRICE UPDATES
+// ====================================================================
+var _livePriceTimer = null;
+var _livePriceInterval = 30000; // 30s poll
+
+function updateLivePrices(){
+  // Collect unique tickers from visible cards
+  var cards = document.querySelectorAll('.tracker-card[data-ticker]');
+  if(!cards.length) return;
+  var tickerSet = {};
+  cards.forEach(function(c){ tickerSet[c.getAttribute('data-ticker')] = true; });
+  var tickers = Object.keys(tickerSet);
+  if(!tickers.length) return;
+
+  fetch('/api/prices/live?tickers=' + tickers.join(','))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok || !d.prices) return;
+      var prices = d.prices;
+      // Update each card's price display in-place
+      cards.forEach(function(card){
+        var ticker = card.getAttribute('data-ticker');
+        var p = prices[ticker];
+        if(!p || !p.price) return;
+
+        // Find the price-inline span (avg_price → current_price)
+        var priceInline = card.querySelector('.tracker-price-inline');
+        if(!priceInline) return;
+        var priceVals = priceInline.querySelectorAll('.price-val');
+        if(priceVals.length >= 2){
+          priceVals[1].textContent = '$' + p.price.toFixed(2);
+          // Subtle highlight if live vs cache
+          if(!p.source || p.source !== 'cache'){
+            priceVals[1].style.color = '#e0e0e0';
+          }
+        }
+
+        // Update pct_gain if we have prev_close — but the card's % is based on avg_price, not prev_close
+        // Find the event in _allTrackerEvents to get avg_price
+        var ev = null;
+        for(var i = 0; i < _allTrackerEvents.length; i++){
+          if(_allTrackerEvents[i].ticker === ticker){
+            ev = _allTrackerEvents[i]; break;
+          }
+        }
+        if(ev && ev.avg_price > 0){
+          var newPct = ((p.price / ev.avg_price) - 1) * 100;
+          ev.current_price = p.price;
+          ev.pct_gain = newPct;
+          var pctSpan = card.querySelector('.tracker-pct');
+          if(pctSpan){
+            var sign = newPct >= 0 ? '+' : '';
+            pctSpan.textContent = sign + newPct.toFixed(1) + '%';
+            pctSpan.className = 'tracker-pct ' + (newPct >= 0 ? 'up' : 'down');
+          }
+        }
+      });
+    })
+    .catch(function(e){ console.error('Live price error:', e); });
+}
+
+function startLivePricePoll(){
+  if(_livePriceTimer) clearInterval(_livePriceTimer);
+  updateLivePrices();
+  _livePriceTimer = setInterval(updateLivePrices, _livePriceInterval);
+}
+
+function stopLivePricePoll(){
+  if(_livePriceTimer){ clearInterval(_livePriceTimer); _livePriceTimer = null; }
 }
 
 function selectTrackerTicker(ticker){
