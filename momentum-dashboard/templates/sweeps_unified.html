@@ -616,11 +616,11 @@ td .cb-flag,td .monster-flag{font-size:8px;padding:0px 3px;margin-left:2px;}
     <div class="table-wrap" id="tabEvents">
     <table>
     <thead><tr>
-    <th>Date</th><th>Type</th><th>Rank</th><th>Total $</th>
+    <th>Date</th><th>Time</th><th>Type</th><th>Rank</th><th>Total $</th>
     <th>Sweeps</th><th>Avg</th><th>Current</th><th>% Gain</th>
     <th>1W</th><th>1M</th><th>3M</th><th>6M</th><th>1Y</th><th>2Y</th>
     </tr></thead>
-    <tbody id="eventsBody"><tr><td colspan="14" class="loading">Select a ticker to see events</td></tr></tbody>
+    <tbody id="eventsBody"><tr><td colspan="15" class="loading">Select a ticker to see events</td></tr></tbody>
     </table>
     </div>
 
@@ -1062,7 +1062,7 @@ function loadDetailTable(){
   if(from) params.set('date_from', from);
   if(to) params.set('date_to', to);
 
-  document.getElementById('eventsBody').innerHTML = '<tr><td colspan="14" class="loading"><span class="spinner"></span> Loading...</td></tr>';
+  document.getElementById('eventsBody').innerHTML = '<tr><td colspan="15" class="loading"><span class="spinner"></span> Loading...</td></tr>';
   // Show events table, hide drill-down detail
   document.getElementById('tabEvents').style.display = '';
   document.getElementById('tabDetail').style.display = 'none';
@@ -1075,7 +1075,7 @@ function loadDetailTable(){
       renderDetailEvents();
     })
     .catch(function(e){
-      document.getElementById('eventsBody').innerHTML = '<tr><td colspan="14" class="text-red">Error: '+e+'</td></tr>';
+      document.getElementById('eventsBody').innerHTML = '<tr><td colspan="15" class="text-red">Error: '+e+'</td></tr>';
     });
 }
 
@@ -1149,7 +1149,7 @@ function renderDetailEvents(){
   var body = document.getElementById('eventsBody');
   if(events.length === 0){
     var msg = _detailEvents.length === 0 ? 'No events found for ' + (_selectedTicker||'this ticker') : 'No ' + _detailTypeFilter.replace('_',' ') + ' events';
-    body.innerHTML = '<tr><td colspan="14" class="text-dim" style="text-align:center;padding:20px;">' + msg + '</td></tr>';
+    body.innerHTML = '<tr><td colspan="15" class="text-dim" style="text-align:center;padding:20px;">' + msg + '</td></tr>';
     return;
   }
 
@@ -1179,8 +1179,10 @@ function renderDetailEvents(){
     var gainStr = (ev.pct_gain!=null) ? '<span class="tracker-value '+gainCls+'">'+((ev.pct_gain>=0)?'+':'')+ev.pct_gain.toFixed(1)+'%</span>' : '<span class="text-dim">\u2014</span>';
     // Row class priority: rare > single > daily
     var rowCls = isRare ? 'row-rare' : hasSingle ? 'row-single' : '';
+    var timeStr = ev.event_time ? ev.event_time.substring(0, 5) : '\u2014';
     html += '<tr class="' + rowCls + '" onclick="focusChartOnDate(\'' + ev.date + '\')" ondblclick="drillDown(\'' + ev.ticker + '\',\'' + ev.date + '\')" style="cursor:pointer">'
       + '<td class="mono col-key">' + ev.date + '</td>'
+      + '<td class="mono text-dim" style="font-size:11px;" title="Peak sweep time (UTC)">' + timeStr + '</td>'
       + '<td>' + typeTag + '</td>'
       + '<td class="mono col-key">' + rankLabel + '</td>'
       + '<td class="mono text-right"><span class="' + notionalClass((hasSingle && !hasDaily && ev.max_notional) ? ev.max_notional : ev.total_notional) + '">' + fmt$((hasSingle && !hasDaily && ev.max_notional) ? ev.max_notional : ev.total_notional) + '</span></td>'

@@ -3313,6 +3313,54 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                                     date_to=date_to, rare_only=rare_only,
                                     limit=limit, min_total=min_total,
                                     exclude_etfs=exclude_etfs, etf_only=etf_only)
+            # Override current_price + pct_gain with live prices if available
+            if _live_daemon is not None and data:
+                tickers_needed = list(set(ev["ticker"] for ev in data))
+                live = _live_daemon.get_live_prices(tickers_needed)
+                for ev in data:
+                    lp = live.get(ev["ticker"])
+                    if lp and lp.get("price"):
+                        ev["current_price"] = round(lp["price"], 4)
+                        avg = ev.get("avg_price", 0)
+                        ev["pct_gain"] = round((lp["price"] / avg - 1) * 100, 2) if avg > 0 else 0
+
+            # Enrich events with peak trade time (time of largest sweep)
+            if data:
+                try:
+                    from sweep_engine import _get_db
+                    conn = _get_db()
+                    # Build batch lookup: for each (ticker, date), find time of max notional trade
+                    pairs = list(set((ev["ticker"], ev["date"]) for ev in data))
+                    time_map = {}  # (ticker, date) → "HH:MM:SS"
+                    # Batch in groups of 50 to avoid huge queries
+                    for i in range(0, len(pairs), 50):
+                        batch = pairs[i:i+50]
+                        conditions = " OR ".join(
+                            f"(ticker = ? AND trade_date = ?)" for _ in batch
+                        )
+                        params = []
+                        for t, d in batch:
+                            params.extend([t, d])
+                        rows = conn.execute(f"""
+                            SELECT ticker, trade_date, trade_time, notional
+                            FROM sweep_trades
+                            WHERE ({conditions})
+                            AND is_sweep = 1 AND is_darkpool = 1
+                            ORDER BY notional DESC
+                        """, params).fetchall()
+                        for r in rows:
+                            key = (r["ticker"], r["trade_date"])
+                            if key not in time_map:
+                                # First row per (ticker, date) = highest notional
+                                raw = r["trade_time"] or ""
+                                time_map[key] = raw[:8] if len(raw) >= 8 else raw
+                    conn.close()
+                    for ev in data:
+                        ev["event_time"] = time_map.get((ev["ticker"], ev["date"]), "")
+                except Exception as e:
+                    for ev in data:
+                        ev["event_time"] = ""
+
             self.send_json({"events": data, "count": len(data)})
         except Exception as e:
             self.send_json({"events": [], "count": 0, "error": str(e)})
@@ -3421,6 +3469,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                                              etf_only=etf_only,
                                              cb_only=cb_only,
                                              monster_only=monster_only)
+            # Override current_price + pct_gain with live prices if available
+            if _live_daemon is not None and events:
+                tickers_needed = list(set(ev["ticker"] for ev in events))
+                live = _live_daemon.get_live_prices(tickers_needed)
+                for ev in events:
+                    lp = live.get(ev["ticker"])
+                    if lp and lp.get("price"):
+                        ev["current_price"] = round(lp["price"], 4)
+                        avg = ev.get("avg_price", 0)
+                        ev["pct_gain"] = round((lp["price"] / avg - 1) * 100, 2) if avg > 0 else 0
+
             response = {"events": events, "total": total, "offset": offset}
 
             # Cache the response
@@ -5520,7 +5579,30 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_json({"error": str(e), "candles": []})
             return
 
-        self.send_json({"candles": all_bars, "ticker": ticker})
+        # Append today's live bars from daemon (if available)
+        live_appended = 0
+        if _live_daemon is not None:
+            last_hist_ts = all_bars[-1]["time"] if all_bars else 0
+            live_bars = _live_daemon.get_live_bars(ticker, interval)
+            for lb in live_bars:
+                if lb["t"] > last_hist_ts:
+                    all_bars.append({
+                        "time": lb["t"],
+                        "open": lb["o"], "high": lb["h"],
+                        "low": lb["l"], "close": lb["c"],
+                        "volume": lb.get("v", 0),
+                    })
+                    live_appended += 1
+                elif lb["t"] == last_hist_ts and all_bars:
+                    # Update the last bar in-place (merge live into historical)
+                    last = all_bars[-1]
+                    last["high"] = max(last["high"], lb["h"])
+                    last["low"] = min(last["low"], lb["l"])
+                    last["close"] = lb["c"]
+                    last["volume"] = max(last["volume"], lb.get("v", 0))
+
+        self.send_json({"candles": all_bars, "ticker": ticker,
+                        "live_bars": live_appended})
 
     def serve_0dte_sweeps(self, query=None):
         """GET /api/0dte/sweeps — darkpool sweeps for multiple tickers with percentile sizing."""

@@ -717,6 +717,56 @@ class UnifiedLiveDaemon:
                     }
         return result
 
+    def get_live_bars(self, ticker, interval=1):
+        """Return today's live bars from daemon memory for chart append.
+
+        Args:
+            ticker: stock symbol
+            interval: minutes per bar (1=1m, 5=5m, 60=1h, 1440=daily)
+
+        Returns list of {t, o, h, l, c, v} dicts, sorted by time.
+        """
+        with self._bars_lock:
+            tb = self._bars.get(ticker)
+            if not tb:
+                return []
+
+            if interval <= 1:
+                # 1-minute bars — direct copy
+                return [dict(b) for b in tb.minutes]
+            elif interval == 60:
+                # Hourly bars — completed hours + current partial hour
+                bars = [dict(b) for b in tb.hourly]
+                if tb._hour_accum:
+                    bars.append(dict(tb._hour_accum))
+                return bars
+            elif interval >= 1440:
+                # Daily bar — single running bar
+                if tb.daily:
+                    return [dict(tb.daily)]
+                return []
+            else:
+                # Aggregate minute bars into N-minute bars (5m, 15m, etc.)
+                if not tb.minutes:
+                    return []
+                result = []
+                accum = None
+                for m in tb.minutes:
+                    bucket = (m["t"] // (interval * 60)) * (interval * 60)
+                    if accum is None or accum["t"] != bucket:
+                        if accum:
+                            result.append(accum)
+                        accum = {"t": bucket, "o": m["o"], "h": m["h"],
+                                 "l": m["l"], "c": m["c"], "v": m["v"]}
+                    else:
+                        accum["h"] = max(accum["h"], m["h"])
+                        accum["l"] = min(accum["l"], m["l"])
+                        accum["c"] = m["c"]
+                        accum["v"] += m["v"]
+                if accum:
+                    result.append(accum)
+                return result
+
     def update_config(self, price_cfg=None, sweep_cfg=None):
         """Hot-reload config on a running daemon (no restart needed).
 
