@@ -2219,11 +2219,25 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
                 pass
 
     # Cleanup: remove stale sweep_rank for tickers we just processed.
+    # CRITICAL: only clean up tickers that survived the ETF filter.
+    # If exclude_etfs=True, ETF tickers were removed from `rows` — they must
+    # NOT be in _processed_tickers or the cleanup will wipe their historical
+    # rankings (since they won't be in _valid).
     _valid = set((r["ticker"], r["trade_date"]) for r in rows)
     _processed_tickers = set(r["ticker"] for r in rows)
 
     if tickers:
-        _processed_tickers.update(tickers)
+        # Filter the input tickers list the SAME way we filtered rows,
+        # so we only clean up tickers that were actually eligible.
+        _eligible_tickers = set(tickers)
+        if etf_only:
+            _etf_set = load_etf_set()
+            _eligible_tickers = _eligible_tickers & _etf_set if _etf_set else set()
+        elif exclude_etfs:
+            _etf_set = load_etf_set()
+            if _etf_set:
+                _eligible_tickers = _eligible_tickers - _etf_set
+        _processed_tickers.update(_eligible_tickers)
 
     if _processed_tickers:
         _ph = ",".join("?" * len(_processed_tickers))
@@ -2403,14 +2417,26 @@ def detect_ranked_daily(rank_limit=100, min_sweeps=2, tickers=None,
                 pass
 
     # Cleanup: remove stale daily_rank for tickers we just processed.
-    # Build set of (ticker, date) pairs that ARE validly in the top N.
+    # CRITICAL: only clean up tickers that survived the ETF filter.
+    # If exclude_etfs=True, ETF tickers were removed from `rows` — they must
+    # NOT be in _processed_tickers or the cleanup will wipe their historical
+    # rankings (since they won't be in _valid).
     _valid = set((r["ticker"], r["trade_date"]) for r in rows)
     _processed_tickers = set(r["ticker"] for r in rows)
 
     # Also include any tickers that were requested but returned no top-N results
     # (all their days fell outside rank_limit) — they need cleanup too.
+    # But filter them the SAME way we filtered rows.
     if tickers:
-        _processed_tickers.update(tickers)
+        _eligible_tickers = set(tickers)
+        if etf_only:
+            _etf_set = load_etf_set()
+            _eligible_tickers = _eligible_tickers & _etf_set if _etf_set else set()
+        elif exclude_etfs:
+            _etf_set = load_etf_set()
+            if _etf_set:
+                _eligible_tickers = _eligible_tickers - _etf_set
+        _processed_tickers.update(_eligible_tickers)
 
     if _processed_tickers:
         _ph = ",".join("?" * len(_processed_tickers))
