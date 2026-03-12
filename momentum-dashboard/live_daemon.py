@@ -1044,6 +1044,10 @@ class UnifiedLiveDaemon:
         with self._lock:
             self._status["price_messages_received"] += 1
             self._status["price_last_message_at"] = datetime.now(timezone.utc).isoformat()
+            # Log first bar and every 1000th bar
+            cnt = self._status["price_messages_received"]
+            if cnt == 1 or cnt % 1000 == 0:
+                print(f"[LIVE] Price bars received: {cnt} (latest: {msg.get('sym','')} c={msg.get('c','')})", flush=True)
 
         ticker = msg.get("sym", "")
         if not ticker:
