@@ -2186,18 +2186,20 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
             except sqlite3.IntegrityError:
                 pass
 
-    # Cleanup: after FULL re-detection (no ticker filter), remove stale ranks.
-    # Never run during single-ticker fetches — would delete valid events that
-    # simply aren't in that ticker's top-N (ASTS bug fix).
-    if not tickers and not date_from and not date_to:
-        _valid = set((r["ticker"], r["trade_date"]) for r in rows)
+    # Cleanup: remove stale sweep_rank for tickers we just processed.
+    _valid = set((r["ticker"], r["trade_date"]) for r in rows)
+    _processed_tickers = set(r["ticker"] for r in rows)
 
-        _ph = ",".join("?" * len(tickers))
+    if tickers:
+        _processed_tickers.update(tickers)
+
+    if _processed_tickers:
+        _ph = ",".join("?" * len(_processed_tickers))
         stale_rows = c.execute(f"""
             SELECT id, ticker, event_date, event_type, sweep_rank, daily_rank
             FROM clusterbomb_events
             WHERE ticker IN ({_ph}) AND sweep_rank IS NOT NULL
-        """, list(tickers)).fetchall()
+        """, list(_processed_tickers)).fetchall()
 
         nulled = 0
         deleted = 0
@@ -2213,7 +2215,7 @@ def detect_ranked_sweeps(rank_limit=100, tickers=None,
                     nulled += 1
 
         if nulled or deleted:
-            print(f"  [SWEEP] cleanup: {nulled} stale ranks nulled, "
+            print(f"  [SWEEP] sweep cleanup: {nulled} stale ranks nulled, "
                   f"{deleted} orphan events deleted", flush=True)
 
     conn.commit()
@@ -2356,21 +2358,23 @@ def detect_ranked_daily(rank_limit=100, min_sweeps=2, tickers=None,
             except sqlite3.IntegrityError:
                 pass
 
-    # Cleanup: after FULL re-detection (no ticker filter), remove stale ranks.
-    # Never run during single-ticker fetches — would delete valid events that
-    # simply aren't in that ticker's top-N (ASTS bug fix).
-    if not tickers and not date_from and not date_to:
-        # Build set of (ticker, date) that ARE validly ranked
-        _valid = set((r["ticker"], r["trade_date"]) for r in rows)
-        _processed_tickers = set(tickers)
+    # Cleanup: remove stale daily_rank for tickers we just processed.
+    # Build set of (ticker, date) pairs that ARE validly in the top N.
+    _valid = set((r["ticker"], r["trade_date"]) for r in rows)
+    _processed_tickers = set(r["ticker"] for r in rows)
 
-        # Find stale ranked events for these tickers
-        _ph = ",".join("?" * len(tickers))
+    # Also include any tickers that were requested but returned no top-N results
+    # (all their days fell outside rank_limit) — they need cleanup too.
+    if tickers:
+        _processed_tickers.update(tickers)
+
+    if _processed_tickers:
+        _ph = ",".join("?" * len(_processed_tickers))
         stale_rows = c.execute(f"""
             SELECT id, ticker, event_date, event_type, daily_rank, sweep_rank
             FROM clusterbomb_events
             WHERE ticker IN ({_ph}) AND daily_rank IS NOT NULL
-        """, list(tickers)).fetchall()
+        """, list(_processed_tickers)).fetchall()
 
         nulled = 0
         deleted = 0
@@ -2386,7 +2390,7 @@ def detect_ranked_daily(rank_limit=100, min_sweeps=2, tickers=None,
                     nulled += 1
 
         if nulled or deleted:
-            print(f"  [SWEEP] cleanup: {nulled} stale ranks nulled, "
+            print(f"  [SWEEP] daily cleanup: {nulled} stale ranks nulled, "
                   f"{deleted} orphan events deleted", flush=True)
 
     conn.commit()
