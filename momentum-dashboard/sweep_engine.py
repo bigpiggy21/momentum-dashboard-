@@ -133,7 +133,19 @@ _etf_set = None  # Lazy-loaded in-memory set
 _ETF_CACHE_MAX_AGE_DAYS = 7
 
 # Manual ETF overrides — tickers Polygon classifies as trusts/funds but we treat as ETFs
-_ETF_MANUAL_OVERRIDES = {"IAU"}
+# Polygon misclassifies many commodity/precious metal ETFs as trusts or closed-end funds.
+# Add them here so they're always treated as ETFs for sweep filtering.
+_ETF_MANUAL_OVERRIDES = {
+    # Precious metals
+    "IAU", "SIVR", "GLDM", "SGOL", "PHYS", "PSLV", "BAR", "OUNZ", "AAAU",
+    "PPLT", "PALL", "GLTR", "IAUM", "IGLD", "BGLD",
+    # Commodity baskets
+    "DBA", "DBC", "DBO", "DBP", "DBB", "PDBC", "GSG", "COMT", "BCI", "FTGC",
+    # Energy commodity
+    "USO", "UNG", "UCO", "SCO", "BOIL", "KOLD", "UGA", "BNO",
+    # Agriculture
+    "WEAT", "CORN", "SOYB", "CPER", "JJC", "COW", "NIB",
+}
 _ETF_CATEGORIES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "etf_categories.json")
 
 def _load_etf_category_tickers():
