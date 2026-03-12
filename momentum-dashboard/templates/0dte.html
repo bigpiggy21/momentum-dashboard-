@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TBD Technologies — Chart</title>
+<link rel="stylesheet" href="/static/header.css">
 <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -42,7 +43,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .lyr-cfg .cfg-label{font-weight:600;}
 
 /* Layout */
-.main{display:flex;height:calc(100vh - 48px);}
+.main{display:flex;height:calc(100vh - 88px);}
 .left-panel{width:280px;min-width:280px;background:#0a0a12;border-right:1px solid #1e1e2e;padding:12px;overflow-y:auto;display:flex;flex-direction:column;transition:width 0.2s,min-width 0.2s,padding 0.2s;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;}
 .left-panel.collapsed{width:0;min-width:0;padding:0;overflow:hidden;border-right:none;}
 .chart-area{flex:1;position:relative;overflow:hidden;}
@@ -115,6 +116,11 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 </style>
 </head>
 <body>
+
+<!-- ROW 1: Global Navigation Bar (shared) -->
+<script>window._activePage='chart';</script>
+<div id="headerRow1"></div>
+<script src="/static/header.js"></script>
 
 <div class="header">
   <div class="header-title">Chart</div>

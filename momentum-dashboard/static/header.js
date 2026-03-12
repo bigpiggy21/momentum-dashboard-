@@ -66,6 +66,7 @@
     + btn('/log', 'Event Log', '&#x26A1; Log', 'log')
     + btn('/search', 'Screener', '&#x1F50D; Screener', 'search')
     + btn('/backtest', 'Backtesting', '&#x1F9EA; Backtest', 'backtest')
+    + btn('/0dte', 'Chart Viewer', '&#x1F4C8; Chart', 'chart')
     + '</div></div>'
 
     + '</div>'
