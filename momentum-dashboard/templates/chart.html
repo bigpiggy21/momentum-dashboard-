@@ -65,6 +65,15 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .cs-item .cs-key{color:#555;font-size:10px;min-width:56px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}
 .cs-item .cs-val{color:#e0e0e8;font-weight:600;}
 
+/* TTM Squeeze sub-pane */
+#ttmContainer{position:absolute;bottom:0;left:0;right:0;display:none;border-top:1px solid #1e1e2e;z-index:2;}
+.ttm-header{display:flex;align-items:center;gap:6px;padding:2px 8px;background:#0a0a12;border-bottom:1px solid #1e1e2e;height:22px;}
+.ttm-header .ttm-label{font-size:10px;color:#555;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;}
+.ttm-toggle{background:#1e293b;color:#555;border:1px solid #334155;padding:1px 7px;cursor:pointer;font-size:10px;font-family:inherit;font-weight:600;border-radius:3px;height:18px;line-height:16px;}
+.ttm-toggle:hover{color:#ccc;}
+.ttm-toggle.active{color:#22c55e;border-color:#22c55e44;background:#22c55e11;}
+#ttmChartArea{width:100%;height:calc(100% - 22px);position:relative;}
+
 /* Layout */
 .main{display:flex;flex:1;overflow:hidden;}
 .left-panel{width:280px;min-width:280px;background:#0a0a12;border-right:1px solid #1e1e2e;padding:12px;overflow-y:auto;display:flex;flex-direction:column;transition:width 0.2s,min-width 0.2s,padding 0.2s;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;}
@@ -237,6 +246,16 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
     <canvas id="bubbleCanvas"></canvas>
     <div id="tickerOverlay"></div>
     <div id="tooltipDiv"></div>
+    <div id="ttmContainer">
+      <div class="ttm-header">
+        <span class="ttm-label">TTM Squeeze</span>
+        <button class="ttm-toggle active" id="ttmTogHist" onclick="_ttmSubToggle('hist',this)">Hist</button>
+        <button class="ttm-toggle active" id="ttmTogSqz" onclick="_ttmSubToggle('sqz',this)">Sqz</button>
+        <button class="ttm-toggle active" id="ttmTogAccel" onclick="_ttmSubToggle('accel',this)">Accel</button>
+        <button class="ttm-toggle active" id="ttmTogThrust" onclick="_ttmSubToggle('thrust',this)">Thrust</button>
+      </div>
+      <div id="ttmChartArea"></div>
+    </div>
   </div>
 </div>
 
@@ -792,6 +811,406 @@ registerIndicator({
 });
 
 // ====================================================================
+// TTM SQUEEZE INDICATOR — sub-pane with momentum histogram, squeeze dots,
+// acceleration background, and thrust/dump arrows
+// ====================================================================
+var _ttmChart = null;        // Second LightweightCharts instance
+var _ttmMomSeries = null;    // Histogram — momentum bars
+var _ttmSqzSeries = null;    // Histogram — squeeze dots at zero line
+var _ttmAccelSeries = null;  // Histogram — acceleration background (wide bars behind momentum)
+var _ttmZeroSeries = null;   // Line — zero reference line
+var _ttmSyncing = false;     // Guard against infinite sync loop
+var _ttmSubs = {hist:true, sqz:true, accel:true, thrust:true}; // Sub-toggle states
+
+// --- TTM math helpers (ported from indicators.py) ---
+function _ttm_sma(values, period){
+  var out = new Array(values.length);
+  for(var i = 0; i < values.length; i++){
+    if(i < period - 1){ out[i] = NaN; continue; }
+    var s = 0;
+    for(var j = i - period + 1; j <= i; j++) s += values[j];
+    out[i] = s / period;
+  }
+  return out;
+}
+
+function _ttm_stdev(values, period){
+  var means = _ttm_sma(values, period);
+  var out = new Array(values.length);
+  for(var i = 0; i < values.length; i++){
+    if(isNaN(means[i])){ out[i] = NaN; continue; }
+    var sqSum = 0;
+    for(var j = i - period + 1; j <= i; j++){
+      var d = values[j] - means[i];
+      sqSum += d * d;
+    }
+    out[i] = Math.sqrt(sqSum / period); // population stddev (ddof=0)
+  }
+  return out;
+}
+
+function _ttm_highest(values, period){
+  var out = new Array(values.length);
+  for(var i = 0; i < values.length; i++){
+    if(i < period - 1){ out[i] = NaN; continue; }
+    var mx = -Infinity;
+    for(var j = i - period + 1; j <= i; j++) if(values[j] > mx) mx = values[j];
+    out[i] = mx;
+  }
+  return out;
+}
+
+function _ttm_lowest(values, period){
+  var out = new Array(values.length);
+  for(var i = 0; i < values.length; i++){
+    if(i < period - 1){ out[i] = NaN; continue; }
+    var mn = Infinity;
+    for(var j = i - period + 1; j <= i; j++) if(values[j] < mn) mn = values[j];
+    out[i] = mn;
+  }
+  return out;
+}
+
+function _ttm_tr(candles){
+  // True Range: max(H-L, |H-prevC|, |L-prevC|)
+  var out = new Array(candles.length);
+  out[0] = candles[0].high - candles[0].low;
+  for(var i = 1; i < candles.length; i++){
+    var h = candles[i].high, l = candles[i].low, pc = candles[i-1].close;
+    out[i] = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+  }
+  return out;
+}
+
+function _ttm_linreg(values, period, offset){
+  // Rolling linear regression value at (period-1-offset) position
+  // Matches TradingView linreg() and indicators.py implementation
+  var n = period;
+  var sumX = n * (n - 1) / 2;
+  var sumX2 = n * (n - 1) * (2 * n - 1) / 6;
+  var denom = n * sumX2 - sumX * sumX;
+  var out = new Array(values.length);
+  for(var i = 0; i < values.length; i++){
+    if(i < n - 1){ out[i] = NaN; continue; }
+    var hasNaN = false;
+    var sumY = 0, sumXY = 0;
+    for(var j = 0; j < n; j++){
+      var v = values[i - n + 1 + j];
+      if(isNaN(v)){ hasNaN = true; break; }
+      sumY += v;
+      sumXY += j * v;
+    }
+    if(hasNaN){ out[i] = NaN; continue; }
+    var slope = (n * sumXY - sumX * sumY) / denom;
+    var intercept = (sumY - slope * sumX) / n;
+    out[i] = intercept + slope * (n - 1 - offset);
+  }
+  return out;
+}
+
+function _ttm_change(values){
+  var out = new Array(values.length);
+  out[0] = NaN;
+  for(var i = 1; i < values.length; i++){
+    out[i] = (isNaN(values[i]) || isNaN(values[i-1])) ? NaN : values[i] - values[i-1];
+  }
+  return out;
+}
+
+// --- TTM Squeeze computation ---
+function _computeTTM(candles){
+  if(!candles || candles.length < 40) return null;
+  var len = 20, bbMult = 2.0, kcHigh = 1.0, kcMid = 1.5, kcLow = 2.0;
+  var n = candles.length;
+
+  // Extract OHLC arrays
+  var closes = new Array(n), highs = new Array(n), lows = new Array(n);
+  for(var i = 0; i < n; i++){
+    closes[i] = candles[i].close;
+    highs[i] = candles[i].high;
+    lows[i] = candles[i].low;
+  }
+
+  // --- Momentum ---
+  var hh = _ttm_highest(highs, len);
+  var ll = _ttm_lowest(lows, len);
+  var smaClose = _ttm_sma(closes, len);
+  // midline = (hh + ll) / 2;  basis = (midline + sma) / 2
+  var delta = new Array(n);
+  for(var i = 0; i < n; i++){
+    if(isNaN(hh[i]) || isNaN(ll[i]) || isNaN(smaClose[i])){ delta[i] = NaN; continue; }
+    var midline = (hh[i] + ll[i]) / 2;
+    var basis = (midline + smaClose[i]) / 2;
+    delta[i] = closes[i] - basis;
+  }
+  var mom = _ttm_linreg(delta, len, 0);
+
+  // Momentum color: cyan (pos+rising), blue (pos+falling), yellow (neg+rising), red (neg+falling)
+  var momColor = new Array(n);
+  for(var i = 0; i < n; i++){
+    if(isNaN(mom[i])){ momColor[i] = null; continue; }
+    var rising = (i > 0 && !isNaN(mom[i-1])) ? mom[i] > mom[i-1] : false;
+    if(mom[i] > 0){
+      momColor[i] = rising ? '#00e5ff' : '#2962ff'; // cyan / blue
+    } else {
+      momColor[i] = rising ? '#ffeb3b' : '#ff1744'; // yellow / red
+    }
+  }
+
+  // --- Squeeze state ---
+  var bbBasis = smaClose;
+  var bbDev = _ttm_stdev(closes, len);
+  var tr = _ttm_tr(candles);
+  var atr = _ttm_sma(tr, len);
+
+  var sqzColor = new Array(n);
+  for(var i = 0; i < n; i++){
+    if(isNaN(bbBasis[i]) || isNaN(bbDev[i]) || isNaN(atr[i])){ sqzColor[i] = null; continue; }
+    var bbUpper = bbBasis[i] + bbMult * bbDev[i];
+    var bbLower = bbBasis[i] - bbMult * bbDev[i];
+    var kcU_high = bbBasis[i] + atr[i] * kcHigh;
+    var kcL_high = bbBasis[i] - atr[i] * kcHigh;
+    var kcU_mid  = bbBasis[i] + atr[i] * kcMid;
+    var kcL_mid  = bbBasis[i] - atr[i] * kcMid;
+    var kcU_low  = bbBasis[i] + atr[i] * kcLow;
+    var kcL_low  = bbBasis[i] - atr[i] * kcLow;
+    // Squeeze uses OR logic (matching indicators.py)
+    var lowSqz  = (bbLower >= kcL_low)  || (bbUpper <= kcU_low);
+    var midSqz  = (bbLower >= kcL_mid)  || (bbUpper <= kcU_mid);
+    var highSqz = (bbLower >= kcL_high) || (bbUpper <= kcU_high);
+    // Priority: orange (tightest) > red > black > green (no squeeze)
+    if(highSqz)      sqzColor[i] = '#ff9800'; // orange
+    else if(midSqz)  sqzColor[i] = '#ff1744'; // red
+    else if(lowSqz)  sqzColor[i] = '#212121'; // black (dark)
+    else              sqzColor[i] = '#00c853'; // green
+  }
+
+  // --- Acceleration (2nd derivative of momentum) ---
+  var momChange = _ttm_change(mom);
+  var momSlope = _ttm_linreg(momChange, len, 0);
+  var momAccel = _ttm_change(momSlope);
+
+  // Acceleration background color
+  var accelColor = new Array(n);
+  for(var i = 0; i < n; i++){
+    if(isNaN(momAccel[i])){ accelColor[i] = null; continue; }
+    accelColor[i] = momAccel[i] > 0 ? 'rgba(0,200,83,0.15)' : 'rgba(255,23,68,0.15)';
+  }
+
+  // --- Thrust/Dump signals ---
+  // Decel: normalised slope crosses below -1 (from above)
+  // Accel: momAccel crosses above 1 (from below)
+  var absSlope = new Array(n);
+  for(var i = 0; i < n; i++) absSlope[i] = isNaN(momSlope[i]) ? NaN : Math.abs(momSlope[i]);
+  var avgSlope = _ttm_sma(absSlope, 50);
+  var normDecel = new Array(n);
+  for(var i = 0; i < n; i++){
+    if(isNaN(momSlope[i]) || isNaN(avgSlope[i]) || avgSlope[i] === 0){ normDecel[i] = NaN; continue; }
+    normDecel[i] = momSlope[i] / avgSlope[i];
+  }
+
+  var thrustSignals = []; // [{idx, type:'thrust'|'dump'}]
+  for(var i = 1; i < n; i++){
+    if(!isNaN(normDecel[i]) && !isNaN(normDecel[i-1])){
+      if(normDecel[i] <= -1.0 && normDecel[i-1] > -1.0){
+        thrustSignals.push({idx: i, type: 'dump'});
+      }
+    }
+    if(!isNaN(momAccel[i]) && !isNaN(momAccel[i-1])){
+      if(momAccel[i] >= 1.0 && momAccel[i-1] < 1.0){
+        thrustSignals.push({idx: i, type: 'thrust'});
+      }
+    }
+  }
+
+  return {mom: mom, momColor: momColor, sqzColor: sqzColor, accelColor: accelColor, thrustSignals: thrustSignals};
+}
+
+// --- TTM pane layout management ---
+function _ttmShowPane(){
+  var container = document.getElementById('chartContainer');
+  var ttmContainer = document.getElementById('ttmContainer');
+  ttmContainer.style.display = 'block';
+  ttmContainer.style.height = '18%';
+  container.style.height = '82%';
+  // Resize main chart
+  _chart.resize(container.clientWidth, container.clientHeight);
+  resizeCanvas();
+  drawBubbles();
+}
+
+function _ttmHidePane(){
+  var container = document.getElementById('chartContainer');
+  var ttmContainer = document.getElementById('ttmContainer');
+  ttmContainer.style.display = 'none';
+  container.style.height = '100%';
+  // Resize main chart back
+  _chart.resize(container.clientWidth, container.clientHeight);
+  resizeCanvas();
+  drawBubbles();
+}
+
+function _ttmCreateChart(){
+  if(_ttmChart) return;
+  var area = document.getElementById('ttmChartArea');
+  _ttmChart = LightweightCharts.createChart(area, {
+    width: area.clientWidth,
+    height: area.clientHeight,
+    layout: {background:{type:'solid',color:'#0c0c14'}, textColor:'#555', fontSize:10},
+    grid: {vertLines:{visible:false}, horzLines:{visible:false}},
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+      vertLine:{color:'#f59e0b33',width:1,style:3},
+      horzLine:{color:'#f59e0b33',width:1,style:3},
+    },
+    timeScale: {borderColor:'#1e1e2e', timeVisible:true, secondsVisible:false, visible:false},
+    rightPriceScale: {borderColor:'#1e1e2e', autoScale:true},
+  });
+
+  // Acceleration background — wide histogram behind momentum (low opacity)
+  _ttmAccelSeries = _ttmChart.addHistogramSeries({
+    priceScaleId: 'ttm_mom',
+    priceLineVisible: false, lastValueVisible: false,
+    base: 0,
+  });
+
+  // Momentum histogram
+  _ttmMomSeries = _ttmChart.addHistogramSeries({
+    priceScaleId: 'ttm_mom',
+    priceLineVisible: false, lastValueVisible: false,
+    base: 0,
+  });
+
+  // Squeeze dots — tiny histogram at zero
+  _ttmSqzSeries = _ttmChart.addHistogramSeries({
+    priceScaleId: 'ttm_sqz',
+    priceLineVisible: false, lastValueVisible: false,
+    base: 0,
+  });
+  _ttmChart.priceScale('ttm_sqz').applyOptions({
+    scaleMargins: {top: 0.45, bottom: 0.45},
+    borderVisible: false,
+  });
+
+  // Zero line
+  _ttmZeroSeries = _ttmChart.addLineSeries({
+    priceScaleId: 'ttm_mom',
+    color: '#333', lineWidth: 1, lineStyle: 2,
+    priceLineVisible: false, lastValueVisible: false,
+    crosshairMarkerVisible: false,
+  });
+
+  // Time scale sync: main → TTM
+  _chart.timeScale().subscribeVisibleLogicalRangeChange(function(range){
+    if(_ttmSyncing || !_ttmChart || !range) return;
+    _ttmSyncing = true;
+    _ttmChart.timeScale().setVisibleLogicalRange(range);
+    _ttmSyncing = false;
+  });
+  // TTM → main
+  _ttmChart.timeScale().subscribeVisibleLogicalRangeChange(function(range){
+    if(_ttmSyncing || !_chart || !range) return;
+    _ttmSyncing = true;
+    _chart.timeScale().setVisibleLogicalRange(range);
+    _ttmSyncing = false;
+  });
+}
+
+function _ttmDestroyChart(){
+  if(!_ttmChart) return;
+  _ttmChart.remove();
+  _ttmChart = null;
+  _ttmMomSeries = null;
+  _ttmSqzSeries = null;
+  _ttmAccelSeries = null;
+  _ttmZeroSeries = null;
+}
+
+function _ttmPopulate(candles){
+  if(!_ttmChart || !candles || candles.length < 40) return;
+  var ttm = _computeTTM(candles);
+  if(!ttm) return;
+
+  var momData = [], sqzData = [], accelData = [], zeroData = [];
+  var markers = [];
+
+  for(var i = 0; i < candles.length; i++){
+    var t = candles[i].time;
+    if(ttm.momColor[i] !== null && !isNaN(ttm.mom[i])){
+      momData.push({time: t, value: ttm.mom[i], color: ttm.momColor[i]});
+      zeroData.push({time: t, value: 0});
+    }
+    if(ttm.sqzColor[i] !== null){
+      sqzData.push({time: t, value: 0, color: ttm.sqzColor[i]});
+    }
+    if(ttm.accelColor[i] !== null && !isNaN(ttm.mom[i])){
+      accelData.push({time: t, value: ttm.mom[i], color: ttm.accelColor[i]});
+    }
+  }
+
+  // Build thrust/dump markers
+  ttm.thrustSignals.forEach(function(sig){
+    var t = candles[sig.idx].time;
+    var momVal = ttm.mom[sig.idx];
+    if(isNaN(momVal)) return;
+    if(sig.type === 'thrust'){
+      markers.push({time: t, position: 'belowBar', color: '#00c853', shape: 'arrowUp', text: ''});
+    } else {
+      markers.push({time: t, position: 'aboveBar', color: '#ff1744', shape: 'arrowDown', text: ''});
+    }
+  });
+  markers.sort(function(a,b){ return a.time - b.time; });
+
+  // Set data based on sub-toggle visibility
+  if(_ttmSubs.accel && _ttmAccelSeries) _ttmAccelSeries.setData(accelData);
+  else if(_ttmAccelSeries) _ttmAccelSeries.setData([]);
+
+  if(_ttmSubs.hist && _ttmMomSeries){
+    _ttmMomSeries.setData(momData);
+    if(_ttmSubs.thrust) _ttmMomSeries.setMarkers(markers);
+    else _ttmMomSeries.setMarkers([]);
+  } else if(_ttmMomSeries){
+    _ttmMomSeries.setData([]);
+    _ttmMomSeries.setMarkers([]);
+  }
+
+  if(_ttmSubs.sqz && _ttmSqzSeries) _ttmSqzSeries.setData(sqzData);
+  else if(_ttmSqzSeries) _ttmSqzSeries.setData([]);
+
+  if(_ttmZeroSeries) _ttmZeroSeries.setData(zeroData);
+}
+
+function _ttmSubToggle(key, btn){
+  _ttmSubs[key] = !_ttmSubs[key];
+  btn.classList.toggle('active', _ttmSubs[key]);
+  // Re-populate to show/hide sub-component
+  _ttmPopulate(_candles);
+}
+
+// Register TTM Squeeze indicator
+registerIndicator({
+  id: 'ttm',
+  name: 'TTM Squeeze',
+  color: '#22c55e',
+  hotkey: 't',
+  createSeries: function(chart){
+    var ind = _indicators['ttm'];
+    ind.series = ['_ttm_placeholder']; // Non-empty to signal "created"
+    _ttmShowPane();
+    _ttmCreateChart();
+  },
+  compute: function(candles, ind){
+    _ttmPopulate(candles);
+  },
+  remove: function(){
+    var ind = _indicators['ttm'];
+    _ttmDestroyChart();
+    _ttmHidePane();
+    ind.series = [];
+  }
+});
+
+// ====================================================================
 // CHART SETTINGS — scale, style, colors, grid, crosshair
 // ====================================================================
 var _COLOR_SCHEMES = {
@@ -1055,6 +1474,11 @@ function initChart(){
     _chart.resize(container.clientWidth, container.clientHeight);
     resizeCanvas();
     drawBubbles();
+    // Resize TTM chart if active
+    if(_ttmChart){
+      var ttmArea = document.getElementById('ttmChartArea');
+      _ttmChart.resize(ttmArea.clientWidth, ttmArea.clientHeight);
+    }
   });
 
   container.addEventListener('mousemove', onMouseMove);
