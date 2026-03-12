@@ -41,6 +41,19 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .lyr-cfg input[type="number"]{background:#14141e;border:1px solid #2a2a3a;color:#e0e0e8;padding:5px 8px;border-radius:4px;font-size:13px;font-family:inherit;width:48px;text-align:center;height:32px;font-weight:600;}
 .lyr-cfg input[type="number"]:focus{border-color:#f59e0b;outline:none;}
 .lyr-cfg .cfg-label{font-weight:600;}
+/* Indicators dropdown */
+.ind-dropdown{position:relative;display:inline-block;}
+.ind-btn{background:#1e293b;color:#888;border:1px solid #334155;padding:5px 14px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:700;letter-spacing:0.3px;height:32px;border-radius:4px;white-space:nowrap;}
+.ind-btn:hover{color:#ccc;}
+.ind-btn.has-active{color:#60a5fa;border-color:#60a5fa44;}
+.ind-menu{display:none;position:absolute;top:36px;right:0;background:#14141e;border:1px solid #334155;border-radius:6px;min-width:200px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,0.6);padding:4px 0;}
+.ind-menu.open{display:block;}
+.ind-item{display:flex;align-items:center;padding:8px 14px;cursor:pointer;font-size:12px;color:#c8c8d4;gap:8px;transition:background 0.1s;}
+.ind-item:hover{background:#1e293b;}
+.ind-item .ind-check{width:14px;height:14px;border:1.5px solid #555;border-radius:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:transparent;}
+.ind-item.active .ind-check{border-color:#60a5fa;background:#60a5fa22;color:#60a5fa;}
+.ind-item .ind-swatch{width:12px;height:3px;border-radius:1px;flex-shrink:0;}
+.ind-item .ind-label{flex:1;}
 
 /* Layout */
 .main{display:flex;flex:1;overflow:hidden;}
@@ -165,6 +178,11 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
   </select>
   <button class="ctrl-btn" style="width:auto;padding:5px 10px;font-size:11px;" onclick="savePreset()">Save</button>
   <button class="ctrl-btn" style="width:auto;padding:5px 10px;font-size:11px;color:#ef4444;" onclick="deletePreset()">Del</button>
+  <div class="hdr-sep"></div>
+  <div class="ind-dropdown" id="indDropdown">
+    <button class="ind-btn" id="indBtn" onclick="toggleIndMenu()">Indicators &#x25BE;</button>
+    <div class="ind-menu" id="indMenu"></div>
+  </div>
 </div>
 
 <div class="main">
@@ -447,6 +465,166 @@ var _candleTimer = null;
 var _tickerPrices = {};  // {ticker: {price, change, changePct}}
 
 // ====================================================================
+// INDICATOR REGISTRY — extensible system for chart overlays
+// Each indicator: {id, name, enabled, color, series:[], compute(candles), remove()}
+// ====================================================================
+var _indicators = {};
+
+function registerIndicator(cfg){
+  _indicators[cfg.id] = {
+    id: cfg.id, name: cfg.name, enabled: false,
+    color: cfg.color || '#888',        // swatch color for menu
+    series: [],                        // LightweightCharts series (created on enable)
+    createSeries: cfg.createSeries,    // fn(chart) → creates series objects, stores in .series
+    compute: cfg.compute,              // fn(candles, ind) → sets data on series
+    remove: function(){                // cleanup
+      var ind = _indicators[cfg.id];
+      ind.series.forEach(function(s){ _chart.removeSeries(s); });
+      ind.series = [];
+    }
+  };
+}
+
+function toggleIndicator(id){
+  var ind = _indicators[id];
+  if(!ind) return;
+  ind.enabled = !ind.enabled;
+  if(ind.enabled){
+    ind.createSeries(_chart);
+    ind.compute(_candles, ind);
+  } else {
+    ind.remove();
+  }
+  buildIndMenu();
+  updateIndBtnState();
+}
+
+function recomputeIndicators(){
+  Object.keys(_indicators).forEach(function(id){
+    var ind = _indicators[id];
+    if(ind.enabled && ind.series.length > 0){
+      ind.compute(_candles, ind);
+    }
+  });
+}
+
+function removeAllIndicatorSeries(){
+  // Called on ticker change — removes series so they can be recreated with fresh data
+  Object.keys(_indicators).forEach(function(id){
+    var ind = _indicators[id];
+    if(ind.series.length > 0){
+      ind.series.forEach(function(s){ _chart.removeSeries(s); });
+      ind.series = [];
+    }
+  });
+}
+
+function recreateEnabledIndicators(){
+  // Called after candle load on ticker change — recreates series for enabled indicators
+  Object.keys(_indicators).forEach(function(id){
+    var ind = _indicators[id];
+    if(ind.enabled && ind.series.length === 0){
+      ind.createSeries(_chart);
+      ind.compute(_candles, ind);
+    }
+  });
+}
+
+function buildIndMenu(){
+  var menu = document.getElementById('indMenu');
+  var html = '';
+  Object.keys(_indicators).forEach(function(id){
+    var ind = _indicators[id];
+    html += '<div class="ind-item' + (ind.enabled ? ' active' : '') + '" onclick="toggleIndicator(\'' + id + '\')">'
+      + '<span class="ind-check">' + (ind.enabled ? '&#x2713;' : '') + '</span>'
+      + '<span class="ind-swatch" style="background:' + ind.color + ';"></span>'
+      + '<span class="ind-label">' + ind.name + '</span></div>';
+  });
+  menu.innerHTML = html;
+}
+
+function toggleIndMenu(){
+  var menu = document.getElementById('indMenu');
+  menu.classList.toggle('open');
+}
+
+function updateIndBtnState(){
+  var anyOn = Object.keys(_indicators).some(function(id){ return _indicators[id].enabled; });
+  document.getElementById('indBtn').classList.toggle('has-active', anyOn);
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e){
+  var dd = document.getElementById('indDropdown');
+  if(dd && !dd.contains(e.target)){
+    document.getElementById('indMenu').classList.remove('open');
+  }
+});
+
+// ====================================================================
+// BOLLINGER BANDS INDICATOR
+// 20-period SMA (orange) + 2σ upper/lower bands (grey, step-line)
+// ====================================================================
+registerIndicator({
+  id: 'bb',
+  name: 'Bollinger Bands (20, 2)',
+  color: '#ff8c00',
+  createSeries: function(chart){
+    var ind = _indicators['bb'];
+    // Basis (20 SMA) — orange solid line
+    var basis = chart.addLineSeries({
+      color: '#ff8c00', lineWidth: 2, lineStyle: 0,
+      priceLineVisible: false, lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    // Upper band — grey step line
+    var upper = chart.addLineSeries({
+      color: '#b2af9d', lineWidth: 1, lineStyle: 0,
+      lineType: 1, // stepLine
+      priceLineVisible: false, lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    // Lower band — grey step line
+    var lower = chart.addLineSeries({
+      color: '#b2af9d', lineWidth: 1, lineStyle: 0,
+      lineType: 1, // stepLine
+      priceLineVisible: false, lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    ind.series = [basis, upper, lower];
+  },
+  compute: function(candles, ind){
+    if(!candles || candles.length < 20) return;
+    var period = 20, mult = 2.0;
+    var basisData = [], upperData = [], lowerData = [];
+
+    for(var i = period - 1; i < candles.length; i++){
+      // Compute SMA
+      var sum = 0;
+      for(var j = i - period + 1; j <= i; j++) sum += candles[j].close;
+      var sma = sum / period;
+
+      // Compute stddev
+      var sqSum = 0;
+      for(var j = i - period + 1; j <= i; j++){
+        var diff = candles[j].close - sma;
+        sqSum += diff * diff;
+      }
+      var std = Math.sqrt(sqSum / period);
+
+      var t = candles[i].time;
+      basisData.push({time: t, value: sma});
+      upperData.push({time: t, value: sma + mult * std});
+      lowerData.push({time: t, value: sma - mult * std});
+    }
+
+    ind.series[0].setData(basisData);
+    ind.series[1].setData(upperData);
+    ind.series[2].setData(lowerData);
+  }
+});
+
+// ====================================================================
 // INIT
 // ====================================================================
 (function init(){
@@ -480,8 +658,9 @@ var _tickerPrices = {};  // {ticker: {price, change, changePct}}
     updateTickerOverlay();
   }).catch(function(){});
 
-  // Init chart
+  // Init chart + indicators menu
   initChart();
+  buildIndMenu();
   loadAll(true);
 
   // Always-live: auto-refresh candles every 60s, sweeps every 30s
@@ -586,6 +765,7 @@ function setActiveTicker(ticker, source){
     _candles = [];
     _candleSeries.setData([]);
     if(_dailyHistSeries) _dailyHistSeries.setData([]);
+    removeAllIndicatorSeries(); // remove BB etc so they recreate with new data
     _chartSweeps = [];
     _chartEvents = [];
     if(_ctx) _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
@@ -845,6 +1025,8 @@ function fetchCandles(){
         }
       }
       drawBubbles();
+      recreateEnabledIndicators();
+      recomputeIndicators();
       _setLoading(false);
     })
     .catch(function(e){ if(e.name === 'AbortError' || (e instanceof TypeError && _fetchController && _fetchController.signal.aborted)) return; console.error('Candle fetch error:', e); _setLoading(false); });
