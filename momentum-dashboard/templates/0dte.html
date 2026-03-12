@@ -142,9 +142,9 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
     <button class="layer-btn lyr-sweeps active" onclick="toggleLayer('sweeps',this)">Sweeps</button>
     <button class="layer-btn lyr-daily" onclick="toggleLayer('daily',this)">Daily</button>
     <button class="layer-btn lyr-single" onclick="toggleLayer('single',this)">Single</button>
-    <button class="layer-btn lyr-rare" onclick="toggleLayer('rare',this)">Rare</button>
-    <button class="layer-btn lyr-cb" onclick="toggleLayer('cb',this)">CB</button>
-    <button class="layer-btn lyr-monster" onclick="toggleLayer('monster',this)">Monster</button>
+    <button class="layer-btn lyr-rare active" onclick="toggleLayer('rare',this)">Rare</button>
+    <button class="layer-btn lyr-cb active" onclick="toggleLayer('cb',this)">CB</button>
+    <button class="layer-btn lyr-monster active" onclick="toggleLayer('monster',this)">Monster</button>
   </div>
   <div class="hdr-sep"></div>
   <div class="sweep-filter">
@@ -403,7 +403,7 @@ var INTERVAL_DAYS = {1:5, 5:30, 60:120, 240:365, 1440:730, 2880:730, 10080:1460,
 var SWEEP_DAYS =    {1:5, 5:30, 60:90,  240:180, 1440:365, 2880:365, 10080:730,  43200:1460, 129600:2520};
 
 // Layer system — 6 layers: raw sweeps + 5 event layers
-var _activeLayers = {sweeps:true, daily:false, single:false, rare:false, cb:false, monster:false};
+var _activeLayers = {sweeps:true, daily:false, single:false, rare:true, cb:true, monster:true};
 var _layerCfg = {minNotional:500000, percentile:85, dailyFrom:1, dailyTo:20, singleFrom:1, singleTo:10};
 // Raw data from /api/sweeps/chart
 var _chartSweeps = [];       // individual sweep trades
@@ -1119,14 +1119,25 @@ function drawBubbles(){
     });
   }
 
+  // Helper: draw a dark backing disc behind overlay text for contrast
+  function drawOverlayBacking(x, y, r){
+    _ctx.beginPath();
+    _ctx.arc(x, y, Math.max(7, r * 0.55), 0, Math.PI * 2);
+    _ctx.fillStyle = 'rgba(12,12,20,0.75)';
+    _ctx.fill();
+  }
+
   // ---- OVERLAY: CB 💣 emoji on largest bubble per clusterbomb day ----
   if(_activeLayers.cb){
     _drawnBubbles.forEach(function(b){
       if(!b._isLargestForDate) return;
       var meta = _evMeta[b.date];
       if(!meta || !meta.is_cb) return;
-      _ctx.font = Math.max(10, Math.round(b.radius * 0.9)) + 'px serif';
+      drawOverlayBacking(b.x, b.y, b.radius);
+      var sz = Math.max(12, Math.round(b.radius * 1.1));
+      _ctx.font = sz + 'px serif';
       _ctx.textAlign = 'center'; _ctx.textBaseline = 'middle';
+      _ctx.globalAlpha = 1.0;
       _ctx.fillText('\uD83D\uDCA3', b.x, b.y);
     });
   }
@@ -1137,8 +1148,11 @@ function drawBubbles(){
       if(!b._isLargestForDate) return;
       var meta = _evMeta[b.date];
       if(!meta || !meta.is_monster) return;
-      _ctx.font = Math.max(10, Math.round(b.radius * 0.9)) + 'px serif';
+      drawOverlayBacking(b.x, b.y, b.radius);
+      var sz = Math.max(12, Math.round(b.radius * 1.1));
+      _ctx.font = sz + 'px serif';
       _ctx.textAlign = 'center'; _ctx.textBaseline = 'middle';
+      _ctx.globalAlpha = 1.0;
       _ctx.fillText('\uD83D\uDCA5', b.x, b.y);
     });
   }
@@ -1149,9 +1163,12 @@ function drawBubbles(){
       if(!b._isLargestForDate) return;
       var meta = _evMeta[b.date];
       if(!meta || !meta.is_rare) return;
-      _ctx.font = 'bold ' + Math.max(9, Math.round(b.radius * 0.7)) + 'px -apple-system, sans-serif';
+      drawOverlayBacking(b.x, b.y, b.radius);
+      var sz = Math.max(10, Math.round(b.radius * 0.8));
+      _ctx.font = 'bold ' + sz + 'px -apple-system, sans-serif';
       _ctx.textAlign = 'center'; _ctx.textBaseline = 'middle';
-      _ctx.fillStyle = '#c4b5fd';
+      _ctx.fillStyle = '#a855f6';
+      _ctx.globalAlpha = 1.0;
       _ctx.fillText('R', b.x, b.y);
     });
   }
