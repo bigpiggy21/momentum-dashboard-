@@ -54,6 +54,16 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .ind-item.active .ind-check{border-color:#60a5fa;background:#60a5fa22;color:#60a5fa;}
 .ind-item .ind-swatch{width:12px;height:3px;border-radius:1px;flex-shrink:0;}
 .ind-item .ind-label{flex:1;}
+/* Chart settings dropdown (same pattern as indicators) */
+.cs-dropdown{position:relative;display:inline-block;}
+.cs-btn{background:#1e293b;color:#888;border:1px solid #334155;padding:5px 14px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:700;letter-spacing:0.3px;height:32px;border-radius:4px;white-space:nowrap;}
+.cs-btn:hover{color:#ccc;}
+.cs-menu{display:none;position:absolute;top:36px;left:0;background:#14141e;border:1px solid #334155;border-radius:6px;min-width:180px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,0.6);padding:4px 0;}
+.cs-menu.open{display:block;}
+.cs-item{display:flex;align-items:center;padding:7px 14px;cursor:pointer;font-size:12px;color:#c8c8d4;gap:8px;transition:background 0.1s;user-select:none;}
+.cs-item:hover{background:#1e293b;}
+.cs-item .cs-key{color:#555;font-size:10px;min-width:56px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}
+.cs-item .cs-val{color:#e0e0e8;font-weight:600;}
 
 /* Layout */
 .main{display:flex;flex:1;overflow:hidden;}
@@ -141,6 +151,11 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 <div class="header">
   <div class="header-title">Chart</div>
   <input type="text" id="tickerInput" placeholder="Ticker..." spellcheck="false">
+  <div class="hdr-sep"></div>
+  <div class="cs-dropdown" id="csDropdown">
+    <button class="cs-btn" onclick="toggleCsMenu()">Chart &#x25BE;</button>
+    <div class="cs-menu" id="csMenu"></div>
+  </div>
   <div class="hdr-sep"></div>
   <div class="seg-ctrl" id="candleIntervalCtrl">
     <button class="active" onclick="setCandleInterval(1,this)">1m</button>
@@ -419,6 +434,13 @@ var _overlayTickers = [];        // flat array of overlay ticker objects
 
 var _candleInterval = 1;
 var _sweepFilterMode = 'notional';   // 'notional' | 'percentile'
+
+// Chart settings (persisted to localStorage)
+var _chartScale = localStorage.getItem('chart_scale') || 'log';
+var _candleStyle = localStorage.getItem('chart_candleStyle') || 'hollow';
+var _chartColorScheme = localStorage.getItem('chart_colors') || 'default';
+var _gridVisible = (localStorage.getItem('chart_grid') || '0') === '1';
+var _crosshairMode = localStorage.getItem('chart_crosshair') || 'normal';
 // Days of candle data per interval (for Polygon API)
 var INTERVAL_DAYS = {1:5, 5:30, 60:120, 240:365, 1440:730, 2880:730, 10080:1460, 43200:2520, 129600:3780};
 // Sweep lookback now uses INTERVAL_DAYS directly (matched to candle range)
@@ -627,6 +649,155 @@ registerIndicator({
 });
 
 // ====================================================================
+// CHART SETTINGS — scale, style, colors, grid, crosshair
+// ====================================================================
+var _COLOR_SCHEMES = {
+  'default': {upColor:'transparent', borderUp:'#056656', borderDown:'#b22833', downColor:'#b22833', wickUp:'#056656', wickDown:'#b22833', label:'🟢🔴'},
+  'blue-red': {upColor:'transparent', borderUp:'#2196f3', borderDown:'#b22833', downColor:'#b22833', wickUp:'#2196f3', wickDown:'#b22833', label:'🔵🔴'},
+  'amber':   {upColor:'transparent', borderUp:'#f59e0b', borderDown:'#7c3aed', downColor:'#7c3aed', wickUp:'#f59e0b', wickDown:'#7c3aed', label:'🟡🟣'},
+};
+
+function _getColorScheme(){
+  var cs = _COLOR_SCHEMES[_chartColorScheme] || _COLOR_SCHEMES['default'];
+  // For filled style, up candle gets solid fill
+  if(_candleStyle === 'filled'){
+    return Object.assign({}, cs, {upColor: cs.borderUp});
+  }
+  return cs;
+}
+
+function applyChartSettings(){
+  if(!_chart || !_candleSeries) return;
+  // Scale
+  _chart.priceScale('right').applyOptions({mode: _chartScale === 'log' ? 1 : 0});
+  // Grid
+  _chart.applyOptions({grid: {
+    vertLines: {visible: _gridVisible, color: '#1e1e2e'},
+    horzLines: {visible: _gridVisible, color: '#1e1e2e'},
+  }});
+  // Crosshair
+  _chart.applyOptions({crosshair: {mode: _crosshairMode === 'magnet' ? LightweightCharts.CrosshairMode.Magnet : LightweightCharts.CrosshairMode.Normal}});
+  // Colors + style (hollow/filled handled by upColor)
+  if(_candleStyle !== 'line'){
+    var cs = _getColorScheme();
+    _candleSeries.applyOptions({
+      upColor: cs.upColor, downColor: cs.downColor,
+      borderUpColor: cs.borderUp, borderDownColor: cs.borderDown,
+      wickUpColor: cs.wickUp, wickDownColor: cs.wickDown,
+    });
+  }
+}
+
+function toggleCsMenu(){
+  document.getElementById('csMenu').classList.toggle('open');
+  // Close indicators menu if open
+  document.getElementById('indMenu').classList.remove('open');
+}
+
+function buildCsMenu(){
+  var scaleLabel = _chartScale === 'log' ? 'Log' : 'Linear';
+  var styleLabel = _candleStyle.charAt(0).toUpperCase() + _candleStyle.slice(1);
+  var colorLabel = (_COLOR_SCHEMES[_chartColorScheme] || _COLOR_SCHEMES['default']).label;
+  var gridLabel = _gridVisible ? 'On' : 'Off';
+  var crossLabel = _crosshairMode === 'magnet' ? 'Magnet' : 'Normal';
+
+  var html = ''
+    + '<div class="cs-item" onclick="cycleSetting(\'scale\')"><span class="cs-key">Scale</span><span class="cs-val">' + scaleLabel + '</span></div>'
+    + '<div class="cs-item" onclick="cycleSetting(\'style\')"><span class="cs-key">Style</span><span class="cs-val">' + styleLabel + '</span></div>'
+    + '<div class="cs-item" onclick="cycleSetting(\'colors\')"><span class="cs-key">Colors</span><span class="cs-val">' + colorLabel + '</span></div>'
+    + '<div class="cs-item" onclick="cycleSetting(\'grid\')"><span class="cs-key">Grid</span><span class="cs-val">' + gridLabel + '</span></div>'
+    + '<div class="cs-item" onclick="cycleSetting(\'crosshair\')"><span class="cs-key">Crosshair</span><span class="cs-val">' + crossLabel + '</span></div>';
+  document.getElementById('csMenu').innerHTML = html;
+}
+
+function cycleSetting(key){
+  if(key === 'scale'){
+    var opts = ['linear','log'];
+    _chartScale = opts[(opts.indexOf(_chartScale) + 1) % opts.length];
+    localStorage.setItem('chart_scale', _chartScale);
+  } else if(key === 'style'){
+    var opts2 = ['hollow','filled','line'];
+    var newStyle = opts2[(opts2.indexOf(_candleStyle) + 1) % opts2.length];
+    var oldStyle = _candleStyle;
+    _candleStyle = newStyle;
+    localStorage.setItem('chart_candleStyle', _candleStyle);
+    // Line ↔ candle requires series swap
+    if((oldStyle === 'line') !== (newStyle === 'line')){
+      rebuildCandleSeries();
+    }
+  } else if(key === 'colors'){
+    var opts3 = ['default','blue-red','amber'];
+    _chartColorScheme = opts3[(opts3.indexOf(_chartColorScheme) + 1) % opts3.length];
+    localStorage.setItem('chart_colors', _chartColorScheme);
+  } else if(key === 'grid'){
+    _gridVisible = !_gridVisible;
+    localStorage.setItem('chart_grid', _gridVisible ? '1' : '0');
+  } else if(key === 'crosshair'){
+    _crosshairMode = _crosshairMode === 'normal' ? 'magnet' : 'normal';
+    localStorage.setItem('chart_crosshair', _crosshairMode);
+  }
+  applyChartSettings();
+  buildCsMenu();
+}
+
+function _setSeriesData(data){
+  // Sets data on _candleSeries, converting format for line series if needed
+  if(_candleStyle === 'line'){
+    _candleSeries.setData(data.map(function(c){ return {time: c.time, value: c.close}; }));
+  } else {
+    _candleSeries.setData(data);
+  }
+}
+
+function _updateSeriesBar(c){
+  // Updates a single bar on _candleSeries
+  if(_candleStyle === 'line'){
+    _candleSeries.update({time: c.time, value: c.close});
+  } else {
+    _candleSeries.update(c);
+  }
+}
+
+function rebuildCandleSeries(){
+  // Swap between candlestick and line series
+  if(!_chart) return;
+  _chart.removeSeries(_candleSeries);
+  if(_candleStyle === 'line'){
+    var cs = _getColorScheme();
+    _candleSeries = _chart.addLineSeries({
+      color: cs.borderUp, lineWidth: 2,
+      priceLineVisible: true, lastValueVisible: true,
+      crosshairMarkerVisible: true,
+    });
+  } else {
+    var cs2 = _getColorScheme();
+    _candleSeries = _chart.addCandlestickSeries({
+      upColor: cs2.upColor, downColor: cs2.downColor,
+      borderUpColor: cs2.borderUp, borderDownColor: cs2.borderDown,
+      wickUpColor: cs2.wickUp, wickDownColor: cs2.wickDown,
+    });
+  }
+  // Re-apply data
+  if(_candles.length > 0){
+    if(_candleStyle === 'line'){
+      _candleSeries.setData(_candles.map(function(c){ return {time: c.time, value: c.close}; }));
+    } else {
+      _candleSeries.setData(_candles);
+    }
+    _chart.timeScale().fitContent();
+  }
+  drawBubbles();
+}
+
+// Close chart settings dropdown when clicking outside
+document.addEventListener('click', function(e){
+  var dd = document.getElementById('csDropdown');
+  if(dd && !dd.contains(e.target)){
+    document.getElementById('csMenu').classList.remove('open');
+  }
+});
+
+// ====================================================================
 // INIT
 // ====================================================================
 (function init(){
@@ -660,8 +831,9 @@ registerIndicator({
     updateTickerOverlay();
   }).catch(function(){});
 
-  // Init chart + indicators menu
+  // Init chart + menus
   initChart();
+  buildCsMenu();
   buildIndMenu();
   loadAll(true);
 
@@ -686,21 +858,34 @@ function initChart(){
     width: container.clientWidth,
     height: container.clientHeight,
     layout: {background:{type:'solid',color:'#0c0c14'}, textColor:'#888', fontSize:11},
-    grid: {vertLines:{color:'#1a1a26'}, horzLines:{color:'#1a1a26'}},
+    grid: {
+      vertLines:{visible: _gridVisible, color:'#1e1e2e'},
+      horzLines:{visible: _gridVisible, color:'#1e1e2e'},
+    },
     crosshair: {
-      mode: LightweightCharts.CrosshairMode.Normal,
+      mode: _crosshairMode === 'magnet' ? LightweightCharts.CrosshairMode.Magnet : LightweightCharts.CrosshairMode.Normal,
       vertLine:{color:'#f59e0b33',width:1,style:3},
       horzLine:{color:'#f59e0b33',width:1,style:3},
     },
     timeScale: {borderColor:'#1e1e2e', timeVisible:true, secondsVisible:false},
-    rightPriceScale: {borderColor:'#1e1e2e'},
+    rightPriceScale: {borderColor:'#1e1e2e', mode: _chartScale === 'log' ? 1 : 0},
   });
 
-  _candleSeries = _chart.addCandlestickSeries({
-    upColor:'transparent', downColor:'#b22833',
-    borderUpColor:'#056656', borderDownColor:'#b22833',
-    wickUpColor:'#056656', wickDownColor:'#b22833',
-  });
+  // Create price series based on saved style
+  var _cs = _getColorScheme();
+  if(_candleStyle === 'line'){
+    _candleSeries = _chart.addLineSeries({
+      color: _cs.borderUp, lineWidth: 2,
+      priceLineVisible: true, lastValueVisible: true,
+      crosshairMarkerVisible: true,
+    });
+  } else {
+    _candleSeries = _chart.addCandlestickSeries({
+      upColor: _cs.upColor, downColor: _cs.downColor,
+      borderUpColor: _cs.borderUp, borderDownColor: _cs.borderDown,
+      wickUpColor: _cs.wickUp, wickDownColor: _cs.wickDown,
+    });
+  }
 
   // Daily DP volume histogram — separate price scale on right
   _dailyHistSeries = _chart.addHistogramSeries({
@@ -1001,7 +1186,7 @@ function fetchCandles(){
 
       if(_initialLoad || _candles.length === 0){
         _candles = newCandles;
-        _candleSeries.setData(_candles);
+        _setSeriesData(_candles);
         // Reset price scale auto-fit + time scale fit for new data
         _chart.priceScale('right').applyOptions({autoScale: true});
         _chart.timeScale().fitContent();
@@ -1011,18 +1196,18 @@ function fetchCandles(){
         var updated = false;
         newCandles.forEach(function(c){
           if(c.time > oldLast){
-            _candleSeries.update(c);
+            _updateSeriesBar(c);
             _candles.push(c);
             updated = true;
           } else if(c.time === oldLast){
-            _candleSeries.update(c);
+            _updateSeriesBar(c);
             _candles[_candles.length - 1] = c;
             updated = true;
           }
         });
         if(!updated && newCandles.length > 0 && newCandles[0].time !== (_candles[0] || {}).time){
           _candles = newCandles;
-          _candleSeries.setData(_candles);
+          _setSeriesData(_candles);
           _chart.timeScale().fitContent();
         }
       }
