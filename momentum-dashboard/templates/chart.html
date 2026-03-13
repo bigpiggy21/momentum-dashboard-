@@ -118,8 +118,9 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .tl-ext.neg{color:#ef5350;}
 body.ext-hours .tl-ext{display:inline;}
 /* TradingView-style digit color flash */
-.tl-price .d-up{color:#26a69a;transition:color 0.6s ease-out 0.4s;}
-.tl-price .d-dn{color:#ef5350;transition:color 0.6s ease-out 0.4s;}
+.tl-price .d-up{color:#26a69a;}
+.tl-price .d-dn{color:#ef5350;}
+.tl-price .d-fade{color:#ccc;transition:color 1.2s ease-out;}
 .tl-price .d-n{color:#ccc;}
 
 /* Overlay checkboxes section — never scrolls, always full height */
@@ -2119,11 +2120,11 @@ function _updateTickerPriceDOM(ticker){
           }
         }
         priceEl.innerHTML = html;
-        // After color holds, fade all spans back to neutral
+        // Hold color for 1.5s, then fade to neutral over 1.2s
         setTimeout(function(){
           var spans = priceEl.querySelectorAll('.d-up,.d-dn');
-          for(var j = 0; j < spans.length; j++) spans[j].className = 'd-n';
-        }, 50);
+          for(var j = 0; j < spans.length; j++) spans[j].className = 'd-fade';
+        }, 1500);
       }
     }
   }
