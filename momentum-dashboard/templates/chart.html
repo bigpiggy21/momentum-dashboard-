@@ -1709,7 +1709,7 @@ function initChart(){
       wickUpColor: _cs.wickUp, wickDownColor: _cs.wickDown,
       priceLineVisible: true,
       priceLineWidth: 1,
-      priceLineColor: '#888',
+      priceLineColor: '#f59e0b',
       priceLineStyle: 2, // dashed
       lastValueVisible: true,
     });
@@ -2218,13 +2218,13 @@ function _updateCloseLine(){
   if(tp && tp.regClose){
     _closePriceLine = _candleSeries.createPriceLine({
       price: tp.regClose,
-      color: '#f59e0b',
+      color: '#888',
       lineWidth: 1,
       lineStyle: 2, // dashed
       axisLabelVisible: true,
       title: '',
-      axisLabelColor: '#f59e0b',
-      axisLabelTextColor: '#000',
+      axisLabelColor: '#888',
+      axisLabelTextColor: '#fff',
     });
   }
 }
