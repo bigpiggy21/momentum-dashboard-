@@ -1696,8 +1696,8 @@ function initChart(){
 
   // Apply session-aware background on chart init
   var _initSession = _getMarketSession();
-  var _initBg = _initSession === 'pre' ? '#636363' : _initSession === 'after' ? '#0c3299' : '#131721';
-  _chart.applyOptions({layout:{background:{type:'solid',color:_initBg}}});
+  var _sessionBgs = {pre: '#1e1e1e', after: '#0a1a3d', regular: '#131721', closed: '#131721'};
+  _chart.applyOptions({layout:{background:{type:'solid',color:_sessionBgs[_initSession] || '#131721'}}});
 
   // Fit content with 35% right margin (65% data, 35% empty space)
   function _fitWithMargin(){
@@ -1976,8 +1976,8 @@ function _updateSessionClass(){
   document.body.classList.toggle('ext-hours', isExt);
   // Update chart background based on session
   if(_prevSession !== session && _chart){
-    var bg = session === 'pre' ? '#636363' : session === 'after' ? '#0c3299' : '#131721';
-    _chart.applyOptions({layout:{background:{type:'solid',color:bg}}});
+    var _sBgs = {pre: '#1e1e1e', after: '#0a1a3d', regular: '#131721', closed: '#131721'};
+    _chart.applyOptions({layout:{background:{type:'solid',color:_sBgs[session] || '#131721'}}});
   }
   // Update close price line on session transitions
   if(_prevSession !== session) _updateCloseLine();
