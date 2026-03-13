@@ -23,6 +23,8 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .sweep-dd-btn{background:#1e293b;color:#888;border:1px solid #334155;padding:5px 14px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:700;letter-spacing:0.3px;height:32px;border-radius:4px;white-space:nowrap;}
 .sweep-dd-btn:hover{color:#ccc;}
 .sweep-dd-btn.has-active{color:#60a5fa;border-color:#60a5fa44;}
+@keyframes leader-outline{0%{box-shadow:0 0 0 2px #f59e0b;}100%{box-shadow:0 0 0 2px transparent;}}
+.sweep-dd-btn.leader-flash{animation:leader-outline 1.5s ease-out forwards;}
 .sweep-dd-menu{display:none;position:absolute;top:36px;left:0;background:#14141e;border:1px solid #334155;border-radius:6px;min-width:200px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,0.6);padding:4px 0;}
 .sweep-dd-menu.open{display:block;}
 .sweep-dd-item{display:flex;align-items:center;padding:8px 14px;cursor:pointer;font-size:12px;color:#c8c8d4;gap:8px;transition:background 0.1s;}
@@ -85,7 +87,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .chart-area{flex:1;position:relative;overflow:hidden;}
 #chartContainer{width:100%;height:100%;position:relative;}
 #bubbleCanvas{position:absolute;top:0;left:0;pointer-events:none;z-index:5;}
-#tickerOverlay{position:absolute;top:8px;left:4px;z-index:6;pointer-events:none;font-family:'Inter',sans-serif;}
+#tickerOverlay{position:absolute;top:12px;left:12px;z-index:6;pointer-events:none;font-family:'Inter',sans-serif;}
 #tickerOverlay .overlay-ticker{font-size:26px;font-weight:700;color:rgba(255,255,255,0.35);letter-spacing:1px;}
 #tickerOverlay .overlay-name{font-size:13px;font-weight:400;color:rgba(255,255,255,0.2);margin-top:1px;}
 #tooltipDiv{position:absolute;display:none;background:rgba(0,0,0,0.92);border:1px solid #334155;border-radius:4px;padding:5px 8px;font-size:11px;color:#c8c8d4;pointer-events:none;z-index:10;white-space:nowrap;line-height:1.5;}
@@ -102,7 +104,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .ticker-list::-webkit-scrollbar{width:6px;}
 .ticker-list::-webkit-scrollbar-track{background:#0a0a12;}
 .ticker-list::-webkit-scrollbar-thumb{background:#333;border-radius:3px;}
-.ticker-list-item{display:flex;align-items:center;gap:0;padding:6px 6px;cursor:pointer;border-radius:4px;font-size:12px;}
+.ticker-list-item{display:flex;align-items:center;gap:0;padding:3px 6px;cursor:pointer;border-radius:4px;font-size:12.5px;}
 .ticker-list-item:hover{background:#14141e;}
 .ticker-list-item.active{background:#f59e0b15;border-left:2px solid #f59e0b;}
 .ticker-list-item .tl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
@@ -603,20 +605,17 @@ var _leaderTimer = null; // auto-clear timeout
 function _clearLeader(){
   _leaderKey = null;
   clearTimeout(_leaderTimer);
-  var badge = document.getElementById('leaderBadge');
-  if(badge) badge.style.display = 'none';
+  var btn = document.getElementById('sweepDdBtn');
+  if(btn) btn.classList.remove('leader-flash');
 }
 
-function _showLeader(label){
-  var badge = document.getElementById('leaderBadge');
-  if(!badge){
-    badge = document.createElement('div');
-    badge.id = 'leaderBadge';
-    badge.style.cssText = 'position:fixed;top:56px;left:50%;transform:translateX(-50%);background:#f59e0b;color:#000;padding:3px 14px;border-radius:4px;font-size:11px;font-weight:700;z-index:999;letter-spacing:0.5px;';
-    document.body.appendChild(badge);
+function _showLeader(){
+  var btn = document.getElementById('sweepDdBtn');
+  if(btn){
+    btn.classList.remove('leader-flash');
+    void btn.offsetWidth; // force reflow to restart animation
+    btn.classList.add('leader-flash');
   }
-  badge.textContent = label;
-  badge.style.display = 'block';
 }
 
 // Sweep layer hotkey map: 1=Sweeps, 2=Daily, 3=Single, 4=Rare, 5=CB, 6=Monster
@@ -645,7 +644,7 @@ document.addEventListener('keydown', function(e){
   if(key === 's'){
     e.preventDefault();
     _leaderKey = 's';
-    _showLeader('SWEEPS: 1-6 toggle layers');
+    _showLeader();
     clearTimeout(_leaderTimer);
     _leaderTimer = setTimeout(function(){
       // If still in leader mode after timeout, do master toggle
@@ -1421,7 +1420,7 @@ var _COLOR_SCHEMES = {
   'default': {upColor:'transparent', borderUp:'#056656', borderDown:'#b22833', downColor:'#b22833', wickUp:'#056656', wickDown:'#b22833', label:'🟢🔴'},
   'blue-red': {upColor:'transparent', borderUp:'#2196f3', borderDown:'#b22833', downColor:'#b22833', wickUp:'#2196f3', wickDown:'#b22833', label:'🔵🔴'},
   'amber':   {upColor:'transparent', borderUp:'#f59e0b', borderDown:'#7c3aed', downColor:'#7c3aed', wickUp:'#f59e0b', wickDown:'#7c3aed', label:'🟡🟣'},
-  'teal':    {upColor:'transparent', borderUp:'#056656', borderDown:'#056656', downColor:'#056656', wickUp:'#056656', wickDown:'#056656', label:'🩲'},
+  'teal':    {upColor:'transparent', borderUp:'#056656', borderDown:'#056656', downColor:'#056656', wickUp:'#056656', wickDown:'#056656', label:'Teal'},
 };
 
 function _getColorScheme(){
