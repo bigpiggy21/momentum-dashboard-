@@ -1391,7 +1391,6 @@ function _ttmDestroyChart(){
 }
 
 function _ttmPopulate(candles){
-  console.log('[TTM] populate called, chart:', !!_ttmChart, 'candles:', candles ? candles.length : 0, 'momSeries:', !!_ttmMomSeries);
   if(!_ttmChart || !candles || candles.length < 40) return;
   var ttm = _computeTTM(candles);
   if(!ttm) return;
@@ -1744,19 +1743,19 @@ function initChart(){
     rightPriceScale: {borderColor:'#1e1e2e', mode: _chartScale === 'log' ? 1 : 0, minimumWidth: 65},
   });
 
-  // Fit content with 35% right margin (65% data, 35% empty space)
-  function _fitWithMargin(){
-    if(!_chart) return;
-    var ts = _chart.timeScale();
-    ts.fitContent();
-    // After fitContent, read visible range and expand it by 35/65 on the right
-    var range = ts.getVisibleLogicalRange();
-    if(range && range.from !== undefined && range.to !== undefined){
-      var span = range.to - range.from;
-      var gap = span * (35 / 65);
-      ts.setVisibleLogicalRange({from: range.from, to: range.to + gap});
-    }
+// Fit content with 35% right margin (65% data, 35% empty space)
+function _fitWithMargin(){
+  if(!_chart) return;
+  var ts = _chart.timeScale();
+  ts.fitContent();
+  // After fitContent, read visible range and expand it by 35/65 on the right
+  var range = ts.getVisibleLogicalRange();
+  if(range && range.from !== undefined && range.to !== undefined){
+    var span = range.to - range.from;
+    var gap = span * (35 / 65);
+    ts.setVisibleLogicalRange({from: range.from, to: range.to + gap});
   }
+}
 
   // Create price series based on saved style
   var _cs = _getColorScheme();
