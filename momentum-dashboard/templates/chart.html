@@ -1694,6 +1694,11 @@ function initChart(){
     rightPriceScale: {borderColor:'#1e1e2e', mode: _chartScale === 'log' ? 1 : 0},
   });
 
+  // Apply session-aware background on chart init
+  var _initSession = _getMarketSession();
+  var _initBg = _initSession === 'pre' ? '#636363' : _initSession === 'after' ? '#0c3299' : '#131721';
+  _chart.applyOptions({layout:{background:{type:'solid',color:_initBg}}});
+
   // Fit content with 35% right margin (65% data, 35% empty space)
   function _fitWithMargin(){
     if(!_chart) return;
@@ -1969,6 +1974,11 @@ function _updateSessionClass(){
 
   var isExt = (session === 'pre' || session === 'after');
   document.body.classList.toggle('ext-hours', isExt);
+  // Update chart background based on session
+  if(_prevSession !== session && _chart){
+    var bg = session === 'pre' ? '#636363' : session === 'after' ? '#0c3299' : '#131721';
+    _chart.applyOptions({layout:{background:{type:'solid',color:bg}}});
+  }
   // Update close price line on session transitions
   if(_prevSession !== session) _updateCloseLine();
 }
