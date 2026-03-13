@@ -5838,13 +5838,108 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     # 0DTE DARKPOOL FLOW
     # ====================================================================
 
+    # Interval → _load_price_candles timeframe mapping (cache-eligible)
+    _CACHE_TF_MAP = {
+        60: "1h",      # 1H
+        240: "4h",     # 4H
+        1440: "1D",    # 1D
+        10080: "1W",   # W
+        43200: "1M",   # M
+        129600: "3M",  # 3M
+    }
+
     def serve_chart_candles(self, query=None):
-        """GET /api/chart/candles — fetch candles from Polygon for a ticker."""
+        """GET /api/chart/candles — fetch candles, cache-first for D/H/W/M."""
         query = query or {}
         ticker = query.get("ticker", ["SPY"])[0]
         date_str = query.get("date", [None])[0]
         days = int(query.get("days", ["1"])[0])
         interval = int(query.get("interval", ["1"])[0])
+
+        if not date_str:
+            from datetime import date as dt_date
+            date_str = dt_date.today().isoformat()
+
+        # --- Tier 1+2: Try local CSV cache for cacheable intervals ---
+        cache_tf = self._CACHE_TF_MAP.get(interval)
+        if cache_tf:
+            candles = self._serve_candles_from_cache(ticker, date_str, days, interval, cache_tf)
+            if candles is not None:
+                self.send_json({"candles": candles, "ticker": ticker,
+                                "source": "cache", "live_bars": 0})
+                return
+
+        # --- Tier 3: API fallback (1m, 5m, 2D, or cache miss) ---
+        self._serve_candles_from_api(ticker, date_str, days, interval)
+
+    def _serve_candles_from_cache(self, ticker, date_str, days, interval, cache_tf):
+        """Try to serve candles from CSV cache + live daemon. Returns list or None."""
+        from datetime import datetime, timedelta
+        import time as _time
+
+        end_date = datetime.strptime(date_str, "%Y-%m-%d")
+        weekend_pad = 2 if days <= 10 else int(days * 0.45)
+        start_date = end_date - timedelta(days=max(0, days - 1) + weekend_pad)
+        date_from = start_date.strftime("%Y-%m-%d")
+        date_to = date_str
+
+        # For weekly/monthly, load daily cache and aggregate
+        if cache_tf in ("1W", "1M", "3M"):
+            candles = self._load_aggregated_candles(ticker, date_from, date_to, cache_tf)
+        else:
+            # 1D, 1h, 4h — use sweep_engine's _load_price_candles directly
+            from sweep_engine import _load_price_candles
+            candles = _load_price_candles(ticker, date_from, date_to, cache_tf)
+
+        if not candles:
+            return None  # cache miss — fall back to API
+
+        return candles
+
+    def _load_aggregated_candles(self, ticker, date_from, date_to, cache_tf):
+        """Aggregate daily cache into weekly/monthly candles."""
+        from sweep_engine import _load_price_candles
+        import pandas as pd
+
+        # Load daily candles from cache
+        daily = _load_price_candles(ticker, date_from, date_to, "1D")
+        if not daily:
+            return None
+
+        # Convert to DataFrame for resampling
+        df = pd.DataFrame(daily)
+        # Daily candles use "YYYY-MM-DD" string time format
+        df["timestamp"] = pd.to_datetime(df["time"])
+        df = df.sort_values("timestamp").set_index("timestamp")
+
+        if cache_tf == "1W":
+            rule = "W-FRI"  # week ending Friday
+        elif cache_tf == "1M":
+            rule = "MS"  # month start
+        elif cache_tf == "3M":
+            rule = "QS"  # quarter start
+        else:
+            return None
+
+        agg = df.resample(rule).agg({
+            "open": "first", "high": "max", "low": "min",
+            "close": "last", "volume": "sum",
+        }).dropna(subset=["open"]).reset_index()
+
+        candles = []
+        for _, row in agg.iterrows():
+            candles.append({
+                "time": row["timestamp"].strftime("%Y-%m-%d"),
+                "open": round(float(row["open"]), 2),
+                "high": round(float(row["high"]), 2),
+                "low": round(float(row["low"]), 2),
+                "close": round(float(row["close"]), 2),
+                "volume": int(row["volume"]) if pd.notna(row["volume"]) else 0,
+            })
+        return candles
+
+    def _serve_candles_from_api(self, ticker, date_str, days, interval):
+        """Original Polygon API path — used for 1m, 5m, 2D, or cache misses."""
         VALID_INTERVALS = {
             1: ("minute", 1),      # 1m
             5: ("minute", 5),      # 5m
@@ -5859,19 +5954,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if interval not in VALID_INTERVALS:
             interval = 1
 
-        if not date_str:
-            from datetime import date as dt_date
-            date_str = dt_date.today().isoformat()
-
-        # Compute date range for multi-day
         from datetime import datetime, timedelta
         end_date = datetime.strptime(date_str, "%Y-%m-%d")
-        # Weekend/holiday padding scales with range
         weekend_pad = 2 if days <= 10 else int(days * 0.45)
         start_date = end_date - timedelta(days=max(0, days - 1) + weekend_pad)
         from_str = start_date.strftime("%Y-%m-%d")
 
-        # Map interval to Polygon aggregation unit
         agg_unit, agg_mult = VALID_INTERVALS.get(interval, ("minute", 1))
 
         url = f"{MASSIVE_BASE_URL}/aggs/ticker/{ticker}/range/{agg_mult}/{agg_unit}/{from_str}/{date_str}"
@@ -5896,7 +5984,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                         "volume": r.get("v", 0),
                     })
                 url = data.get("next_url")
-                params = {}  # next_url includes params
+                params = {}
                 if url and MASSIVE_API_KEY:
                     url += f"&apiKey={MASSIVE_API_KEY}"
         except Exception as e:
@@ -5918,7 +6006,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     })
                     live_appended += 1
                 elif lb["t"] == last_hist_ts and all_bars:
-                    # Update the last bar in-place (merge live into historical)
                     last = all_bars[-1]
                     last["high"] = max(last["high"], lb["h"])
                     last["low"] = min(last["low"], lb["l"])
@@ -5926,7 +6013,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     last["volume"] = max(last["volume"], lb.get("v", 0))
 
         self.send_json({"candles": all_bars, "ticker": ticker,
-                        "live_bars": live_appended})
+                        "source": "api", "live_bars": live_appended})
 
     def serve_chart_live_bar(self, query=None):
         """GET /api/chart/live-bar?ticker=SPY&interval=1 — lightweight live bar from daemon.
