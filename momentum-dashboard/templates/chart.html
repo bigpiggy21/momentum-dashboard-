@@ -821,6 +821,7 @@ registerIndicator({
       color: '#ff8c00', lineWidth: 2, lineStyle: 0,
       priceLineVisible: false, lastValueVisible: false,
       crosshairMarkerVisible: false,
+      autoscaleInfoProvider: function(){ return null; },
     });
     // Upper band — grey step line
     var upper = chart.addLineSeries({
@@ -828,6 +829,7 @@ registerIndicator({
       lineType: 1, // stepLine
       priceLineVisible: false, lastValueVisible: false,
       crosshairMarkerVisible: false,
+      autoscaleInfoProvider: function(){ return null; },
     });
     // Lower band — grey step line
     var lower = chart.addLineSeries({
@@ -835,6 +837,7 @@ registerIndicator({
       lineType: 1, // stepLine
       priceLineVisible: false, lastValueVisible: false,
       crosshairMarkerVisible: false,
+      autoscaleInfoProvider: function(){ return null; },
     });
     ind.series = [basis, upper, lower];
   },
