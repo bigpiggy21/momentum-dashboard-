@@ -1969,11 +1969,6 @@ function _updateSessionClass(){
 
   var isExt = (session === 'pre' || session === 'after');
   document.body.classList.toggle('ext-hours', isExt);
-  // Apply session-aware chart background (every check, not just transitions)
-  if(_chart){
-    var _sBgs = {pre: '#636363', after: '#0c3299', regular: '#131721', closed: '#131721'};
-    _chart.applyOptions({layout:{background:{type:'solid',color:_sBgs[session] || '#131721'}}});
-  }
   // Update close price line on session transitions
   if(_prevSession !== session) _updateCloseLine();
 }
@@ -2373,12 +2368,95 @@ function updateDailyHist(){
 function _bubbleRadius(p){ return 3 + Math.pow(p, 2.5) * 32; }
 function _bubbleAlpha(p){ return 0.30 + p * 0.55; }
 
+// Session background bands — paints pre/regular/after as vertical color zones on intraday charts
+function _drawSessionBands(){
+  if(!_ctx || !_chart || !_candleSeries || !_candles.length) return;
+  // Only on intraday charts (< daily)
+  if(_candleInterval >= 1440) return;
+  // Need unix-second timestamps (intraday candles)
+  if(typeof _candles[0].time === 'string') return;
+
+  var ts = _chart.timeScale();
+  var visRange = ts.getVisibleRange();
+  if(!visRange) return;
+
+  var fromT = typeof visRange.from === 'number' ? visRange.from : Math.floor(new Date(visRange.from).getTime()/1000);
+  var toT = typeof visRange.to === 'number' ? visRange.to : Math.floor(new Date(visRange.to).getTime()/1000);
+
+  // Session boundary hours in ET (US/Eastern)
+  // Pre-market:  04:00 - 09:30
+  // Regular:     09:30 - 16:00
+  // After-hours: 16:00 - 20:00
+  var PRE_COLOR = 'rgba(99,99,99,0.25)';      // #636363 at 25% opacity
+  var AFTER_COLOR = 'rgba(12,50,153,0.25)';    // #0c3299 at 25% opacity
+  // Regular = no overlay (base #131721 shows through)
+
+  // Walk day-by-day across visible range
+  // Start from the day of fromT, go to day of toT
+  var startDay = new Date(fromT * 1000);
+  startDay.setUTCHours(0,0,0,0);
+  var startDayUnix = Math.floor(startDay.getTime() / 1000);
+
+  // ET offset: EST = UTC-5, EDT = UTC-4
+  // We approximate — check if DST via the date
+  function etOffset(unixSec){
+    var d = new Date(unixSec * 1000);
+    var month = d.getUTCMonth(); // 0-indexed
+    // Rough DST: Mar second Sun to Nov first Sun
+    // Good enough: Mar 8-14 to Nov 1-7 range
+    if(month >= 2 && month <= 10){ // Mar-Nov range
+      if(month > 2 && month < 10) return -4*3600; // Apr-Oct = EDT
+      if(month === 2){ // March — after ~2nd Sunday
+        var day = d.getUTCDate();
+        return day >= 10 ? -4*3600 : -5*3600;
+      }
+      if(month === 10){ // November — before ~1st Sunday
+        var day2 = d.getUTCDate();
+        return day2 < 4 ? -4*3600 : -5*3600;
+      }
+    }
+    return -5*3600; // EST
+  }
+
+  var h = _canvas.height;
+
+  for(var dayStart = startDayUnix - 86400; dayStart <= toT + 86400; dayStart += 86400){
+    var off = etOffset(dayStart);
+    // Session boundaries in UTC (seconds)
+    var preOpen  = dayStart - off + 4*3600;   // 04:00 ET in UTC
+    var regOpen  = dayStart - off + 9*3600 + 1800;  // 09:30 ET
+    var regClose = dayStart - off + 16*3600;  // 16:00 ET
+    var afterClose = dayStart - off + 20*3600; // 20:00 ET
+
+    // Pre-market band: preOpen → regOpen
+    var x1 = ts.timeToCoordinate(preOpen);
+    var x2 = ts.timeToCoordinate(regOpen);
+    if(x1 !== null && x2 !== null && x2 > 0 && x1 < _canvas.width){
+      x1 = Math.max(0, x1); x2 = Math.min(_canvas.width, x2);
+      _ctx.fillStyle = PRE_COLOR;
+      _ctx.fillRect(x1, 0, x2 - x1, h);
+    }
+
+    // After-hours band: regClose → afterClose
+    var x3 = ts.timeToCoordinate(regClose);
+    var x4 = ts.timeToCoordinate(afterClose);
+    if(x3 !== null && x4 !== null && x4 > 0 && x3 < _canvas.width){
+      x3 = Math.max(0, x3); x4 = Math.min(_canvas.width, x4);
+      _ctx.fillStyle = AFTER_COLOR;
+      _ctx.fillRect(x3, 0, x4 - x3, h);
+    }
+  }
+}
+
 function drawBubbles(){
   if(!_ctx || !_chart || !_candleSeries) {
     if(_ctx) _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
     return;
   }
   _ctx.clearRect(0, 0, _canvas.width, _canvas.height);
+
+  // Draw session background bands first (underneath everything)
+  _drawSessionBands();
 
   var anyLayer = _activeLayers.sweeps || _activeLayers.daily || _activeLayers.single || _activeLayers.rare || _activeLayers.cb || _activeLayers.monster;
   if(!anyLayer) return;
