@@ -898,25 +898,25 @@ var _MA_LABELS = ['Off', '200D SMA', '30W SMA', '200D + 30W'];
 registerIndicator({
   id: 'ma',
   name: 'Moving Averages',
-  color: '#22d3ee',
+  color: '#FF9800',
   hotkey: 'm',
   createSeries: function(chart){
     var ind = _indicators['ma'];
     var series = [];
-    // 200D SMA — cyan
+    // 200D SMA — dark red
     if(_maMode === 1 || _maMode === 3){
       var s200 = chart.addLineSeries({
-        color: '#22d3ee', lineWidth: 2, lineStyle: 0,
+        color: 'rgba(128,25,34,0.75)', lineWidth: 2, lineStyle: 0,
         priceLineVisible: false, lastValueVisible: false,
         crosshairMarkerVisible: false,
         autoscaleInfoProvider: function(){ return null; },
       });
       series.push({key:'200d', s: s200});
     }
-    // 30W SMA (150-day) — amber
+    // 30W SMA (150-day) — orange
     if(_maMode === 2 || _maMode === 3){
       var s30w = chart.addLineSeries({
-        color: '#f59e0b', lineWidth: 2, lineStyle: 0,
+        color: 'rgba(255,152,0,0.75)', lineWidth: 2, lineStyle: 0,
         priceLineVisible: false, lastValueVisible: false,
         crosshairMarkerVisible: false,
         autoscaleInfoProvider: function(){ return null; },
