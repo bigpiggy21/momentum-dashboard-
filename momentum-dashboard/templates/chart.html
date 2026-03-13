@@ -519,6 +519,7 @@ var _candleTimer = null;
 var _liveBarTimer = null;
 var _tickerListTimer = null;
 var _tickerPrices = {};  // {ticker: {price, prevClose}}
+var _closePriceLine = null; // LightweightCharts price line for previous close (ext hours)
 
 // ====================================================================
 // INDICATOR REGISTRY — extensible system for chart overlays
@@ -1954,6 +1955,8 @@ function _updateSessionClass(){
 
   var isExt = (session === 'pre' || session === 'after');
   document.body.classList.toggle('ext-hours', isExt);
+  // Update close price line on session transitions
+  if(_prevSession !== session) _updateCloseLine();
 }
 // Check session every 10s
 _updateSessionClass();
@@ -2193,9 +2196,37 @@ function fetchCandles(){
       drawBubbles();
       recreateEnabledIndicators();
       recomputeIndicators();
+      _updateCloseLine();
       _setLoading(false);
     })
     .catch(function(e){ if(e.name === 'AbortError' || (e instanceof TypeError && _fetchController && _fetchController.signal.aborted)) return; console.error('Candle fetch error:', e); _setLoading(false); });
+}
+
+// Previous-close price line (orange, like TradingView ext-hours)
+function _updateCloseLine(){
+  if(!_candleSeries) return;
+  // Remove old line
+  if(_closePriceLine){
+    try{ _candleSeries.removePriceLine(_closePriceLine); }catch(e){}
+    _closePriceLine = null;
+  }
+  var session = _getMarketSession();
+  var isExt = (session === 'pre' || session === 'after');
+  if(!isExt) return;
+  // Get regClose from ticker prices (populated by fetchTickerPrices)
+  var tp = _tickerPrices[_activeTicker];
+  if(tp && tp.regClose){
+    _closePriceLine = _candleSeries.createPriceLine({
+      price: tp.regClose,
+      color: '#f59e0b',
+      lineWidth: 1,
+      lineStyle: 2, // dashed
+      axisLabelVisible: true,
+      title: '',
+      axisLabelColor: '#f59e0b',
+      axisLabelTextColor: '#000',
+    });
+  }
 }
 
 function fetchSweepChart(){
