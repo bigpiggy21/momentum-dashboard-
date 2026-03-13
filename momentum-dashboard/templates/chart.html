@@ -1391,6 +1391,7 @@ function _ttmDestroyChart(){
 }
 
 function _ttmPopulate(candles){
+  console.log('[TTM] populate called, chart:', !!_ttmChart, 'candles:', candles ? candles.length : 0, 'momSeries:', !!_ttmMomSeries);
   if(!_ttmChart || !candles || candles.length < 40) return;
   var ttm = _computeTTM(candles);
   if(!ttm) return;
