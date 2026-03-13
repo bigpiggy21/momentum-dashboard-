@@ -5860,21 +5860,25 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             from datetime import date as dt_date
             date_str = dt_date.today().isoformat()
 
+        # Allow ?source=api to force API path (used by fetchTickerPrices fallback)
+        force_api = query.get("source", [None])[0] == "api"
+
         # --- Tier 1+2: Try local CSV cache for cacheable intervals ---
-        cache_tf = self._CACHE_TF_MAP.get(interval)
-        if cache_tf:
-            candles = self._serve_candles_from_cache(ticker, date_str, days, interval, cache_tf)
-            if candles is not None:
-                self.send_json({"candles": candles, "ticker": ticker,
-                                "source": "cache", "live_bars": 0})
-                return
+        if not force_api:
+            cache_tf = self._CACHE_TF_MAP.get(interval)
+            if cache_tf:
+                candles = self._serve_candles_from_cache(ticker, date_str, days, interval, cache_tf)
+                if candles is not None:
+                    self.send_json({"candles": candles, "ticker": ticker,
+                                    "source": "cache", "live_bars": 0})
+                    return
 
         # --- Tier 3: API fallback (1m, 5m, 2D, or cache miss) ---
         self._serve_candles_from_api(ticker, date_str, days, interval)
 
     def _serve_candles_from_cache(self, ticker, date_str, days, interval, cache_tf):
         """Try to serve candles from CSV cache + live daemon. Returns list or None."""
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
         import time as _time
 
         end_date = datetime.strptime(date_str, "%Y-%m-%d")
@@ -5894,17 +5898,102 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if not candles:
             return None  # cache miss — fall back to API
 
+        # Normalise time format: convert "YYYY-MM-DD" strings to unix seconds
+        # (frontend bubble/sweep code expects numeric timestamps)
+        for c in candles:
+            t = c.get("time")
+            if isinstance(t, str):
+                c["time"] = int(datetime.strptime(t, "%Y-%m-%d")
+                                .replace(tzinfo=timezone.utc).timestamp())
+
+        # --- Gap fill: if cache is stale, fetch missing bars from API and append ---
+        last_cache_ts = candles[-1]["time"] if candles else 0
+        # For daily candles, last_cache_ts is midnight UTC of last cached day
+        today_ts = int(datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0).timestamp())
+        # If last cached bar is >1 calendar day old, fill the gap from API
+        gap_days = (today_ts - last_cache_ts) // 86400
+        if gap_days >= 1 and cache_tf == "1D":
+            try:
+                gap_from = datetime.utcfromtimestamp(last_cache_ts + 86400).strftime("%Y-%m-%d")
+                gap_url = f"{MASSIVE_BASE_URL}/aggs/ticker/{ticker}/range/1/day/{gap_from}/{date_str}"
+                headers = {"Authorization": f"Bearer {MASSIVE_API_KEY}"}
+                resp = requests.get(gap_url, params={"adjusted": "true", "sort": "asc", "limit": 50000},
+                                    headers=headers, timeout=15)
+                if resp.ok:
+                    results = resp.json().get("results", [])
+                    for r in results:
+                        ts = r.get("t", 0) // 1000
+                        if ts > last_cache_ts:
+                            candles.append({
+                                "time": ts,
+                                "open": r.get("o", 0), "high": r.get("h", 0),
+                                "low": r.get("l", 0), "close": r.get("c", 0),
+                                "volume": r.get("v", 0),
+                            })
+            except Exception:
+                pass  # gap fill is best-effort — stale cache still better than nothing
+
+        # Append live daemon bars (for today's intraday updates)
+        global _live_daemon
+        if _live_daemon is not None and cache_tf in ("1D",):
+            last_ts = candles[-1]["time"] if candles else 0
+            live_bars = _live_daemon.get_live_bars(ticker, interval)
+            for lb in live_bars:
+                if lb["t"] > last_ts:
+                    candles.append({
+                        "time": lb["t"],
+                        "open": lb["o"], "high": lb["h"],
+                        "low": lb["l"], "close": lb["c"],
+                        "volume": lb.get("v", 0),
+                    })
+                elif lb["t"] == last_ts and candles:
+                    last = candles[-1]
+                    last["high"] = max(last["high"], lb["h"])
+                    last["low"] = min(last["low"], lb["l"])
+                    last["close"] = lb["c"]
+                    last["volume"] = max(last["volume"], lb.get("v", 0))
+
         return candles
 
     def _load_aggregated_candles(self, ticker, date_from, date_to, cache_tf):
         """Aggregate daily cache into weekly/monthly candles."""
         from sweep_engine import _load_price_candles
+        from datetime import datetime, timezone
         import pandas as pd
 
         # Load daily candles from cache
         daily = _load_price_candles(ticker, date_from, date_to, "1D")
         if not daily:
             return None
+
+        # Gap-fill: append missing recent days from API before aggregating
+        if daily:
+            last_day = daily[-1].get("time", "")
+            if isinstance(last_day, str) and last_day:
+                last_dt = datetime.strptime(last_day, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                now_dt = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+                gap = (now_dt - last_dt).days
+                if gap >= 1:
+                    try:
+                        from datetime import timedelta as _td
+                        gap_from = (last_dt + _td(days=1)).strftime("%Y-%m-%d")
+                        gap_url = f"{MASSIVE_BASE_URL}/aggs/ticker/{ticker}/range/1/day/{gap_from}/{date_to}"
+                        headers = {"Authorization": f"Bearer {MASSIVE_API_KEY}"}
+                        resp = requests.get(gap_url, params={"adjusted": "true", "sort": "asc", "limit": 50000},
+                                            headers=headers, timeout=15)
+                        if resp.ok:
+                            for r in resp.json().get("results", []):
+                                ts_str = datetime.utcfromtimestamp(r["t"] // 1000).strftime("%Y-%m-%d")
+                                if ts_str > last_day:
+                                    daily.append({
+                                        "time": ts_str,
+                                        "open": r.get("o", 0), "high": r.get("h", 0),
+                                        "low": r.get("l", 0), "close": r.get("c", 0),
+                                        "volume": r.get("v", 0),
+                                    })
+                    except Exception:
+                        pass  # best-effort
 
         # Convert to DataFrame for resampling
         df = pd.DataFrame(daily)

@@ -1965,38 +1965,58 @@ setInterval(_updateSessionClass, 10000);
 // ====================================================================
 // TICKER PRICES (for left panel list)
 // ====================================================================
+function _extractTickerPrices(ticker, candles){
+  if(candles.length === 0) return;
+  var now = new Date();
+  var etStr = now.toLocaleDateString('en-CA', {timeZone: 'America/New_York'});
+  var lastBar = candles[candles.length - 1];
+  var lastDate = typeof lastBar.time === 'string' ? lastBar.time : new Date(lastBar.time * 1000).toLocaleDateString('en-CA', {timeZone: 'America/New_York'});
+
+  var regClose, prevClose, livePrice;
+  if(lastDate === etStr && candles.length >= 2){
+    var yest = candles[candles.length - 2];
+    var dayBefore = candles.length >= 3 ? candles[candles.length - 3] : null;
+    regClose = yest.close;
+    prevClose = dayBefore ? dayBefore.close : yest.open;
+    livePrice = lastBar.close;
+  } else {
+    regClose = lastBar.close;
+    var prev = candles.length >= 2 ? candles[candles.length - 2] : null;
+    prevClose = prev ? prev.close : lastBar.open;
+    livePrice = lastBar.close;
+  }
+  _tickerPrices[ticker] = {price: livePrice, prevClose: prevClose, regClose: regClose};
+  _updateTickerPriceDOM(ticker);
+}
+
+function _isCacheStale(candles){
+  if(candles.length === 0) return true;
+  var lastBar = candles[candles.length - 1];
+  var lastDate = typeof lastBar.time === 'string' ? lastBar.time : new Date(lastBar.time * 1000).toLocaleDateString('en-CA', {timeZone: 'America/New_York'});
+  var lastMs = new Date(lastDate + 'T00:00:00').getTime();
+  var nowMs = new Date().getTime();
+  return (nowMs - lastMs) / 86400000 > 2;
+}
+
 function fetchTickerPrices(tickers){
-  // Fetch last 3 daily candles to correctly identify today's partial vs yesterday's close
+  // Fetch last 3 daily candles — cache-first, API fallback if stale
   tickers.forEach(function(ticker){
     fetch('/api/chart/candles?ticker='+ticker+'&date='+getDate()+'&days=3&interval=1440')
       .then(function(r){ return r.json(); })
       .then(function(d){
         var candles = d.candles || [];
-        if(candles.length === 0) return;
-        // Determine if the last candle is today's partial bar
-        // Compare last candle's date to today (ET timezone)
-        var now = new Date();
-        var etStr = now.toLocaleDateString('en-CA', {timeZone: 'America/New_York'}); // YYYY-MM-DD
-        var lastBar = candles[candles.length - 1];
-        var lastDate = typeof lastBar.time === 'string' ? lastBar.time : new Date(lastBar.time * 1000).toLocaleDateString('en-CA', {timeZone: 'America/New_York'});
-
-        var regClose, prevClose, livePrice;
-        if(lastDate === etStr && candles.length >= 2){
-          // Last candle IS today's partial → regClose = yesterday (second-to-last)
-          var yest = candles[candles.length - 2];
-          var dayBefore = candles.length >= 3 ? candles[candles.length - 3] : null;
-          regClose = yest.close;
-          prevClose = dayBefore ? dayBefore.close : yest.open;
-          livePrice = lastBar.close;
+        if(_isCacheStale(candles)){
+          // Cache too old — fall back to API for correct prev close
+          fetch('/api/chart/candles?ticker='+ticker+'&date='+getDate()+'&days=3&interval=1440&source=api')
+            .then(function(r2){ return r2.json(); })
+            .then(function(d2){
+              var ac = d2.candles || [];
+              _extractTickerPrices(ticker, ac.length > 0 ? ac : candles);
+            })
+            .catch(function(){ _extractTickerPrices(ticker, candles); });
         } else {
-          // Last candle is yesterday (no partial today yet) → regClose = last
-          regClose = lastBar.close;
-          var prev = candles.length >= 2 ? candles[candles.length - 2] : null;
-          prevClose = prev ? prev.close : lastBar.open;
-          livePrice = lastBar.close;
+          _extractTickerPrices(ticker, candles);
         }
-        _tickerPrices[ticker] = {price: livePrice, prevClose: prevClose, regClose: regClose};
-        _updateTickerPriceDOM(ticker);
       })
       .catch(function(){});
   });
