@@ -741,6 +741,11 @@ function buildSweepMenu(){
 
 function toggleLayerFromMenu(layer){
   _activeLayers[layer] = !_activeLayers[layer];
+  // If turning a layer on and we have no sweep data, fetch it now
+  if(_activeLayers[layer] && _chartSweeps.length === 0 && _chartEvents.length === 0){
+    fetchSweepChart();
+    fetchAnchorBars();
+  }
   if(layer === 'daily') updateDailyHist();
   drawBubbles();
   updateStats();
@@ -769,6 +774,11 @@ function masterToggleSweeps(){
       _sweepLayers.forEach(function(lyr){ _activeLayers[lyr.id] = true; });
     }
     _sweepLayerSnapshot = null;
+    // Fetch sweep data if we skipped it earlier
+    if(_chartSweeps.length === 0 && _chartEvents.length === 0){
+      fetchSweepChart();
+      fetchAnchorBars();
+    }
   }
   updateDailyHist();
   drawBubbles();
@@ -2116,14 +2126,25 @@ function fetchAnchorBars(){
     });
 }
 
+function _anySweepOn(){
+  return _sweepLayers.some(function(lyr){ return _activeLayers[lyr.id]; });
+}
+
 function loadAll(resetView){
   // Abort any in-flight fetches so stale responses don't overwrite current ticker
   if(_fetchController) _fetchController.abort();
   _fetchController = new AbortController();
   if(resetView) _initialLoad = true;
   fetchCandles();
-  fetchSweepChart();
-  fetchAnchorBars();  // fetch finer-grained bars for overlay y-positioning
+  // Only fetch sweep data if any sweep layer is toggled on
+  if(_anySweepOn()){
+    fetchSweepChart();
+    fetchAnchorBars();
+  } else {
+    _chartSweeps = []; _chartEvents = [];
+    _anchorBars = []; _anchorReady = true;
+    if(_dailyHistSeries) _dailyHistSeries.setData([]);
+  }
 }
 
 function fetchCandles(){
