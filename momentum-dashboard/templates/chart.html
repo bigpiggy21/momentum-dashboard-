@@ -1320,32 +1320,31 @@ function _ttmCreateChart(){
       horzLine:{color:'#f59e0b33',width:1,style:3},
     },
     timeScale: {borderColor:'#1e1e2e', timeVisible:true, secondsVisible:false, visible:false},
-    rightPriceScale: {borderColor:'#1e1e2e', autoScale:true},
+    rightPriceScale: {borderColor:'#1e1e2e', autoScale:true, minimumWidth: 65, drawTicks:false},
   });
 
   // Momentum price scale — tight margins so histogram fills the pane vertically
-  _ttmChart.priceScale('ttm_mom').applyOptions({
+  _ttmChart.priceScale('right').applyOptions({
     scaleMargins: {top: 0.05, bottom: 0.05},
-    borderVisible: false,
   });
 
   // Acceleration background — wide histogram behind momentum (low opacity)
   _ttmAccelSeries = _ttmChart.addHistogramSeries({
-    priceScaleId: 'ttm_mom',
+    priceScaleId: 'right',
     priceLineVisible: false, lastValueVisible: false,
     base: 0,
   });
 
   // Momentum histogram
   _ttmMomSeries = _ttmChart.addHistogramSeries({
-    priceScaleId: 'ttm_mom',
+    priceScaleId: 'right',
     priceLineVisible: false, lastValueVisible: false,
     base: 0,
   });
 
   // Zero line — also carries squeeze dot markers
   _ttmZeroSeries = _ttmChart.addLineSeries({
-    priceScaleId: 'ttm_mom',
+    priceScaleId: 'right',
     color: '#333', lineWidth: 1, lineStyle: 2,
     priceLineVisible: false, lastValueVisible: false,
     crosshairMarkerVisible: false,
@@ -1718,7 +1717,7 @@ function initChart(){
       horzLine:{color:'#f59e0b33',width:1,style:3},
     },
     timeScale: {borderColor:'#1e1e2e', timeVisible:true, secondsVisible:false, rightOffset: 5},
-    rightPriceScale: {borderColor:'#1e1e2e', mode: _chartScale === 'log' ? 1 : 0},
+    rightPriceScale: {borderColor:'#1e1e2e', mode: _chartScale === 'log' ? 1 : 0, minimumWidth: 65},
   });
 
   // Fit content with 35% right margin (65% data, 35% empty space)
