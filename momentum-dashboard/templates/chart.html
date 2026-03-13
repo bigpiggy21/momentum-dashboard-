@@ -2370,11 +2370,39 @@ function _bubbleAlpha(p){ return 0.30 + p * 0.55; }
 
 // Session background bands — paints pre/regular/after as vertical color zones on intraday charts
 // Uses actual candle timestamps to determine session, so it works regardless of data source
+var _etFormatter = null;
+try { _etFormatter = new Intl.DateTimeFormat('en-US', {timeZone:'America/New_York', hour:'numeric', minute:'numeric', hour12:false}); } catch(e){}
+
+function _getETMins(unixSec){
+  // Returns minutes since midnight ET for a unix timestamp
+  if(_etFormatter){
+    // formatToParts gives reliable {hour, minute} objects
+    var parts = _etFormatter.formatToParts(new Date(unixSec * 1000));
+    var hh = 0, mm = 0;
+    for(var i = 0; i < parts.length; i++){
+      if(parts[i].type === 'hour') hh = parseInt(parts[i].value);
+      if(parts[i].type === 'minute') mm = parseInt(parts[i].value);
+    }
+    // Intl can return hour=24 for midnight — treat as 0
+    if(hh === 24) hh = 0;
+    return hh * 60 + mm;
+  }
+  // Fallback: parse toLocaleString
+  var d = new Date(unixSec * 1000);
+  var s = d.toLocaleString('en-US', {timeZone:'America/New_York'});
+  var m = s.match(/(\d+):(\d+):(\d+)\s*(AM|PM)/i);
+  if(m){
+    var h = parseInt(m[1]); var mn = parseInt(m[2]); var ap = m[4].toUpperCase();
+    if(ap === 'PM' && h !== 12) h += 12;
+    if(ap === 'AM' && h === 12) h = 0;
+    return h * 60 + mn;
+  }
+  return -1;
+}
+
 function _drawSessionBands(){
   if(!_ctx || !_chart || !_candleSeries || !_candles.length) return;
-  // Only on intraday charts (< daily)
   if(_candleInterval >= 1440) return;
-  // Need unix-second timestamps (intraday candles)
   if(typeof _candles[0].time === 'string') return;
 
   var ts = _chart.timeScale();
@@ -2382,24 +2410,18 @@ function _drawSessionBands(){
   var AFTER_COLOR = 'rgba(12,50,153,0.25)';    // #0c3299 at 25%
   var h = _canvas.height;
 
-  // Classify each candle into a session based on its ET hour
   function getSession(unixSec){
-    // Use JS Date to get ET hour reliably
-    var d = new Date(unixSec * 1000);
-    var etStr = d.toLocaleString('en-US', {timeZone:'America/New_York', hour12:false,
-      hour:'2-digit', minute:'2-digit'});
-    var parts = etStr.split(':');
-    var hh = parseInt(parts[0]); var mm = parseInt(parts[1]);
-    var mins = hh * 60 + mm; // minutes since midnight ET
-    if(mins < 240) return null;        // before 4am — not a session
+    var mins = _getETMins(unixSec);
+    if(mins < 0) return null;
+    if(mins < 240) return null;        // before 4am
     if(mins < 570) return 'pre';       // 4:00 - 9:29
     if(mins < 960) return 'regular';   // 9:30 - 15:59
     if(mins < 1200) return 'after';    // 16:00 - 19:59
-    return null;                        // 20:00+ — not a session
+    return null;
   }
 
   // Build runs of consecutive candles in the same ext session
-  var runs = []; // [{session, fromTime, toTime}]
+  var runs = [];
   var curRun = null;
   for(var i = 0; i < _candles.length; i++){
     var c = _candles[i];
@@ -2423,7 +2445,7 @@ function _drawSessionBands(){
     var x1 = ts.timeToCoordinate(run.fromTime);
     var x2 = ts.timeToCoordinate(run.toTime);
     if(x1 === null || x2 === null) continue;
-    // Pad half a candle width on each side so the band covers the full candles
+    // Pad half a candle width on each side
     var pad = Math.max(3, (x2 - x1) / Math.max(1, (run.toTime - run.fromTime) / (_candleInterval * 60)) * 0.6);
     x1 -= pad; x2 += pad;
     if(x2 < 0 || x1 > _canvas.width) continue;
