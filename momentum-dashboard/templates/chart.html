@@ -1831,11 +1831,9 @@ function setActiveTicker(ticker, source){
   document.getElementById('tickerInput').value = ticker;
 
   if(source === 'input'){
-    _mode = 'single';
-    _activeWatchlist = null;
-    document.getElementById('watchlistSelect').value = '';
-    // Clear ticker list
-    document.getElementById('tickerListBox').innerHTML = '';
+    // Keep watchlist context — just load chart for this ticker
+    // If ticker is in the current watchlist, highlight it
+    highlightTickerList(ticker);
   } else if(source === 'watchlist-click'){
     highlightTickerList(ticker);
   }
