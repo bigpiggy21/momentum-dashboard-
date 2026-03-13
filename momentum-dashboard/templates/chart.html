@@ -1709,17 +1709,15 @@ document.addEventListener('click', function(e){
   _startLiveTimers();
 })();
 
-// Fit content with 35% right margin (65% data, 35% empty space)
+// Fit content then add 35% empty space on the right
 function _fitWithMargin(){
-  if(!_chart) return;
+  if(!_chart || !_candles || _candles.length === 0) return;
   var ts = _chart.timeScale();
-  ts.fitContent();
-  var range = ts.getVisibleLogicalRange();
-  if(range && range.from !== undefined && range.to !== undefined){
-    var span = range.to - range.from;
-    var gap = span * (35 / 65);
-    ts.setVisibleLogicalRange({from: range.from, to: range.to + gap});
-  }
+  // Calculate how many bars to show: all data + 35% gap
+  var barCount = _candles.length;
+  var gap = Math.round(barCount * 35 / 65);
+  // scrollToPosition scrolls so the last bar is at `offset` bars from the right edge
+  ts.scrollToPosition(gap, false);
 }
 
 function updateTickerOverlay(){
