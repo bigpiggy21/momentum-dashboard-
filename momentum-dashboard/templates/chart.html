@@ -112,10 +112,10 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .tl-change.pos{color:#26a69a;}
 .tl-change.neg{color:#ef5350;}
 /* Price flash animation */
-@keyframes flash-green{0%{background:#26a69a44;}100%{background:transparent;}}
-@keyframes flash-red{0%{background:#ef535044;}100%{background:transparent;}}
-.tl-price.flash-up{animation:flash-green 0.6s ease-out;}
-.tl-price.flash-down{animation:flash-red 0.6s ease-out;}
+@keyframes flash-green{0%{background:#26a69a55;color:#26a69a;}50%{color:#26a69a;}100%{background:transparent;color:#ccc;}}
+@keyframes flash-red{0%{background:#ef535055;color:#ef5350;}50%{color:#ef5350;}100%{background:transparent;color:#ccc;}}
+.tl-price.flash-up{animation:flash-green 0.8s ease-out forwards;}
+.tl-price.flash-down{animation:flash-red 0.8s ease-out forwards;}
 
 /* Overlay checkboxes section — never scrolls, always full height */
 .overlay-section{margin-top:8px;margin-bottom:8px;flex-shrink:0;}
@@ -592,17 +592,68 @@ function buildIndMenu(){
   menu.innerHTML = html;
 }
 
-// Keyboard shortcuts for indicators + sweeps
+// Keyboard shortcuts: leader key system + indicators
+var _leaderKey = null;   // current leader mode: 's' for sweeps, null for none
+var _leaderTimer = null; // auto-clear timeout
+
+function _clearLeader(){
+  _leaderKey = null;
+  clearTimeout(_leaderTimer);
+  var badge = document.getElementById('leaderBadge');
+  if(badge) badge.style.display = 'none';
+}
+
+function _showLeader(label){
+  var badge = document.getElementById('leaderBadge');
+  if(!badge){
+    badge = document.createElement('div');
+    badge.id = 'leaderBadge';
+    badge.style.cssText = 'position:fixed;top:56px;left:50%;transform:translateX(-50%);background:#f59e0b;color:#000;padding:3px 14px;border-radius:4px;font-size:11px;font-weight:700;z-index:999;letter-spacing:0.5px;';
+    document.body.appendChild(badge);
+  }
+  badge.textContent = label;
+  badge.style.display = 'block';
+}
+
+// Sweep layer hotkey map: 1=Sweeps, 2=Daily, 3=Single, 4=Rare, 5=CB, 6=Monster
+var _sweepHotkeyMap = {'1':'sweeps','2':'daily','3':'single','4':'rare','5':'cb','6':'monster'};
+
 document.addEventListener('keydown', function(e){
   // Skip if typing in an input
   if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
   var key = e.key.toLowerCase();
-  // S = master toggle all sweep layers on/off
-  if(key === 's'){
+
+  // Leader mode active — handle sub-keys
+  if(_leaderKey === 's'){
     e.preventDefault();
-    masterToggleSweeps();
+    if(_sweepHotkeyMap[key]){
+      toggleLayerFromMenu(_sweepHotkeyMap[key]);
+      // Reset timer — stay in leader mode for chaining
+      clearTimeout(_leaderTimer);
+      _leaderTimer = setTimeout(_clearLeader, 1500);
+    } else {
+      _clearLeader();
+    }
     return;
   }
+
+  // S = enter sweep leader mode (or master toggle on double-tap)
+  if(key === 's'){
+    e.preventDefault();
+    _leaderKey = 's';
+    _showLeader('SWEEPS: 1-6 toggle layers');
+    clearTimeout(_leaderTimer);
+    _leaderTimer = setTimeout(function(){
+      // If still in leader mode after timeout, do master toggle
+      if(_leaderKey === 's'){
+        masterToggleSweeps();
+      }
+      _clearLeader();
+    }, 1500);
+    return;
+  }
+
+  // Indicator hotkeys
   Object.keys(_indicators).forEach(function(id){
     if(_indicators[id].hotkey === key){
       e.preventDefault();
@@ -1835,16 +1886,22 @@ function _updateTickerPriceDOM(ticker){
   if(priceEl){
     var oldText = priceEl.textContent;
     var newText = '$' + tp.price.toFixed(2);
-    priceEl.textContent = newText;
     // Flash green/red on price change
     if(oldText !== '—' && oldText !== newText){
       var oldVal = parseFloat(oldText.replace('$',''));
       var cls = tp.price > oldVal ? 'flash-up' : tp.price < oldVal ? 'flash-down' : '';
       if(cls){
-        priceEl.classList.remove('flash-up','flash-down');
-        void priceEl.offsetWidth; // force reflow to re-trigger animation
-        priceEl.classList.add(cls);
+        // Clone + replace to reliably re-trigger CSS animation
+        var clone = priceEl.cloneNode(true);
+        clone.textContent = newText;
+        clone.className = 'tl-price ' + cls;
+        clone.addEventListener('animationend', function(){ clone.classList.remove('flash-up','flash-down'); });
+        priceEl.parentNode.replaceChild(clone, priceEl);
+      } else {
+        priceEl.textContent = newText;
       }
+    } else {
+      priceEl.textContent = newText;
     }
   }
   if(changeEl){
@@ -2692,7 +2749,15 @@ function fetchLiveBar(){
           }
         }
       });
-      if(changed) drawBubbles();
+      if(changed){
+        drawBubbles();
+        // Also update active ticker's price in ticker list (most reliable live source)
+        var livePrice = _candles[_candles.length - 1].close;
+        if(_tickerPrices[_activeTicker]){
+          _tickerPrices[_activeTicker].price = livePrice;
+          _updateTickerPriceDOM(_activeTicker);
+        }
+      }
     })
     .catch(function(){});
 }
