@@ -5915,7 +5915,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         gap_days = (today_ts - last_cache_ts) // 86400
         if gap_days >= 1 and cache_tf == "1D":
             try:
-                gap_from = datetime.utcfromtimestamp(last_cache_ts + 86400).strftime("%Y-%m-%d")
+                gap_from = datetime.fromtimestamp(last_cache_ts + 86400, tz=timezone.utc).strftime("%Y-%m-%d")
                 gap_url = f"{MASSIVE_BASE_URL}/aggs/ticker/{ticker}/range/1/day/{gap_from}/{date_str}"
                 headers = {"Authorization": f"Bearer {MASSIVE_API_KEY}"}
                 resp = requests.get(gap_url, params={"adjusted": "true", "sort": "asc", "limit": 50000},
