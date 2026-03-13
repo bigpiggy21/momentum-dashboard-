@@ -1295,7 +1295,7 @@ function _ttmCreateChart(){
   _ttmChart = LightweightCharts.createChart(area, {
     width: area.clientWidth,
     height: area.clientHeight,
-    layout: {background:{type:'solid',color:'#0c0c14'}, textColor:'#555', fontSize:10},
+    layout: {background:{type:'solid',color:'#131721'}, textColor:'#555', fontSize:10},
     grid: {vertLines:{visible:false}, horzLines:{visible:false}},
     crosshair: {
       mode: LightweightCharts.CrosshairMode.Normal,
@@ -1679,7 +1679,7 @@ function initChart(){
   _chart = LightweightCharts.createChart(container, {
     width: container.clientWidth,
     height: container.clientHeight,
-    layout: {background:{type:'solid',color:'#0c0c14'}, textColor:'#888', fontSize:11},
+    layout: {background:{type:'solid',color:'#131721'}, textColor:'#888', fontSize:11},
     grid: {
       vertLines:{visible: _gridVisible, color:'#1e1e2e'},
       horzLines:{visible: _gridVisible, color:'#1e1e2e'},
@@ -1706,6 +1706,11 @@ function initChart(){
       upColor: _cs.upColor, downColor: _cs.downColor,
       borderUpColor: _cs.borderUp, borderDownColor: _cs.borderDown,
       wickUpColor: _cs.wickUp, wickDownColor: _cs.wickDown,
+      priceLineVisible: true,
+      priceLineWidth: 1,
+      priceLineColor: '#888',
+      priceLineStyle: 2, // dashed
+      lastValueVisible: true,
     });
   }
 
