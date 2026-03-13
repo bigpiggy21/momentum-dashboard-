@@ -506,7 +506,8 @@ var _fetchController = null;   // AbortController — cancels in-flight fetches 
 var _sweepTimer = null;
 var _candleTimer = null;
 var _liveBarTimer = null;
-var _tickerPrices = {};  // {ticker: {price, change, changePct}}
+var _tickerListTimer = null;
+var _tickerPrices = {};  // {ticker: {price, prevClose}}
 
 // ====================================================================
 // INDICATOR REGISTRY — extensible system for chart overlays
@@ -1365,14 +1366,32 @@ document.addEventListener('click', function(e){
 // INIT
 // ====================================================================
 (function init(){
-  // Populate watchlist dropdown
+  // Populate watchlist dropdown — Priority is hardcoded (has overlay map),
+  // other watchlists loaded from server API
   var sel = document.getElementById('watchlistSelect');
-  Object.keys(WATCHLISTS).forEach(function(key){
-    var opt = document.createElement('option');
-    opt.value = key;
-    opt.textContent = key;
-    sel.appendChild(opt);
-  });
+  // Add Priority first (always available with overlays)
+  var priOpt = document.createElement('option');
+  priOpt.value = 'Priority'; priOpt.textContent = 'Priority';
+  sel.appendChild(priOpt);
+  // Fetch other watchlists from server
+  fetch('/api/watchlists').then(function(r){return r.json();}).then(function(wls){
+    wls.forEach(function(wl){
+      if(wl.name === 'Priority') return; // already added
+      if(WATCHLISTS[wl.name]) return; // already hardcoded
+      // Build ticker array from server data
+      var tickers = [];
+      (wl.groups || []).forEach(function(g){
+        (g.tickers || []).forEach(function(t){
+          tickers.push({ticker: t.display, label: t.display, group: g.name});
+        });
+      });
+      WATCHLISTS[wl.name] = tickers;
+      var opt = document.createElement('option');
+      opt.value = wl.name;
+      opt.textContent = wl.name + ' (' + tickers.length + ')';
+      sel.appendChild(opt);
+    });
+  }).catch(function(){});
   sel.value = _activeWatchlist;
 
   // Ticker input — Enter key
@@ -1600,13 +1619,11 @@ function buildWatchlistView(){
   document.getElementById('tickerInput').value = _activeTicker;
 
   tickers.forEach(function(t, i){
-    var col = _COLORS[i % _COLORS.length];
     var item = document.createElement('div');
     item.className = 'ticker-list-item' + (t.ticker === _activeTicker ? ' active' : '');
     item.setAttribute('data-ticker', t.ticker);
     item.onclick = function(){ setActiveTicker(t.ticker, 'watchlist-click'); };
-    item.innerHTML = '<div class="tl-dot" style="background:'+col.s+';"></div>'
-      + '<span class="tl-ticker">'+t.label+'</span>'
+    item.innerHTML = '<span class="tl-ticker">'+t.label+'</span>'
       + '<span class="tl-price" id="price_'+t.ticker+'">—</span>'
       + '<span class="tl-change" id="change_'+t.ticker+'">—</span>';
     listBox.appendChild(item);
@@ -1644,7 +1661,7 @@ function onWatchlistChange(){
 // TICKER PRICES (for left panel list)
 // ====================================================================
 function fetchTickerPrices(tickers){
-  // Fetch last daily candle for each ticker to get price + change
+  // Fetch last 2 daily candles: prev close = yesterday, last close = latest known
   tickers.forEach(function(ticker){
     fetch('/api/chart/candles?ticker='+ticker+'&date='+getDate()+'&days=2&interval=1440')
       .then(function(r){ return r.json(); })
@@ -1653,22 +1670,47 @@ function fetchTickerPrices(tickers){
         if(candles.length === 0) return;
         var last = candles[candles.length - 1];
         var prev = candles.length > 1 ? candles[candles.length - 2] : null;
-        var price = last.close;
-        var change = prev ? (price - prev.close) : 0;
-        var changePct = prev ? ((change / prev.close) * 100) : 0;
-        _tickerPrices[ticker] = {price: price, change: change, changePct: changePct};
-        // Update DOM
-        var priceEl = document.getElementById('price_'+ticker);
-        var changeEl = document.getElementById('change_'+ticker);
-        if(priceEl) priceEl.textContent = '$' + price.toFixed(2);
-        if(changeEl){
-          var sign = changePct >= 0 ? '+' : '';
-          changeEl.textContent = sign + changePct.toFixed(2) + '%';
-          changeEl.className = 'tl-change ' + (changePct >= 0 ? 'pos' : 'neg');
-        }
+        var prevClose = prev ? prev.close : last.open;
+        _tickerPrices[ticker] = {price: last.close, prevClose: prevClose};
+        _updateTickerPriceDOM(ticker);
       })
       .catch(function(){});
   });
+}
+
+function _updateTickerPriceDOM(ticker){
+  var tp = _tickerPrices[ticker];
+  if(!tp) return;
+  var priceEl = document.getElementById('price_'+ticker);
+  var changeEl = document.getElementById('change_'+ticker);
+  if(priceEl) priceEl.textContent = '$' + tp.price.toFixed(2);
+  if(changeEl){
+    var changePct = tp.prevClose ? ((tp.price - tp.prevClose) / tp.prevClose * 100) : 0;
+    var sign = changePct >= 0 ? '+' : '';
+    changeEl.textContent = sign + changePct.toFixed(2) + '%';
+    changeEl.className = 'tl-change ' + (changePct >= 0 ? 'pos' : 'neg');
+  }
+}
+
+function _refreshTickerListPrices(){
+  // Batch fetch live bars for all visible tickers in the list
+  var items = document.querySelectorAll('.ticker-list-item');
+  if(items.length === 0) return;
+  var tickers = [];
+  items.forEach(function(el){ tickers.push(el.getAttribute('data-ticker')); });
+  // Use snapshot endpoint for all tickers at once
+  fetch('/api/chart/live-prices?tickers='+tickers.join(','))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var prices = d.prices || {};
+      Object.keys(prices).forEach(function(ticker){
+        if(_tickerPrices[ticker]){
+          _tickerPrices[ticker].price = prices[ticker];
+          _updateTickerPriceDOM(ticker);
+        }
+      });
+    })
+    .catch(function(){});
 }
 
 // ====================================================================
@@ -2443,11 +2485,14 @@ function _startLiveTimers(){
   clearInterval(_sweepTimer);
   clearInterval(_candleTimer);
   clearInterval(_liveBarTimer);
+  clearInterval(_tickerListTimer);
   _candleTimer = setInterval(fetchCandles, 60000);
   _sweepTimer = setInterval(fetchSweepChart, 30000);
   // Fast live-bar polling: 1s for 1m, 2s for 5m, 5s for ≥15m
   var liveMs = _candleInterval <= 1 ? 1000 : _candleInterval <= 5 ? 2000 : 5000;
   _liveBarTimer = setInterval(fetchLiveBar, liveMs);
+  // Refresh ticker list prices every 2s
+  _tickerListTimer = setInterval(_refreshTickerListPrices, 2000);
 }
 
 function fetchLiveBar(){

@@ -1122,6 +1122,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_chart_candles(query)
         elif path == "/api/chart/live-bar":
             self.serve_chart_live_bar(query)
+        elif path == "/api/chart/live-prices":
+            self.serve_chart_live_prices(query)
         elif path == "/api/chart/bb-signals":
             self.serve_bb_signals(query)
         elif path == "/api/chart/sweeps" or path == "/api/0dte/sweeps":
@@ -5961,6 +5963,26 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             })
 
         self.send_json({"bars": out, "ticker": ticker})
+
+    def serve_chart_live_prices(self, query=None):
+        """GET /api/chart/live-prices?tickers=SPY,QQQ,AAPL — batch live prices from daemon.
+
+        Returns the latest close price for each ticker from the daemon's in-memory bars.
+        Designed for fast polling (2s) to update the ticker list panel.
+        """
+        query = query or {}
+        tickers_str = (query.get("tickers") or [""])[0]
+        tickers = [t.strip().upper() for t in tickers_str.split(",") if t.strip()]
+
+        prices = {}
+        if _live_daemon is not None:
+            for ticker in tickers:
+                # Get minute bars — last bar's close is the latest price
+                bars = _live_daemon.get_live_bars(ticker, 1)
+                if bars:
+                    prices[ticker] = bars[-1]["c"]
+
+        self.send_json({"prices": prices})
 
     def serve_bb_signals(self, query=None):
         """GET /api/chart/bb-signals?ticker=SPY — BB deviation signals from CSV cache.
