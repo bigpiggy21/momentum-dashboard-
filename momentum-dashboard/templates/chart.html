@@ -100,7 +100,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 #watchlistSelect{width:100%;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:6px 10px;border-radius:4px;font-size:12px;font-family:inherit;margin-bottom:12px;}
 
 /* Ticker list — fills available space, scrollable */
-.ticker-list{min-height:80px;max-height:calc(50vh - 48px);overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;}
+.ticker-list{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;}
 .ticker-list::-webkit-scrollbar{width:6px;}
 .ticker-list::-webkit-scrollbar-track{background:#0a0a12;}
 .ticker-list::-webkit-scrollbar-thumb{background:#333;border-radius:3px;}
@@ -232,14 +232,14 @@ body.ext-hours .tl-ext{display:inline;}
       </select>
       <button class="overlay-toggle-btn" id="overlayToggleBtn" onclick="toggleOverlaySection()" title="Toggle Overlay Tickers (O)">O</button>
     </div>
+    <div class="ticker-list" id="tickerListBox">
+      <!-- Populated by JS -->
+    </div>
     <div class="overlay-section" id="overlaySection" style="display:none;">
       <div class="panel-label">Overlay Tickers</div>
       <div class="overlay-grid" id="overlayList">
         <!-- Group checkboxes populated by JS -->
       </div>
-    </div>
-    <div class="ticker-list" id="tickerListBox" style="flex:1;min-height:0;">
-      <!-- Populated by JS -->
     </div>
   </div>
   <div class="chart-area">
