@@ -584,17 +584,10 @@ function recomputeIndicators(){
 
 function removeAllIndicatorSeries(){
   // Called on ticker change — removes series so they can be recreated with fresh data
-  // TTM is special: destroy chart but keep pane visible (avoids hide/show flicker)
   Object.keys(_indicators).forEach(function(id){
     var ind = _indicators[id];
     if(!ind.enabled) return;
-    if(id === 'ttm'){
-      _ttmDestroyChart();
-      // Keep pane visible + series marker so recreate knows to rebuild
-      ind.series = [];
-    } else {
-      ind.remove();
-    }
+    ind.remove();
   });
 }
 
@@ -604,7 +597,12 @@ function recreateEnabledIndicators(){
     var ind = _indicators[id];
     if(ind.enabled && ind.series.length === 0){
       ind.createSeries(_chart);
-      ind.compute(_candles, ind);
+      // TTM needs a slight delay — pane must be laid out before data can be set
+      if(id === 'ttm'){
+        setTimeout(function(){ ind.compute(_candles, ind); }, 50);
+      } else {
+        ind.compute(_candles, ind);
+      }
     }
   });
 }
