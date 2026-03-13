@@ -1715,7 +1715,7 @@ function _fitWithMargin(){
   // Block TTM sync during fit to prevent feedback loop
   _ttmSyncing = true;
   var ts = _chart.timeScale();
-  var gap = Math.round(_candles.length * 35 / 65);
+  var gap = Math.round(_candles.length * 23 / 77);
   ts.applyOptions({rightOffset: gap});
   ts.fitContent();
   // Sync TTM to match (same rightOffset + range), then unblock
