@@ -184,6 +184,10 @@ body.ext-hours .tl-ext{display:inline;}
     <button class="cs-btn" onclick="toggleCsMenu()">Chart &#x25BE;</button>
     <div class="cs-menu" id="csMenu"></div>
   </div>
+  <div class="ind-dropdown" id="indDropdown">
+    <button class="ind-btn" id="indBtn" onclick="toggleIndMenu()">Indicators &#x25BE;</button>
+    <div class="ind-menu" id="indMenu"></div>
+  </div>
   <div class="hdr-sep"></div>
   <div class="seg-ctrl" id="candleIntervalCtrl">
     <button class="active" onclick="setCandleInterval(1,this)">1m</button>
@@ -217,19 +221,16 @@ body.ext-hours .tl-ext{display:inline;}
   </select>
   <button class="ctrl-btn" style="width:auto;padding:5px 10px;font-size:11px;" onclick="savePreset()">Save</button>
   <button class="ctrl-btn" style="width:auto;padding:5px 10px;font-size:11px;color:#ef4444;" onclick="deletePreset()">Del</button>
-  <div class="hdr-sep"></div>
-  <div class="ind-dropdown" id="indDropdown">
-    <button class="ind-btn" id="indBtn" onclick="toggleIndMenu()">Indicators &#x25BE;</button>
-    <div class="ind-menu" id="indMenu"></div>
-  </div>
+
 </div>
 
 <div class="main">
   <div class="left-panel" id="leftPanel">
-    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
-      <select id="watchlistSelect" onchange="onWatchlistChange()" style="flex:1;">
+    <div style="display:flex;gap:4px;align-items:center;margin-bottom:8px;">
+      <select id="watchlistSelect" onchange="onWatchlistChange()" style="flex:1;min-width:0;">
         <option value="">-- Select Watchlist --</option>
       </select>
+      <button class="overlay-toggle-btn" id="addTickerBtn" onclick="addTickerToWatchlist()" title="Add Ticker (+)">+</button>
       <button class="overlay-toggle-btn" id="overlayToggleBtn" onclick="toggleOverlaySection()" title="Toggle Overlay Tickers (O)">O</button>
     </div>
     <div class="ticker-list" id="tickerListBox">
@@ -681,6 +682,13 @@ document.addEventListener('keydown', function(e){
     var ti = document.getElementById('tickerInput');
     ti.focus();
     ti.select();
+    return;
+  }
+
+  // O = toggle overlay section
+  if(key === 'o'){
+    e.preventDefault();
+    toggleOverlaySection();
     return;
   }
 
@@ -3156,6 +3164,11 @@ function toggleOverlaySection(){
   var visible = sec.style.display !== 'none';
   sec.style.display = visible ? 'none' : '';
   btn.classList.toggle('active', !visible);
+}
+
+function addTickerToWatchlist(){
+  // TODO: implement add-ticker modal/prompt
+  console.log('Add ticker — not yet implemented');
 }
 
 // ====================================================================
