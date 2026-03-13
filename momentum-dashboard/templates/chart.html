@@ -1880,16 +1880,45 @@ function _getMarketSession(){
   return 'closed';
 }
 
-var _currentSession = 'closed';
+var _currentSession = _getMarketSession();
+var _prevSession = _currentSession;
+
 function _updateSessionClass(){
   var session = _getMarketSession();
+  _prevSession = _currentSession;
   _currentSession = session;
+
+  // Transition: regular → after/closed — snapshot regClose from current live prices
+  if(_prevSession === 'regular' && session !== 'regular'){
+    Object.keys(_tickerPrices).forEach(function(ticker){
+      var tp = _tickerPrices[ticker];
+      tp.regClose = tp.price; // freeze today's close
+    });
+  }
+
+  // Transition: ext/closed → regular — shift references for new trading day
+  // regClose (yesterday's close) becomes prevClose, regClose will track live
+  if(_prevSession !== 'regular' && session === 'regular'){
+    Object.keys(_tickerPrices).forEach(function(ticker){
+      var tp = _tickerPrices[ticker];
+      tp.prevClose = tp.regClose; // yesterday's close → prevClose
+    });
+  }
+
+  // During regular hours, continuously update regClose to current price
+  // (so it's always fresh when session ends)
+  if(session === 'regular'){
+    Object.keys(_tickerPrices).forEach(function(ticker){
+      _tickerPrices[ticker].regClose = _tickerPrices[ticker].price;
+    });
+  }
+
   var isExt = (session === 'pre' || session === 'after');
   document.body.classList.toggle('ext-hours', isExt);
 }
-// Check session every 30s
+// Check session every 10s
 _updateSessionClass();
-setInterval(_updateSessionClass, 30000);
+setInterval(_updateSessionClass, 10000);
 
 // ====================================================================
 // TICKER PRICES (for left panel list)
@@ -1969,15 +1998,12 @@ function _updateTickerPriceDOM(ticker){
   // Ext-hours column: live price vs last regular close
   var extEl = document.getElementById('ext_'+ticker);
   if(extEl){
-    var isExt2 = (_currentSession === 'pre' || _currentSession === 'after');
-    if(isExt2 && tp.regClose && tp.price !== tp.regClose){
+    var isExt = (_currentSession === 'pre' || _currentSession === 'after');
+    if(isExt && tp.regClose){
       var extPct = ((tp.price - tp.regClose) / tp.regClose * 100);
       var extSign = extPct >= 0 ? '+' : '';
       extEl.textContent = extSign + extPct.toFixed(2) + '%';
       extEl.className = 'tl-ext ' + (extPct >= 0 ? 'pos' : 'neg');
-    } else if(isExt2){
-      extEl.textContent = '0.00%';
-      extEl.className = 'tl-ext';
     } else {
       extEl.textContent = '';
     }
