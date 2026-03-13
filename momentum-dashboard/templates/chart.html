@@ -1895,17 +1895,36 @@ setInterval(_updateSessionClass, 30000);
 // TICKER PRICES (for left panel list)
 // ====================================================================
 function fetchTickerPrices(tickers){
-  // Fetch last 2 daily candles: prev close = yesterday, last close = latest known
+  // Fetch last 3 daily candles to correctly identify today's partial vs yesterday's close
   tickers.forEach(function(ticker){
-    fetch('/api/chart/candles?ticker='+ticker+'&date='+getDate()+'&days=2&interval=1440')
+    fetch('/api/chart/candles?ticker='+ticker+'&date='+getDate()+'&days=3&interval=1440')
       .then(function(r){ return r.json(); })
       .then(function(d){
         var candles = d.candles || [];
         if(candles.length === 0) return;
-        var last = candles[candles.length - 1];
-        var prev = candles.length > 1 ? candles[candles.length - 2] : null;
-        var prevClose = prev ? prev.close : last.open;
-        _tickerPrices[ticker] = {price: last.close, prevClose: prevClose, regClose: last.close};
+        // Determine if the last candle is today's partial bar
+        // Compare last candle's date to today (ET timezone)
+        var now = new Date();
+        var etStr = now.toLocaleDateString('en-CA', {timeZone: 'America/New_York'}); // YYYY-MM-DD
+        var lastBar = candles[candles.length - 1];
+        var lastDate = typeof lastBar.time === 'string' ? lastBar.time : new Date(lastBar.time * 1000).toLocaleDateString('en-CA', {timeZone: 'America/New_York'});
+
+        var regClose, prevClose, livePrice;
+        if(lastDate === etStr && candles.length >= 2){
+          // Last candle IS today's partial → regClose = yesterday (second-to-last)
+          var yest = candles[candles.length - 2];
+          var dayBefore = candles.length >= 3 ? candles[candles.length - 3] : null;
+          regClose = yest.close;
+          prevClose = dayBefore ? dayBefore.close : yest.open;
+          livePrice = lastBar.close;
+        } else {
+          // Last candle is yesterday (no partial today yet) → regClose = last
+          regClose = lastBar.close;
+          var prev = candles.length >= 2 ? candles[candles.length - 2] : null;
+          prevClose = prev ? prev.close : lastBar.open;
+          livePrice = lastBar.close;
+        }
+        _tickerPrices[ticker] = {price: livePrice, prevClose: prevClose, regClose: regClose};
         _updateTickerPriceDOM(ticker);
       })
       .catch(function(){});
