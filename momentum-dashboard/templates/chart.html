@@ -676,6 +676,15 @@ document.addEventListener('keydown', function(e){
     return;
   }
 
+  // / = focus ticker input (TradingView-style search shortcut)
+  if(key === '/'){
+    e.preventDefault();
+    var ti = document.getElementById('tickerInput');
+    ti.focus();
+    ti.select();
+    return;
+  }
+
   // Indicator hotkeys
   Object.keys(_indicators).forEach(function(id){
     if(_indicators[id].hotkey === key){
@@ -1649,6 +1658,9 @@ document.addEventListener('click', function(e){
       if(val){
         setActiveTicker(val, 'input');
       }
+      tickerInput.blur();
+    } else if(e.key === 'Escape'){
+      tickerInput.blur();
     }
   });
 
