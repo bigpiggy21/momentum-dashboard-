@@ -1712,11 +1712,21 @@ document.addEventListener('click', function(e){
 // Fit content then add 35% empty space on the right
 function _fitWithMargin(){
   if(!_chart || !_candles || _candles.length === 0) return;
+  // Block TTM sync during fit to prevent feedback loop
+  _ttmSyncing = true;
   var ts = _chart.timeScale();
-  // Set rightOffset proportional to visible bars (35% of data count)
   var gap = Math.round(_candles.length * 35 / 65);
   ts.applyOptions({rightOffset: gap});
   ts.fitContent();
+  // Sync TTM to match (same rightOffset + range), then unblock
+  setTimeout(function(){
+    if(_ttmChart){
+      _ttmChart.timeScale().applyOptions({rightOffset: gap});
+      var range = ts.getVisibleLogicalRange();
+      if(range) _ttmChart.timeScale().setVisibleLogicalRange(range);
+    }
+    _ttmSyncing = false;
+  }, 0);
 }
 
 function updateTickerOverlay(){
