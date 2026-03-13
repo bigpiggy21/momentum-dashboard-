@@ -56,6 +56,17 @@ _ticker_backfill = {
 }
 _ticker_backfill_lock = threading.Lock()
 
+# Nightly pipeline state
+_nightly_state = {
+    "running": False,
+    "started_at": None,
+    "jobs": {
+        "queue_fetch": {"status": "idle", "detail": "", "started_at": None, "finished_at": None, "duration_s": None, "error": None},
+        "watchlist_pipeline": {"status": "idle", "detail": "", "started_at": None, "finished_at": None, "duration_s": None, "error": None},
+    },
+}
+_nightly_lock = threading.Lock()
+
 # Unified live daemon instance (single WebSocket for price + sweeps)
 _live_daemon = None
 _live_daemon_lock = threading.Lock()
@@ -64,6 +75,260 @@ _daemon_intentionally_stopped = True  # True until user starts or auto-start fir
 # Server-side tracker response cache (60s TTL)
 _tracker_cache = {}       # {cache_key: {"data": response_dict, "ts": float}}
 _TRACKER_CACHE_TTL = 60   # seconds
+
+def _run_nightly_pipeline():
+    """Execute the nightly pipeline: queue fetch + watchlist collection/compute in parallel."""
+    from live_daemon import load_nightly_pipeline_config, save_nightly_pipeline_config
+    global _live_daemon
+
+    cfg = load_nightly_pipeline_config()
+    jobs_cfg = cfg.get("jobs", {})
+    qf_cfg = jobs_cfg.get("queue_fetch", {})
+    wl_cfg = jobs_cfg.get("watchlist_pipeline", {})
+
+    with _nightly_lock:
+        _nightly_state["running"] = True
+        _nightly_state["started_at"] = datetime.now(timezone.utc).isoformat()
+        for k in _nightly_state["jobs"]:
+            _nightly_state["jobs"][k] = {"status": "idle", "detail": "", "started_at": None,
+                                         "finished_at": None, "duration_s": None, "error": None}
+
+    print("[NIGHTLY] Pipeline started", flush=True)
+    threads = []
+
+    # --- Job 1: Queue fetch ---
+    if qf_cfg.get("enabled", True):
+        def _run_queue_fetch():
+            import time as _t
+            t0 = _t.time()
+            with _nightly_lock:
+                _nightly_state["jobs"]["queue_fetch"]["status"] = "running"
+                _nightly_state["jobs"]["queue_fetch"]["started_at"] = datetime.now(timezone.utc).isoformat()
+            try:
+                queue_path = os.path.join(os.path.dirname(__file__), "pending_fetch_queue.json")
+                try:
+                    with open(queue_path, "r", encoding="utf-8") as f:
+                        tickers = json.load(f)
+                    if not isinstance(tickers, list) or not tickers:
+                        tickers = []
+                except (FileNotFoundError, json.JSONDecodeError):
+                    tickers = []
+
+                if not tickers:
+                    print("[NIGHTLY] Queue fetch: no pending tickers", flush=True)
+                    with _nightly_lock:
+                        _nightly_state["jobs"]["queue_fetch"]["status"] = "done"
+                        _nightly_state["jobs"]["queue_fetch"]["detail"] = "No pending tickers"
+                        _nightly_state["jobs"]["queue_fetch"]["finished_at"] = datetime.now(timezone.utc).isoformat()
+                        _nightly_state["jobs"]["queue_fetch"]["duration_s"] = round(_t.time() - t0)
+                    return
+
+                lookback_years = qf_cfg.get("lookback_years", 10)
+                start_date = (datetime.now() - timedelta(days=lookback_years * 365)).strftime("%Y-%m-%d")
+                end_date = datetime.now().strftime("%Y-%m-%d")
+
+                print(f"[NIGHTLY] Queue fetch: {len(tickers)} tickers, {lookback_years}yr lookback", flush=True)
+                with _nightly_lock:
+                    _nightly_state["jobs"]["queue_fetch"]["detail"] = f"Fetching {len(tickers)} tickers"
+
+                # Check if a fetch is already running
+                with _sweep_fetch_lock:
+                    if _sweep_fetch_progress["running"]:
+                        with _nightly_lock:
+                            _nightly_state["jobs"]["queue_fetch"]["status"] = "error"
+                            _nightly_state["jobs"]["queue_fetch"]["error"] = "A sweep fetch is already running"
+                            _nightly_state["jobs"]["queue_fetch"]["finished_at"] = datetime.now(timezone.utc).isoformat()
+                            _nightly_state["jobs"]["queue_fetch"]["duration_s"] = round(_t.time() - t0)
+                        return
+
+                # Clear queue file
+                try:
+                    with open(queue_path, "w", encoding="utf-8") as f:
+                        json.dump([], f)
+                except Exception:
+                    pass
+
+                # Reuse the existing fetch infrastructure
+                from sweep_engine import fetch_and_store_sweeps, get_detection_config
+                from sweep_engine import detect_clusterbombs, detect_rare_sweep_days
+                from sweep_engine import detect_monster_sweeps, detect_ranked_daily, detect_ranked_sweeps
+
+                with _sweep_fetch_lock:
+                    _sweep_fetch_progress["running"] = True
+                    _sweep_fetch_progress["completed"] = 0
+                    _sweep_fetch_progress["total"] = len(tickers)
+                    _sweep_fetch_progress["phase"] = "fetching"
+                    _sweep_fetch_progress["log_lines"] = ["[NIGHTLY] Queue fetch started"]
+                    _sweep_fetch_progress["_t0"] = _t.time()
+
+                stats = fetch_and_store_sweeps(
+                    tickers=tickers,
+                    start_date=start_date,
+                    end_date=end_date,
+                    workers=8,
+                    progress_callback=lambda tk, dt, ns, ts, c, tot: None,
+                )
+
+                # Detection pass
+                with _nightly_lock:
+                    _nightly_state["jobs"]["queue_fetch"]["detail"] = "Detecting events"
+                det_cfg = get_detection_config()
+                sc = det_cfg.get("stock", {})
+                _cb_keys = ("min_sweeps", "min_notional", "min_total", "rarity_days", "rare_min_notional")
+                _sp = {k: sc[k] for k in _cb_keys if k in sc}
+                detect_clusterbombs(tickers=tickers, **_sp)
+                detect_rare_sweep_days(
+                    min_notional=sc.get("rare_min_notional", sc.get("min_notional", 1_000_000)),
+                    rarity_days=sc.get("rarity_days", 60), tickers=tickers)
+                _sm = sc.get("monster_min_notional")
+                if _sm:
+                    detect_monster_sweeps(monster_min_notional=float(_sm), tickers=tickers)
+                detect_ranked_daily(rank_limit=100, min_sweeps=int(sc.get("min_sweeps_daily", 1)),
+                                    tickers=tickers, exclude_etfs=True, etf_only=False)
+                detect_ranked_sweeps(rank_limit=100, tickers=tickers, exclude_etfs=True, etf_only=False)
+                # ETF pass
+                ecfg = det_cfg.get("etf", {})
+                detect_ranked_daily(rank_limit=100, min_sweeps=1, tickers=tickers,
+                                    exclude_etfs=False, etf_only=True)
+                detect_ranked_sweeps(rank_limit=100, tickers=tickers, exclude_etfs=False, etf_only=True)
+
+                with _sweep_fetch_lock:
+                    _sweep_fetch_progress["running"] = False
+                    _sweep_fetch_progress["phase"] = "done"
+
+                with _nightly_lock:
+                    _nightly_state["jobs"]["queue_fetch"]["status"] = "done"
+                    _nightly_state["jobs"]["queue_fetch"]["detail"] = f"{len(tickers)} tickers, {stats.get('sweeps_found', 0)} sweeps"
+                    _nightly_state["jobs"]["queue_fetch"]["finished_at"] = datetime.now(timezone.utc).isoformat()
+                    _nightly_state["jobs"]["queue_fetch"]["duration_s"] = round(_t.time() - t0)
+                print(f"[NIGHTLY] Queue fetch complete: {stats}", flush=True)
+
+            except Exception as e:
+                with _sweep_fetch_lock:
+                    _sweep_fetch_progress["running"] = False
+                    _sweep_fetch_progress["phase"] = "error"
+                with _nightly_lock:
+                    _nightly_state["jobs"]["queue_fetch"]["status"] = "error"
+                    _nightly_state["jobs"]["queue_fetch"]["error"] = str(e)
+                    _nightly_state["jobs"]["queue_fetch"]["finished_at"] = datetime.now(timezone.utc).isoformat()
+                    _nightly_state["jobs"]["queue_fetch"]["duration_s"] = round(_t.time() - t0)
+                print(f"[NIGHTLY] Queue fetch error: {e}", flush=True)
+
+        t = threading.Thread(target=_run_queue_fetch, daemon=True)
+        threads.append(t)
+        t.start()
+
+    # --- Job 2: Watchlist pipeline (collect + compute) ---
+    if wl_cfg.get("enabled", True):
+        def _run_watchlist_pipeline():
+            import time as _t
+            t0 = _t.time()
+            with _nightly_lock:
+                _nightly_state["jobs"]["watchlist_pipeline"]["status"] = "running"
+                _nightly_state["jobs"]["watchlist_pipeline"]["started_at"] = datetime.now(timezone.utc).isoformat()
+            try:
+                watchlists = wl_cfg.get("watchlists", ["Russell3000"])
+                print(f"[NIGHTLY] Watchlist pipeline: {watchlists}", flush=True)
+                with _nightly_lock:
+                    _nightly_state["jobs"]["watchlist_pipeline"]["detail"] = f"Running {', '.join(watchlists)}"
+
+                # Trigger each watchlist through the existing scheduler
+                global _live_daemon
+                scheduler = None
+                if _live_daemon and hasattr(_live_daemon, '_scheduler'):
+                    scheduler = _live_daemon._scheduler
+                else:
+                    # Try to find scheduler from the global scope
+                    from scheduler import WatchlistScheduler
+                    # The scheduler is a module-level singleton started in main()
+                    pass
+
+                # For each watchlist, trigger via scheduler or run directly
+                for wl_name in watchlists:
+                    with _nightly_lock:
+                        _nightly_state["jobs"]["watchlist_pipeline"]["detail"] = f"Running {wl_name}"
+
+                    # Direct execution: collect + compute
+                    from collector import collect_all
+                    from config import WATCHLISTS
+
+                    wl_groups = WATCHLISTS.get(wl_name)
+                    if not wl_groups:
+                        print(f"[NIGHTLY] Watchlist {wl_name} not found, skipping", flush=True)
+                        continue
+
+                    tickers = []
+                    seen = set()
+                    for _gn, gt in wl_groups:
+                        for display, _api, _at in gt:
+                            if display not in seen:
+                                seen.add(display)
+                                tickers.append(display)
+
+                    # Phase 1: Collect
+                    collect_workers = wl_cfg.get("collect_workers", 4)
+                    print(f"[NIGHTLY] Collecting {wl_name} ({len(tickers)} tickers, {collect_workers} workers)", flush=True)
+                    with _nightly_lock:
+                        _nightly_state["jobs"]["watchlist_pipeline"]["detail"] = f"Collecting {wl_name} ({len(tickers)} tickers)"
+                    collect_all(tickers, workers=collect_workers)
+
+                    # Phase 2: Compute (subprocess)
+                    if wl_cfg.get("compute", True):
+                        compute_workers = wl_cfg.get("compute_workers", 8)
+                        print(f"[NIGHTLY] Computing {wl_name} ({compute_workers} workers)", flush=True)
+                        with _nightly_lock:
+                            _nightly_state["jobs"]["watchlist_pipeline"]["detail"] = f"Computing {wl_name}"
+                        engine_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "engine.py")
+                        args = [sys.executable, engine_path, "--once",
+                                "--workers", str(compute_workers),
+                                "--watchlist", wl_name]
+                        result = subprocess.run(
+                            args, capture_output=True, timeout=7200,
+                            cwd=os.path.dirname(engine_path),
+                            encoding="utf-8", errors="replace")
+                        if result.returncode != 0:
+                            print(f"[NIGHTLY] Compute {wl_name} FAILED: {(result.stderr or '')[-300:]}", flush=True)
+                        else:
+                            print(f"[NIGHTLY] Compute {wl_name} complete", flush=True)
+
+                with _nightly_lock:
+                    _nightly_state["jobs"]["watchlist_pipeline"]["status"] = "done"
+                    _nightly_state["jobs"]["watchlist_pipeline"]["detail"] = f"{', '.join(watchlists)} complete"
+                    _nightly_state["jobs"]["watchlist_pipeline"]["finished_at"] = datetime.now(timezone.utc).isoformat()
+                    _nightly_state["jobs"]["watchlist_pipeline"]["duration_s"] = round(_t.time() - t0)
+                print(f"[NIGHTLY] Watchlist pipeline complete ({round(_t.time() - t0)}s)", flush=True)
+
+            except Exception as e:
+                with _nightly_lock:
+                    _nightly_state["jobs"]["watchlist_pipeline"]["status"] = "error"
+                    _nightly_state["jobs"]["watchlist_pipeline"]["error"] = str(e)
+                    _nightly_state["jobs"]["watchlist_pipeline"]["finished_at"] = datetime.now(timezone.utc).isoformat()
+                    _nightly_state["jobs"]["watchlist_pipeline"]["duration_s"] = round(_t.time() - t0)
+                print(f"[NIGHTLY] Watchlist pipeline error: {e}", flush=True)
+
+        t = threading.Thread(target=_run_watchlist_pipeline, daemon=True)
+        threads.append(t)
+        t.start()
+
+    # Wait for all jobs to complete
+    for t in threads:
+        t.join()
+
+    # Record results
+    finished_at = datetime.now(timezone.utc).isoformat()
+    with _nightly_lock:
+        _nightly_state["running"] = False
+        job_results = {}
+        for k, v in _nightly_state["jobs"].items():
+            job_results[k] = {"status": v["status"], "duration_s": v.get("duration_s"),
+                              "detail": v.get("detail", ""), "error": v.get("error")}
+
+    # Persist last run info
+    cfg["last_run"] = finished_at
+    cfg["last_result"] = job_results
+    save_nightly_pipeline_config(cfg)
+    print(f"[NIGHTLY] Pipeline finished: {job_results}", flush=True)
+
 
 def _parse_asset_class(query):
     """Parse asset_class param from query string.
@@ -887,6 +1152,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_indicator_compute_config()
         elif path == "/api/scheduler/indicator-compute/status":
             self.serve_indicator_compute_status()
+        elif path == "/api/nightly/config":
+            self.serve_nightly_config()
+        elif path == "/api/nightly/status":
+            self.serve_nightly_status()
         # ── TradingView UDF Datafeed Endpoints ──────────────────────
         elif path == "/api/tv/config":
             self.serve_tv_config()
@@ -977,6 +1246,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_indicator_compute_save_config()
         elif path == "/api/scheduler/indicator-compute/trigger":
             self.serve_indicator_compute_trigger()
+        elif path == "/api/nightly/config":
+            self.save_nightly_config_handler()
+        elif path == "/api/nightly/trigger":
+            self.trigger_nightly_pipeline()
         else:
             self.send_response(404)
             self.end_headers()
@@ -4317,6 +4590,49 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_json({"ok": True, "message": f"Indicator compute triggered for {watchlists}"})
         except Exception as e:
             self.send_json({"ok": False, "error": str(e)})
+
+    # ------------------------------------------------------------------
+    # Nightly Pipeline endpoints
+    # ------------------------------------------------------------------
+
+    def serve_nightly_config(self):
+        """GET /api/nightly/config — return nightly pipeline config."""
+        from live_daemon import load_nightly_pipeline_config
+        try:
+            cfg = load_nightly_pipeline_config()
+            self.send_json(cfg)
+        except Exception as e:
+            self.send_json({"error": str(e)})
+
+    def save_nightly_config_handler(self):
+        """POST /api/nightly/config — save nightly pipeline config."""
+        from live_daemon import save_nightly_pipeline_config, load_nightly_pipeline_config
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            # Merge with existing to preserve last_run/last_result
+            existing = load_nightly_pipeline_config()
+            existing.update(body)
+            save_nightly_pipeline_config(existing)
+            self.send_json({"ok": True})
+        except Exception as e:
+            self.send_json({"ok": False, "error": str(e)})
+
+    def serve_nightly_status(self):
+        """GET /api/nightly/status — return nightly pipeline running state."""
+        with _nightly_lock:
+            self.send_json(dict(_nightly_state))
+
+    def trigger_nightly_pipeline(self):
+        """POST /api/nightly/trigger — manually run the nightly pipeline now."""
+        with _nightly_lock:
+            if _nightly_state["running"]:
+                self.send_json({"ok": False, "error": "Nightly pipeline is already running"})
+                return
+
+        t = threading.Thread(target=_run_nightly_pipeline, daemon=True)
+        t.start()
+        self.send_json({"ok": True, "message": "Nightly pipeline triggered"})
 
     # ------------------------------------------------------------------
     # Sweep Detection Config endpoints

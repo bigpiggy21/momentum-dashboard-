@@ -211,6 +211,66 @@ def save_indicator_compute_config(config):
 
 
 # ---------------------------------------------------------------------------
+# Config helpers — nightly pipeline (scheduler_config.json)
+# ---------------------------------------------------------------------------
+
+def load_nightly_pipeline_config():
+    """Load nightly pipeline config from scheduler_config.json."""
+    defaults = {
+        "enabled": False,
+        "trigger_time": "21:00",
+        "jobs": {
+            "queue_fetch": {
+                "enabled": True,
+                "lookback_years": 10,
+            },
+            "watchlist_pipeline": {
+                "enabled": True,
+                "watchlists": ["Russell3000"],
+                "collect_workers": 4,
+                "compute_workers": 8,
+                "compute": True,
+            },
+        },
+        "last_run": None,
+        "last_result": None,
+    }
+    try:
+        with open(SCHEDULER_CONFIG_PATH, "r", encoding="utf-8") as f:
+            saved = json.load(f)
+        if "nightly_pipeline" in saved and isinstance(saved["nightly_pipeline"], dict):
+            result = dict(defaults)
+            for k in ("enabled", "trigger_time", "last_run", "last_result"):
+                if k in saved["nightly_pipeline"]:
+                    result[k] = saved["nightly_pipeline"][k]
+            if "jobs" in saved["nightly_pipeline"] and isinstance(saved["nightly_pipeline"]["jobs"], dict):
+                result["jobs"] = dict(defaults["jobs"])
+                sj = saved["nightly_pipeline"]["jobs"]
+                if "queue_fetch" in sj and isinstance(sj["queue_fetch"], dict):
+                    result["jobs"]["queue_fetch"] = dict(defaults["jobs"]["queue_fetch"])
+                    result["jobs"]["queue_fetch"].update(sj["queue_fetch"])
+                if "watchlist_pipeline" in sj and isinstance(sj["watchlist_pipeline"], dict):
+                    result["jobs"]["watchlist_pipeline"] = dict(defaults["jobs"]["watchlist_pipeline"])
+                    result["jobs"]["watchlist_pipeline"].update(sj["watchlist_pipeline"])
+            return result
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return defaults
+
+
+def save_nightly_pipeline_config(config):
+    """Save nightly pipeline config to scheduler_config.json (merges)."""
+    try:
+        with open(SCHEDULER_CONFIG_PATH, "r", encoding="utf-8") as f:
+            full = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        full = {}
+    full["nightly_pipeline"] = config
+    with open(SCHEDULER_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(full, f, indent=2, ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------------
 # Config helpers — sweep scanner (sweep_detection_config.json)
 # ---------------------------------------------------------------------------
 SWEEP_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -2035,15 +2095,60 @@ class UnifiedLiveDaemon:
     # ------------------------------------------------------------------
 
     def _eod_compute_loop(self):
-        """Thread that checks every 60s whether EOD compute should trigger."""
+        """Thread that checks every 60s whether EOD compute or nightly pipeline should trigger."""
         self._stop_event.wait(timeout=60)
+        self._nightly_last_date = None  # Track which date we've already run
         while not self._stop_event.is_set():
             try:
                 self._check_eod_compute()
             except Exception as e:
                 print(f"[LIVE] EOD compute check error: {e}", flush=True)
                 traceback.print_exc()
+            try:
+                self._check_nightly_pipeline()
+            except Exception as e:
+                print(f"[LIVE] Nightly pipeline check error: {e}", flush=True)
+                traceback.print_exc()
             self._stop_event.wait(timeout=60)
+
+    def _check_nightly_pipeline(self):
+        """Check if nightly pipeline should auto-trigger based on configured time."""
+        try:
+            cfg = load_nightly_pipeline_config()
+        except Exception:
+            return
+
+        if not cfg.get("enabled", False):
+            return
+
+        trigger_time_str = cfg.get("trigger_time", "21:00")
+        try:
+            trigger_h, trigger_m = map(int, trigger_time_str.split(":"))
+        except (ValueError, AttributeError):
+            return
+
+        # Use US Eastern time (market timezone)
+        from scheduler import MarketClock
+        now_et = datetime.now(MarketClock.ET)
+        today_str = now_et.strftime("%Y-%m-%d")
+
+        # Already ran today?
+        if self._nightly_last_date == today_str:
+            return
+
+        # Check if we're past the trigger time
+        trigger_minutes = trigger_h * 60 + trigger_m
+        now_minutes = now_et.hour * 60 + now_et.minute
+
+        if now_minutes >= trigger_minutes:
+            self._nightly_last_date = today_str
+            print(f"[LIVE] Nightly pipeline auto-trigger at {trigger_time_str} ET", flush=True)
+
+            # Import and run the pipeline in a new thread (non-blocking)
+            import app as _app
+            t = threading.Thread(target=_app._run_nightly_pipeline, daemon=True,
+                                 name="nightly-pipeline")
+            t.start()
 
     def _check_eod_compute(self):
         """Check if market closed + delay elapsed, then run enabled computations."""

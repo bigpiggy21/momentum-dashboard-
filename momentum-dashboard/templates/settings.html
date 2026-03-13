@@ -269,7 +269,75 @@ body{background:#08080d;color:#d0d0d8;font-family:'Segoe UI',-apple-system,sans-
   </div>
 </div>
 
-<!-- 3. Indicator Computation (subprocess) -->
+<!-- 3. Nightly Pipeline -->
+<div class="s-section" id="nightlySection">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+    <h3 style="font-size:13px;color:#ccc;margin:0;display:flex;align-items:center;gap:6px;">&#x1F319; Nightly Pipeline</h3>
+    <button class="s-toggle" id="nightlyToggle" onclick="toggleNightly()">OFF</button>
+    <label style="font-size:11px;color:#666;display:flex;align-items:center;gap:4px;">
+      Trigger time:
+      <input type="text" id="nightlyTriggerTime" value="21:00" style="width:50px;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;">
+      <span style="font-size:10px;color:#444;">ET</span>
+    </label>
+    <button class="s-btn" onclick="triggerNightly()" style="margin-left:auto;">Run Now</button>
+    <span id="nightlyRunning" style="font-size:11px;color:#f59e0b;display:none;">Running...</span>
+  </div>
+
+  <!-- Job table -->
+  <table style="width:100%;border-collapse:collapse;font-size:12px;background:#0e0e16;border:1px solid #1e1e2e;border-radius:6px;overflow:hidden;">
+    <thead>
+      <tr style="border-bottom:2px solid #2a2a3a;">
+        <th style="text-align:left;padding:8px;color:#666;font-size:10px;font-weight:700;text-transform:uppercase;">Job</th>
+        <th style="text-align:center;padding:8px;color:#666;font-size:10px;font-weight:700;text-transform:uppercase;">On</th>
+        <th style="text-align:center;padding:8px;color:#666;font-size:10px;font-weight:700;text-transform:uppercase;">Status</th>
+        <th style="text-align:center;padding:8px;color:#666;font-size:10px;font-weight:700;text-transform:uppercase;">Detail</th>
+        <th style="text-align:center;padding:8px;color:#666;font-size:10px;font-weight:700;text-transform:uppercase;">Duration</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid #1a1a24;">
+        <td style="padding:8px;color:#ccc;font-weight:600;">Queue Fetch</td>
+        <td style="text-align:center;padding:8px;"><input type="checkbox" id="nightlyQueueEnabled" checked style="accent-color:#f59e0b;"></td>
+        <td style="text-align:center;padding:8px;" id="nightlyQueueStatus"><span class="eod-status pending">Idle</span></td>
+        <td style="text-align:center;padding:8px;font-size:11px;color:#666;" id="nightlyQueueDetail">--</td>
+        <td style="text-align:center;padding:8px;font-size:11px;color:#666;" id="nightlyQueueDuration">--</td>
+      </tr>
+      <tr>
+        <td style="padding:8px;color:#ccc;font-weight:600;">Price + Compute</td>
+        <td style="text-align:center;padding:8px;"><input type="checkbox" id="nightlyWatchlistEnabled" checked style="accent-color:#f59e0b;"></td>
+        <td style="text-align:center;padding:8px;" id="nightlyWatchlistStatus"><span class="eod-status pending">Idle</span></td>
+        <td style="text-align:center;padding:8px;font-size:11px;color:#666;" id="nightlyWatchlistDetail">--</td>
+        <td style="text-align:center;padding:8px;font-size:11px;color:#666;" id="nightlyWatchlistDuration">--</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Watchlist chips + worker config -->
+  <div style="margin-top:10px;">
+    <div style="font-size:10px;color:#666;margin-bottom:4px;">Pipeline watchlists:</div>
+    <div class="s-chips" id="nightlyWatchlistChips">
+      <span style="font-size:10px;color:#444;">Loading...</span>
+    </div>
+  </div>
+  <div class="s-form-row" style="margin-top:8px;">
+    <label style="font-size:11px;color:#666;">Collect workers: <input type="number" id="nightlyCollectWorkers" min="1" max="16" value="4" style="width:40px;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;"></label>
+    <label style="font-size:11px;color:#666;">Compute workers: <input type="number" id="nightlyComputeWorkers" min="1" max="16" value="8" style="width:40px;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;"></label>
+    <label style="font-size:11px;color:#666;">Lookback: <input type="number" id="nightlyLookbackYears" min="1" max="20" value="10" style="width:40px;background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:3px 5px;border-radius:4px;font-size:11px;text-align:center;"> yr</label>
+  </div>
+
+  <!-- Last run info -->
+  <div id="nightlyLastRun" style="margin-top:8px;font-size:11px;color:#555;display:none;">
+    Last run: <span id="nightlyLastRunTime">--</span>
+  </div>
+
+  <!-- Save -->
+  <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
+    <button class="s-btn" onclick="saveNightlyConfig()">Save</button>
+    <span class="sched-save-status" id="nightlySaveStatus"></span>
+  </div>
+</div>
+
+<!-- 4. Indicator Computation (subprocess) -->
 <div class="s-section" id="indicatorSection">
   <div class="eod-header">
     <h3>&#x1F9EE; Indicator Computation</h3>
@@ -1136,6 +1204,143 @@ function pollEodStatus(){
 loadEodConfig();
 pollEodStatus();
 setInterval(pollEodStatus, 10000);
+
+// ────────────────────────────────────────────────────────────────
+// Nightly Pipeline
+// ────────────────────────────────────────────────────────────────
+var _nightlyConfig = null;
+
+function loadNightlyConfig(){
+  fetch('/api/nightly/config').then(function(r){return r.json();}).then(function(cfg){
+    _nightlyConfig = cfg;
+    var toggle = document.getElementById('nightlyToggle');
+    toggle.textContent = cfg.enabled ? 'ON' : 'OFF';
+    toggle.classList.toggle('active', cfg.enabled);
+    document.getElementById('nightlyTriggerTime').value = cfg.trigger_time || '21:00';
+
+    var jobs = cfg.jobs || {};
+    var qf = jobs.queue_fetch || {};
+    var wl = jobs.watchlist_pipeline || {};
+    document.getElementById('nightlyQueueEnabled').checked = qf.enabled !== false;
+    document.getElementById('nightlyWatchlistEnabled').checked = wl.enabled !== false;
+    document.getElementById('nightlyCollectWorkers').value = wl.collect_workers || 4;
+    document.getElementById('nightlyComputeWorkers').value = wl.compute_workers || 8;
+    document.getElementById('nightlyLookbackYears').value = qf.lookback_years || 10;
+
+    // Build watchlist chips
+    var selectedWl = wl.watchlists || ['Russell3000'];
+    fetch('/api/scheduler/config').then(function(r2){return r2.json();}).then(function(scfg){
+      var container = document.getElementById('nightlyWatchlistChips');
+      container.innerHTML = '';
+      var wlNames = Object.keys(scfg.watchlists || {});
+      wlNames.forEach(function(name){
+        var chip = document.createElement('span');
+        chip.className = 's-chip' + (selectedWl.indexOf(name) >= 0 ? ' active' : '');
+        chip.setAttribute('data-wl', name);
+        chip.textContent = name;
+        chip.onclick = function(){ chip.classList.toggle('active'); };
+        container.appendChild(chip);
+      });
+    });
+
+    // Last run info
+    if(cfg.last_run){
+      document.getElementById('nightlyLastRun').style.display = 'block';
+      var lr = cfg.last_result || {};
+      var parts = [_fmtAgo(cfg.last_run)];
+      if(lr.queue_fetch) parts.push('Queue: ' + (lr.queue_fetch.detail || lr.queue_fetch.status));
+      if(lr.watchlist_pipeline) parts.push('Pipeline: ' + (lr.watchlist_pipeline.detail || lr.watchlist_pipeline.status));
+      document.getElementById('nightlyLastRunTime').textContent = parts.join(' — ');
+    }
+  }).catch(function(){});
+}
+
+function toggleNightly(){
+  var toggle = document.getElementById('nightlyToggle');
+  var cur = toggle.classList.contains('active');
+  toggle.classList.toggle('active', !cur);
+  toggle.textContent = !cur ? 'ON' : 'OFF';
+}
+
+function saveNightlyConfig(){
+  var selectedWl = [];
+  document.querySelectorAll('#nightlyWatchlistChips .s-chip.active').forEach(function(el){
+    selectedWl.push(el.getAttribute('data-wl'));
+  });
+  var cfg = {
+    enabled: document.getElementById('nightlyToggle').classList.contains('active'),
+    trigger_time: document.getElementById('nightlyTriggerTime').value || '21:00',
+    jobs: {
+      queue_fetch: {
+        enabled: document.getElementById('nightlyQueueEnabled').checked,
+        lookback_years: parseInt(document.getElementById('nightlyLookbackYears').value) || 10
+      },
+      watchlist_pipeline: {
+        enabled: document.getElementById('nightlyWatchlistEnabled').checked,
+        watchlists: selectedWl.length > 0 ? selectedWl : ['Russell3000'],
+        collect_workers: parseInt(document.getElementById('nightlyCollectWorkers').value) || 4,
+        compute_workers: parseInt(document.getElementById('nightlyComputeWorkers').value) || 8,
+        compute: true
+      }
+    }
+  };
+  fetch('/api/nightly/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(cfg)
+  }).then(function(r){return r.json();}).then(function(r){
+    var st = document.getElementById('nightlySaveStatus');
+    st.textContent = r.ok ? 'Saved!' : ('Error: ' + (r.error || 'unknown'));
+    st.style.color = r.ok ? '#22c55e' : '#ef4444';
+    setTimeout(function(){ st.textContent = ''; }, 3000);
+  });
+}
+
+function triggerNightly(){
+  fetch('/api/nightly/trigger', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: '{}'
+  }).then(function(r){return r.json();}).then(function(r){
+    if(!r.ok) alert(r.error || 'Failed to trigger');
+  });
+}
+
+function pollNightlyStatus(){
+  fetch('/api/nightly/status').then(function(r){return r.json();}).then(function(s){
+    document.getElementById('nightlyRunning').style.display = s.running ? 'inline' : 'none';
+
+    var jobs = s.jobs || {};
+    // Queue fetch
+    var qf = jobs.queue_fetch || {};
+    var qfStatus = qf.status || 'idle';
+    var qfCls = qfStatus === 'done' ? 'success' : qfStatus === 'error' ? 'error' : qfStatus === 'running' ? 'skipped' : 'pending';
+    var qfLabel = qfStatus === 'idle' ? 'Idle' : qfStatus === 'running' ? 'Running' : qfStatus === 'done' ? 'Done' : qfStatus === 'error' ? 'Error' : qfStatus;
+    document.getElementById('nightlyQueueStatus').innerHTML = '<span class="eod-status ' + qfCls + '">' + qfLabel + '</span>';
+    document.getElementById('nightlyQueueDetail').textContent = qf.detail || '--';
+    document.getElementById('nightlyQueueDuration').textContent = qf.duration_s != null ? _fmtDuration(qf.duration_s) : '--';
+
+    // Watchlist pipeline
+    var wl = jobs.watchlist_pipeline || {};
+    var wlStatus = wl.status || 'idle';
+    var wlCls = wlStatus === 'done' ? 'success' : wlStatus === 'error' ? 'error' : wlStatus === 'running' ? 'skipped' : 'pending';
+    var wlLabel = wlStatus === 'idle' ? 'Idle' : wlStatus === 'running' ? 'Running' : wlStatus === 'done' ? 'Done' : wlStatus === 'error' ? 'Error' : wlStatus;
+    document.getElementById('nightlyWatchlistStatus').innerHTML = '<span class="eod-status ' + wlCls + '">' + wlLabel + '</span>';
+    document.getElementById('nightlyWatchlistDetail').textContent = wl.detail || '--';
+    document.getElementById('nightlyWatchlistDuration').textContent = wl.duration_s != null ? _fmtDuration(wl.duration_s) : '--';
+  }).catch(function(){});
+}
+
+function _fmtDuration(secs){
+  if(secs < 60) return secs + 's';
+  if(secs < 3600) return Math.floor(secs / 60) + 'm ' + (secs % 60) + 's';
+  return Math.floor(secs / 3600) + 'h ' + Math.floor((secs % 3600) / 60) + 'm';
+}
+
+// Init nightly
+loadNightlyConfig();
+pollNightlyStatus();
+setInterval(pollNightlyStatus, 10000);
 
 // Load scheduler UI on page load
 refreshSchedulerUI();
