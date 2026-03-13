@@ -111,6 +111,11 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .ticker-list-item .tl-change{font-size:14px;font-weight:600;min-width:62px;text-align:right;font-family:'SF Mono','Consolas',monospace;}
 .tl-change.pos{color:#26a69a;}
 .tl-change.neg{color:#ef5350;}
+/* Price flash animation */
+@keyframes flash-green{0%{background:#26a69a44;}100%{background:transparent;}}
+@keyframes flash-red{0%{background:#ef535044;}100%{background:transparent;}}
+.tl-price.flash-up{animation:flash-green 0.6s ease-out;}
+.tl-price.flash-down{animation:flash-red 0.6s ease-out;}
 
 /* Overlay checkboxes section — never scrolls, always full height */
 .overlay-section{margin-top:8px;margin-bottom:8px;flex-shrink:0;}
@@ -182,6 +187,8 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
     <button onclick="setCandleInterval(129600,this)">3M</button>
   </div>
   <div class="hdr-sep"></div>
+  <button class="placeholder-btn" title="Coming soon">All &#x25BE;</button>
+  <button class="placeholder-btn" title="Coming soon">Blocks &#x25BE;</button>
   <div class="sweep-dropdown" id="sweepDropdown">
     <button class="sweep-dd-btn has-active" id="sweepDdBtn" onclick="toggleSweepMenu()">Sweeps &#x25BE;</button>
     <div class="sweep-dd-menu" id="sweepDdMenu"></div>
@@ -194,9 +201,6 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
     <span class="cfg-label" style="color:#f59e0b;">D</span><input type="number" id="cfgDailyFrom" value="1" min="1" onchange="onLayerCfgChange()">–<input type="number" id="cfgDailyTo" value="20" min="1" onchange="onLayerCfgChange()">
     <span class="cfg-label" style="color:#3b82f6;margin-left:3px;">S</span><input type="number" id="cfgSingleFrom" value="1" min="1" onchange="onLayerCfgChange()">–<input type="number" id="cfgSingleTo" value="10" min="1" onchange="onLayerCfgChange()">
   </div>
-  <div class="hdr-sep"></div>
-  <button class="placeholder-btn" title="Coming soon">All &#x25BE;</button>
-  <button class="placeholder-btn" title="Coming soon">Blocks &#x25BE;</button>
   <div class="hdr-sep"></div>
   <select id="presetSelect" style="width:120px;" onchange="loadPreset()">
     <option value="">Presets...</option>
@@ -593,10 +597,10 @@ document.addEventListener('keydown', function(e){
   // Skip if typing in an input
   if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
   var key = e.key.toLowerCase();
-  // S = toggle sweeps dropdown
+  // S = master toggle all sweep layers on/off
   if(key === 's'){
     e.preventDefault();
-    toggleSweepMenu();
+    masterToggleSweeps();
     return;
   }
   Object.keys(_indicators).forEach(function(id){
@@ -675,6 +679,30 @@ function toggleLayerFromMenu(layer){
 function updateSweepBtnState(){
   var anyOn = _sweepLayers.some(function(lyr){ return _activeLayers[lyr.id]; });
   document.getElementById('sweepDdBtn').classList.toggle('has-active', anyOn);
+}
+
+// Master toggle: if any sweep layer is on, turn all off. If all off, restore previous state.
+var _sweepLayerSnapshot = null;
+function masterToggleSweeps(){
+  var anyOn = _sweepLayers.some(function(lyr){ return _activeLayers[lyr.id]; });
+  if(anyOn){
+    // Save current state, turn all off
+    _sweepLayerSnapshot = {};
+    _sweepLayers.forEach(function(lyr){ _sweepLayerSnapshot[lyr.id] = _activeLayers[lyr.id]; _activeLayers[lyr.id] = false; });
+  } else {
+    // Restore saved state (or default all-on)
+    if(_sweepLayerSnapshot){
+      _sweepLayers.forEach(function(lyr){ _activeLayers[lyr.id] = _sweepLayerSnapshot[lyr.id]; });
+    } else {
+      _sweepLayers.forEach(function(lyr){ _activeLayers[lyr.id] = true; });
+    }
+    _sweepLayerSnapshot = null;
+  }
+  updateDailyHist();
+  drawBubbles();
+  updateStats();
+  buildSweepMenu();
+  updateSweepBtnState();
 }
 
 // ====================================================================
@@ -1804,7 +1832,21 @@ function _updateTickerPriceDOM(ticker){
   if(!tp) return;
   var priceEl = document.getElementById('price_'+ticker);
   var changeEl = document.getElementById('change_'+ticker);
-  if(priceEl) priceEl.textContent = '$' + tp.price.toFixed(2);
+  if(priceEl){
+    var oldText = priceEl.textContent;
+    var newText = '$' + tp.price.toFixed(2);
+    priceEl.textContent = newText;
+    // Flash green/red on price change
+    if(oldText !== '—' && oldText !== newText){
+      var oldVal = parseFloat(oldText.replace('$',''));
+      var cls = tp.price > oldVal ? 'flash-up' : tp.price < oldVal ? 'flash-down' : '';
+      if(cls){
+        priceEl.classList.remove('flash-up','flash-down');
+        void priceEl.offsetWidth; // force reflow to re-trigger animation
+        priceEl.classList.add(cls);
+      }
+    }
+  }
   if(changeEl){
     var changePct = tp.prevClose ? ((tp.price - tp.prevClose) / tp.prevClose * 100) : 0;
     var sign = changePct >= 0 ? '+' : '';
@@ -2614,7 +2656,7 @@ function _startLiveTimers(){
   var liveMs = _candleInterval <= 1 ? 1000 : _candleInterval <= 5 ? 2000 : 5000;
   _liveBarTimer = setInterval(fetchLiveBar, liveMs);
   // Refresh ticker list prices every 2s
-  _tickerListTimer = setInterval(_refreshTickerListPrices, 2000);
+  _tickerListTimer = setInterval(_refreshTickerListPrices, 1000);
 }
 
 function fetchLiveBar(){
