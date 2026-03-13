@@ -471,6 +471,7 @@ var _candleStyle = localStorage.getItem('chart_candleStyle') || 'hollow';
 var _chartColorScheme = localStorage.getItem('chart_colors') || 'default';
 var _gridVisible = (localStorage.getItem('chart_grid') || '0') === '1';
 var _crosshairMode = localStorage.getItem('chart_crosshair') || 'normal';
+var _sessionBands = (localStorage.getItem('chart_sessions') || '1') === '1'; // on by default
 // Days of candle data per interval (for Polygon API)
 var INTERVAL_DAYS = {1:5, 5:30, 60:120, 240:365, 1440:730, 2880:730, 10080:1460, 43200:2520, 129600:3780};
 // Sweep lookback now uses INTERVAL_DAYS directly (matched to candle range)
@@ -1504,12 +1505,15 @@ function buildCsMenu(){
   var gridLabel = _gridVisible ? 'On' : 'Off';
   var crossLabel = _crosshairMode === 'magnet' ? 'Magnet' : 'Normal';
 
+  var sessLabel = _sessionBands ? 'On' : 'Off';
+
   var html = ''
     + '<div class="cs-item" onclick="cycleSetting(\'scale\')"><span class="cs-key">Scale</span><span class="cs-val">' + scaleLabel + '</span></div>'
     + '<div class="cs-item" onclick="cycleSetting(\'style\')"><span class="cs-key">Style</span><span class="cs-val">' + styleLabel + '</span></div>'
     + '<div class="cs-item" onclick="cycleSetting(\'colors\')"><span class="cs-key">Colors</span><span class="cs-val">' + colorLabel + '</span></div>'
     + '<div class="cs-item" onclick="cycleSetting(\'grid\')"><span class="cs-key">Grid</span><span class="cs-val">' + gridLabel + '</span></div>'
-    + '<div class="cs-item" onclick="cycleSetting(\'crosshair\')"><span class="cs-key">Crosshair</span><span class="cs-val">' + crossLabel + '</span></div>';
+    + '<div class="cs-item" onclick="cycleSetting(\'crosshair\')"><span class="cs-key">Crosshair</span><span class="cs-val">' + crossLabel + '</span></div>'
+    + '<div class="cs-item" onclick="cycleSetting(\'sessions\')"><span class="cs-key">Sessions</span><span class="cs-val">' + sessLabel + '</span></div>';
   document.getElementById('csMenu').innerHTML = html;
 }
 
@@ -1538,6 +1542,10 @@ function cycleSetting(key){
   } else if(key === 'crosshair'){
     _crosshairMode = _crosshairMode === 'normal' ? 'magnet' : 'normal';
     localStorage.setItem('chart_crosshair', _crosshairMode);
+  } else if(key === 'sessions'){
+    _sessionBands = !_sessionBands;
+    localStorage.setItem('chart_sessions', _sessionBands ? '1' : '0');
+    drawBubbles(); // redraw canvas immediately
   }
   applyChartSettings();
   buildCsMenu();
@@ -2401,6 +2409,7 @@ function _getETMins(unixSec){
 }
 
 function _drawSessionBands(){
+  if(!_sessionBands) return;
   if(!_ctx || !_chart || !_candleSeries || !_candles.length) return;
   if(_candleInterval >= 1440) return;
   if(typeof _candles[0].time === 'string') return;
