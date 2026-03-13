@@ -545,6 +545,21 @@ function registerIndicator(cfg){
 function toggleIndicator(id){
   var ind = _indicators[id];
   if(!ind) return;
+  // Volume: 3-state cycle (off → bars → bars+MA → off)
+  if(id === 'volume'){
+    _volumeMode = (_volumeMode + 1) % 3;
+    if(ind.enabled) ind.remove(); // tear down current
+    if(_volumeMode === 0){
+      ind.enabled = false;
+    } else {
+      ind.enabled = true;
+      ind.createSeries(_chart);
+      ind.compute(_candles, ind);
+    }
+    buildIndMenu();
+    updateIndBtnState();
+    return;
+  }
   ind.enabled = !ind.enabled;
   if(ind.enabled){
     ind.createSeries(_chart);
@@ -590,10 +605,13 @@ function buildIndMenu(){
   Object.keys(_indicators).forEach(function(id){
     var ind = _indicators[id];
     var hkHint = ind.hotkey ? '<span style="color:#555;font-size:10px;margin-left:auto;text-transform:uppercase;">'+ind.hotkey+'</span>' : '';
+    var label = ind.name;
+    if(id === 'volume' && _volumeMode === 1) label = 'Volume';
+    else if(id === 'volume' && _volumeMode === 2) label = 'Volume + MA';
     html += '<div class="ind-item' + (ind.enabled ? ' active' : '') + '" onclick="toggleIndicator(\'' + id + '\')">'
       + '<span class="ind-check">' + (ind.enabled ? '&#x2713;' : '') + '</span>'
       + '<span class="ind-swatch" style="background:' + ind.color + ';"></span>'
-      + '<span class="ind-label">' + ind.name + '</span>' + hkHint + '</div>';
+      + '<span class="ind-label">' + label + '</span>' + hkHint + '</div>';
   });
   menu.innerHTML = html;
 }
@@ -954,8 +972,9 @@ registerIndicator({
 });
 
 // ====================================================================
-// VOLUME INDICATOR — histogram bars + 20MA orange area fill
+// VOLUME INDICATOR — 3-state cycle: off → bars only → bars + 20MA → off
 // ====================================================================
+var _volumeMode = 0; // 0=off, 1=bars only, 2=bars + 20MA
 registerIndicator({
   id: 'volume',
   name: 'Volume',
@@ -970,27 +989,29 @@ registerIndicator({
       lastValueVisible: false,
       priceLineVisible: false,
     });
-    // 20MA area fill — semi-transparent orange
-    var ma = chart.addAreaSeries({
-      priceScaleId: 'vol',
-      lineColor: 'rgba(245,158,11,0.6)',
-      topColor: 'rgba(245,158,11,0.25)',
-      bottomColor: 'rgba(245,158,11,0.02)',
-      lineWidth: 1,
-      lastValueVisible: false,
-      priceLineVisible: false,
-      crosshairMarkerVisible: false,
-    });
     chart.priceScale('vol').applyOptions({
       scaleMargins: {top: 0.75, bottom: 0},
       borderVisible: false,
     });
-    ind.series = [hist, ma];
+    ind.series = [hist];
+    // Mode 2: also add 20MA area
+    if(_volumeMode === 2){
+      var ma = chart.addAreaSeries({
+        priceScaleId: 'vol',
+        lineColor: 'rgba(245,158,11,0.8)',
+        topColor: 'rgba(245,158,11,0.08)',
+        bottomColor: 'rgba(245,158,11,0.7)',
+        lineWidth: 1,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      ind.series.push(ma);
+    }
   },
   compute: function(candles, ind){
     if(!candles || candles.length < 2) return;
     var histData = [];
-    var maData = [];
     var period = 20;
     for(var i = 0; i < candles.length; i++){
       var c = candles[i];
@@ -1001,15 +1022,20 @@ registerIndicator({
         value: vol,
         color: up ? 'rgba(38,166,154,0.45)' : 'rgba(239,83,80,0.45)'
       });
-      // 20-period SMA of volume
-      if(i >= period - 1){
-        var sum = 0;
-        for(var j = i - period + 1; j <= i; j++) sum += (candles[j].volume || 0);
-        maData.push({time: c.time, value: sum / period});
-      }
     }
     ind.series[0].setData(histData);
-    ind.series[1].setData(maData);
+    // Mode 2: compute and set 20MA
+    if(_volumeMode === 2 && ind.series.length > 1){
+      var maData = [];
+      for(var i = 0; i < candles.length; i++){
+        if(i >= period - 1){
+          var sum = 0;
+          for(var j = i - period + 1; j <= i; j++) sum += (candles[j].volume || 0);
+          maData.push({time: candles[i].time, value: sum / period});
+        }
+      }
+      ind.series[1].setData(maData);
+    }
   }
 });
 
