@@ -18,17 +18,21 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .header select{background:#14141e;border:1px solid #2a2a3a;color:#ccc;padding:5px 8px;border-radius:4px;font-size:12px;font-family:inherit;height:32px;}
 /* Divider */
 .hdr-sep{width:1px;height:24px;background:#334155;flex-shrink:0;}
-/* Layer toggle buttons */
-.layer-ctrl{display:inline-flex;border:1px solid #334155;border-radius:4px;overflow:hidden;}
-.layer-btn{background:#1e293b;color:#888;border:none;padding:5px 10px;cursor:pointer;font-size:11px;font-family:inherit;border-right:1px solid #334155;font-weight:700;letter-spacing:0.3px;white-space:nowrap;height:32px;}
-.layer-btn:last-child{border-right:none;}
-.layer-btn:hover{color:#ccc;}
-.layer-btn.active.lyr-daily{background:#f59e0b22;color:#f59e0b;}
-.layer-btn.active.lyr-single{background:#3b82f622;color:#3b82f6;}
-.layer-btn.active.lyr-rare{background:#a78bfa22;color:#c4b5fd;}
-.layer-btn.active.lyr-cb{background:#eab30822;color:#eab308;}
-.layer-btn.active.lyr-monster{background:#f9731622;color:#f97316;}
-.layer-btn.active.lyr-sweeps{background:#60a5fa18;color:#60a5fa;}
+/* Sweep dropdown (same pattern as indicators) */
+.sweep-dropdown{position:relative;display:inline-block;}
+.sweep-dd-btn{background:#1e293b;color:#888;border:1px solid #334155;padding:5px 14px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:700;letter-spacing:0.3px;height:32px;border-radius:4px;white-space:nowrap;}
+.sweep-dd-btn:hover{color:#ccc;}
+.sweep-dd-btn.has-active{color:#60a5fa;border-color:#60a5fa44;}
+.sweep-dd-menu{display:none;position:absolute;top:36px;left:0;background:#14141e;border:1px solid #334155;border-radius:6px;min-width:200px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,0.6);padding:4px 0;}
+.sweep-dd-menu.open{display:block;}
+.sweep-dd-item{display:flex;align-items:center;padding:8px 14px;cursor:pointer;font-size:12px;color:#c8c8d4;gap:8px;transition:background 0.1s;}
+.sweep-dd-item:hover{background:#1e293b;}
+.sweep-dd-item .sw-check{width:14px;height:14px;border:1.5px solid #555;border-radius:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:transparent;}
+.sweep-dd-item.active .sw-check{border-color:#60a5fa;background:#60a5fa22;color:#60a5fa;}
+.sweep-dd-item .sw-swatch{width:12px;height:3px;border-radius:1px;flex-shrink:0;}
+.sweep-dd-item .sw-label{flex:1;}
+/* Placeholder dropdown buttons (disabled) */
+.placeholder-btn{background:#1e293b;color:#444;border:1px solid #282838;padding:5px 14px;font-size:11px;font-family:inherit;font-weight:700;letter-spacing:0.3px;height:32px;border-radius:4px;white-space:nowrap;cursor:default;opacity:0.45;}
 /* Sweep filter mode toggle ($ vs Pctl) */
 .sweep-filter{display:flex;align-items:center;gap:4px;}
 .sweep-mode-btn{background:#1e293b;color:#555;border:1px solid #334155;padding:5px 10px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:700;height:32px;border-radius:4px 0 0 4px;}
@@ -178,24 +182,21 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
     <button onclick="setCandleInterval(129600,this)">3M</button>
   </div>
   <div class="hdr-sep"></div>
-  <div class="layer-ctrl" id="layerCtrl">
-    <button class="layer-btn lyr-sweeps active" onclick="toggleLayer('sweeps',this)">Sweeps</button>
-    <button class="layer-btn lyr-daily" onclick="toggleLayer('daily',this)">Daily</button>
-    <button class="layer-btn lyr-single" onclick="toggleLayer('single',this)">Single</button>
-    <button class="layer-btn lyr-rare active" onclick="toggleLayer('rare',this)">Rare</button>
-    <button class="layer-btn lyr-cb active" onclick="toggleLayer('cb',this)">CB</button>
-    <button class="layer-btn lyr-monster active" onclick="toggleLayer('monster',this)">Monster</button>
+  <div class="sweep-dropdown" id="sweepDropdown">
+    <button class="sweep-dd-btn has-active" id="sweepDdBtn" onclick="toggleSweepMenu()">Sweeps &#x25BE;</button>
+    <div class="sweep-dd-menu" id="sweepDdMenu"></div>
   </div>
-  <div class="hdr-sep"></div>
   <div class="sweep-filter">
     <button class="sweep-mode-btn active" id="modeNotional" onclick="setSweepFilterMode('notional')">$</button><button class="sweep-mode-btn" id="modePctl" onclick="setSweepFilterMode('percentile')">Pctl</button>
     <input type="number" id="cfgSweepValue" value="500000" step="100000" min="0" onchange="onLayerCfgChange()" title="Min notional ($)">
   </div>
-  <div class="hdr-sep"></div>
   <div class="lyr-cfg">
     <span class="cfg-label" style="color:#f59e0b;">D</span><input type="number" id="cfgDailyFrom" value="1" min="1" onchange="onLayerCfgChange()">–<input type="number" id="cfgDailyTo" value="20" min="1" onchange="onLayerCfgChange()">
     <span class="cfg-label" style="color:#3b82f6;margin-left:3px;">S</span><input type="number" id="cfgSingleFrom" value="1" min="1" onchange="onLayerCfgChange()">–<input type="number" id="cfgSingleTo" value="10" min="1" onchange="onLayerCfgChange()">
   </div>
+  <div class="hdr-sep"></div>
+  <button class="placeholder-btn" title="Coming soon">All &#x25BE;</button>
+  <button class="placeholder-btn" title="Coming soon">Blocks &#x25BE;</button>
   <div class="hdr-sep"></div>
   <select id="presetSelect" style="width:120px;" onchange="loadPreset()">
     <option value="">Presets...</option>
@@ -587,11 +588,17 @@ function buildIndMenu(){
   menu.innerHTML = html;
 }
 
-// Keyboard shortcuts for indicators
+// Keyboard shortcuts for indicators + sweeps
 document.addEventListener('keydown', function(e){
   // Skip if typing in an input
   if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
   var key = e.key.toLowerCase();
+  // S = toggle sweeps dropdown
+  if(key === 's'){
+    e.preventDefault();
+    toggleSweepMenu();
+    return;
+  }
   Object.keys(_indicators).forEach(function(id){
     if(_indicators[id].hotkey === key){
       e.preventDefault();
@@ -603,6 +610,8 @@ document.addEventListener('keydown', function(e){
 function toggleIndMenu(){
   var menu = document.getElementById('indMenu');
   menu.classList.toggle('open');
+  document.getElementById('sweepDdMenu').classList.remove('open');
+  document.getElementById('csMenu').classList.remove('open');
 }
 
 function updateIndBtnState(){
@@ -616,7 +625,57 @@ document.addEventListener('click', function(e){
   if(dd && !dd.contains(e.target)){
     document.getElementById('indMenu').classList.remove('open');
   }
+  var sd = document.getElementById('sweepDropdown');
+  if(sd && !sd.contains(e.target)){
+    document.getElementById('sweepDdMenu').classList.remove('open');
+  }
 });
+
+// ====================================================================
+// SWEEPS DROPDOWN (layer toggles)
+// ====================================================================
+var _sweepLayers = [
+  {id:'sweeps',  name:'Sweeps',  color:'#60a5fa'},
+  {id:'daily',   name:'Daily',   color:'#f59e0b'},
+  {id:'single',  name:'Single',  color:'#3b82f6'},
+  {id:'rare',    name:'Rare',    color:'#c4b5fd'},
+  {id:'cb',      name:'Clusterbombs', color:'#eab308'},
+  {id:'monster', name:'Monster', color:'#f97316'},
+];
+
+function toggleSweepMenu(){
+  var menu = document.getElementById('sweepDdMenu');
+  menu.classList.toggle('open');
+  // Close other menus
+  document.getElementById('indMenu').classList.remove('open');
+  document.getElementById('csMenu').classList.remove('open');
+}
+
+function buildSweepMenu(){
+  var html = '';
+  _sweepLayers.forEach(function(lyr){
+    var on = _activeLayers[lyr.id];
+    html += '<div class="sweep-dd-item' + (on ? ' active' : '') + '" onclick="toggleLayerFromMenu(\'' + lyr.id + '\')">'
+      + '<span class="sw-check">' + (on ? '&#x2713;' : '') + '</span>'
+      + '<span class="sw-swatch" style="background:' + lyr.color + ';"></span>'
+      + '<span class="sw-label">' + lyr.name + '</span></div>';
+  });
+  document.getElementById('sweepDdMenu').innerHTML = html;
+}
+
+function toggleLayerFromMenu(layer){
+  _activeLayers[layer] = !_activeLayers[layer];
+  if(layer === 'daily') updateDailyHist();
+  drawBubbles();
+  updateStats();
+  buildSweepMenu();
+  updateSweepBtnState();
+}
+
+function updateSweepBtnState(){
+  var anyOn = _sweepLayers.some(function(lyr){ return _activeLayers[lyr.id]; });
+  document.getElementById('sweepDdBtn').classList.toggle('has-active', anyOn);
+}
 
 // ====================================================================
 // BOLLINGER BANDS INDICATOR
@@ -1315,8 +1374,8 @@ function applyChartSettings(){
 
 function toggleCsMenu(){
   document.getElementById('csMenu').classList.toggle('open');
-  // Close indicators menu if open
   document.getElementById('indMenu').classList.remove('open');
+  document.getElementById('sweepDdMenu').classList.remove('open');
 }
 
 function buildCsMenu(){
@@ -1479,6 +1538,7 @@ document.addEventListener('click', function(e){
   initChart();
   buildCsMenu();
   buildIndMenu();
+  buildSweepMenu();
   loadAll(true);
 
   // Always-live: auto-refresh candles every 60s, sweeps every 30s
@@ -2492,12 +2552,13 @@ function _syncIntervalButtons(){
   });
 }
 
-function toggleLayer(layer, btn){
+function toggleLayer(layer){
   _activeLayers[layer] = !_activeLayers[layer];
-  btn.classList.toggle('active', _activeLayers[layer]);
   if(layer === 'daily') updateDailyHist();
   drawBubbles();
   updateStats();
+  buildSweepMenu();
+  updateSweepBtnState();
 }
 
 function setSweepFilterMode(mode){
@@ -2714,12 +2775,9 @@ function loadPreset(){
   // Restore layer toggles
   if(cfg.layers){
     _activeLayers = cfg.layers;
-    // Ensure sweeps key exists for backward compat with v3 presets saved before sweeps layer
     if(_activeLayers.sweeps === undefined) _activeLayers.sweeps = true;
-    ['sweeps','daily','single','rare','cb','monster'].forEach(function(l){
-      var btn = document.querySelector('.lyr-' + l);
-      if(btn) btn.classList.toggle('active', !!_activeLayers[l]);
-    });
+    buildSweepMenu();
+    updateSweepBtnState();
   }
   if(cfg.layerCfg){
     _layerCfg = cfg.layerCfg;
