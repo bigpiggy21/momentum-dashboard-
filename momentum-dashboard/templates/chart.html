@@ -539,6 +539,21 @@ function registerIndicator(cfg){
 function toggleIndicator(id){
   var ind = _indicators[id];
   if(!ind) return;
+  // Moving Averages: 4-state cycle (off → 200D → 30W → both → off)
+  if(id === 'ma'){
+    _maMode = (_maMode + 1) % 4;
+    if(ind.enabled) ind.remove();
+    if(_maMode === 0){
+      ind.enabled = false;
+    } else {
+      ind.enabled = true;
+      ind.createSeries(_chart);
+      ind.compute(_candles, ind);
+    }
+    buildIndMenu();
+    updateIndBtnState();
+    return;
+  }
   // Volume: 3-state cycle (off → bars → bars+MA → off)
   if(id === 'volume'){
     _volumeMode = (_volumeMode + 1) % 3;
@@ -610,6 +625,7 @@ function buildIndMenu(){
     var label = ind.name;
     if(id === 'volume' && _volumeMode === 1) label = 'Volume';
     else if(id === 'volume' && _volumeMode === 2) label = 'Volume + MA';
+    if(id === 'ma') label = 'MA: ' + _MA_LABELS[_maMode];
     html += '<div class="ind-item' + (ind.enabled ? ' active' : '') + '" onclick="toggleIndicator(\'' + id + '\')">'
       + '<span class="ind-check">' + (ind.enabled ? '&#x2713;' : '') + '</span>'
       + '<span class="ind-swatch" style="background:' + ind.color + ';"></span>'
@@ -869,6 +885,67 @@ registerIndicator({
     ind.series[0].setData(basisData);
     ind.series[1].setData(upperData);
     ind.series[2].setData(lowerData);
+  }
+});
+
+// ====================================================================
+// MOVING AVERAGES — 200D SMA (cyan) + 30W SMA (amber)
+// Cycle: off → 200D → 30W → both → off (hotkey M)
+// 30W SMA = 150-day SMA on daily data (30 weeks × 5 trading days)
+// ====================================================================
+var _maMode = 0; // 0=off, 1=200D, 2=30W, 3=both
+var _MA_LABELS = ['Off', '200D SMA', '30W SMA', '200D + 30W'];
+registerIndicator({
+  id: 'ma',
+  name: 'Moving Averages',
+  color: '#22d3ee',
+  hotkey: 'm',
+  createSeries: function(chart){
+    var ind = _indicators['ma'];
+    var series = [];
+    // 200D SMA — cyan
+    if(_maMode === 1 || _maMode === 3){
+      var s200 = chart.addLineSeries({
+        color: '#22d3ee', lineWidth: 2, lineStyle: 0,
+        priceLineVisible: false, lastValueVisible: false,
+        crosshairMarkerVisible: false,
+        autoscaleInfoProvider: function(){ return null; },
+      });
+      series.push({key:'200d', s: s200});
+    }
+    // 30W SMA (150-day) — amber
+    if(_maMode === 2 || _maMode === 3){
+      var s30w = chart.addLineSeries({
+        color: '#f59e0b', lineWidth: 2, lineStyle: 0,
+        priceLineVisible: false, lastValueVisible: false,
+        crosshairMarkerVisible: false,
+        autoscaleInfoProvider: function(){ return null; },
+      });
+      series.push({key:'30w', s: s30w});
+    }
+    ind.series = series;
+  },
+  compute: function(candles, ind){
+    if(!candles || candles.length === 0) return;
+    ind.series.forEach(function(entry){
+      var period = entry.key === '200d' ? 200 : 150;
+      if(candles.length < period) return;
+      var data = [];
+      // Running sum for efficiency
+      var sum = 0;
+      for(var i = 0; i < period; i++) sum += candles[i].close;
+      data.push({time: candles[period-1].time, value: sum / period});
+      for(var i = period; i < candles.length; i++){
+        sum += candles[i].close - candles[i - period].close;
+        data.push({time: candles[i].time, value: sum / period});
+      }
+      entry.s.setData(data);
+    });
+  },
+  remove: function(){
+    var ind = _indicators['ma'];
+    ind.series.forEach(function(entry){ _chart.removeSeries(entry.s); });
+    ind.series = [];
   }
 });
 
