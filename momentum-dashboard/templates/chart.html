@@ -1713,11 +1713,10 @@ document.addEventListener('click', function(e){
 function _fitWithMargin(){
   if(!_chart || !_candles || _candles.length === 0) return;
   var ts = _chart.timeScale();
-  // Calculate how many bars to show: all data + 35% gap
-  var barCount = _candles.length;
-  var gap = Math.round(barCount * 35 / 65);
-  // scrollToPosition scrolls so the last bar is at `offset` bars from the right edge
-  ts.scrollToPosition(gap, false);
+  // Set rightOffset proportional to visible bars (35% of data count)
+  var gap = Math.round(_candles.length * 35 / 65);
+  ts.applyOptions({rightOffset: gap});
+  ts.fitContent();
 }
 
 function updateTickerOverlay(){
