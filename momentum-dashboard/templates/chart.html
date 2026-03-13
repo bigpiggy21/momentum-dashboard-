@@ -1279,6 +1279,7 @@ var _COLOR_SCHEMES = {
   'default': {upColor:'transparent', borderUp:'#056656', borderDown:'#b22833', downColor:'#b22833', wickUp:'#056656', wickDown:'#b22833', label:'🟢🔴'},
   'blue-red': {upColor:'transparent', borderUp:'#2196f3', borderDown:'#b22833', downColor:'#b22833', wickUp:'#2196f3', wickDown:'#b22833', label:'🔵🔴'},
   'amber':   {upColor:'transparent', borderUp:'#f59e0b', borderDown:'#7c3aed', downColor:'#7c3aed', wickUp:'#f59e0b', wickDown:'#7c3aed', label:'🟡🟣'},
+  'teal':    {upColor:'transparent', borderUp:'#056656', borderDown:'#056656', downColor:'#056656', wickUp:'#056656', wickDown:'#056656', label:'🩲'},
 };
 
 function _getColorScheme(){
@@ -1350,7 +1351,7 @@ function cycleSetting(key){
       rebuildCandleSeries();
     }
   } else if(key === 'colors'){
-    var opts3 = ['default','blue-red','amber'];
+    var opts3 = ['default','blue-red','amber','teal'];
     _chartColorScheme = opts3[(opts3.indexOf(_chartColorScheme) + 1) % opts3.length];
     localStorage.setItem('chart_colors', _chartColorScheme);
   } else if(key === 'grid'){
