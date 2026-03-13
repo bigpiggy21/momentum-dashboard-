@@ -584,9 +584,19 @@ function recomputeIndicators(){
 
 function removeAllIndicatorSeries(){
   // Called on ticker change — removes series so they can be recreated with fresh data
+  // TTM is special: keep pane open, just clear data (avoids destroy/recreate flicker)
   Object.keys(_indicators).forEach(function(id){
     var ind = _indicators[id];
-    if(ind.enabled) ind.remove();
+    if(!ind.enabled) return;
+    if(id === 'ttm'){
+      // Clear TTM series data without destroying the chart pane
+      if(_ttmMomSeries) _ttmMomSeries.setData([]);
+      if(_ttmSqzSeries) _ttmSqzSeries.setData([]);
+      if(_ttmAccelSeries) _ttmAccelSeries.setData([]);
+      if(_ttmZeroSeries) _ttmZeroSeries.setData([]);
+    } else {
+      ind.remove();
+    }
   });
 }
 
@@ -594,7 +604,11 @@ function recreateEnabledIndicators(){
   // Called after candle load on ticker change — recreates series for enabled indicators
   Object.keys(_indicators).forEach(function(id){
     var ind = _indicators[id];
-    if(ind.enabled && ind.series.length === 0){
+    if(!ind.enabled) return;
+    if(id === 'ttm'){
+      // TTM pane stays open — just recompute with new candles
+      ind.compute(_candles, ind);
+    } else if(ind.series.length === 0){
       ind.createSeries(_chart);
       ind.compute(_candles, ind);
     }
@@ -1351,18 +1365,17 @@ function _ttmCreateChart(){
     pointMarkersVisible: false,
   });
 
-  // Time scale sync: main → TTM
+  // Time scale sync: main ↔ TTM (use logical range for pixel-perfect alignment)
   _chart.timeScale().subscribeVisibleLogicalRangeChange(function(range){
     if(_ttmSyncing || !_ttmChart || !range) return;
     _ttmSyncing = true;
-    _ttmChart.timeScale().setVisibleLogicalRange(range);
+    try { _ttmChart.timeScale().setVisibleLogicalRange(range); } catch(e){}
     _ttmSyncing = false;
   });
-  // TTM → main
   _ttmChart.timeScale().subscribeVisibleLogicalRangeChange(function(range){
     if(_ttmSyncing || !_chart || !range) return;
     _ttmSyncing = true;
-    _chart.timeScale().setVisibleLogicalRange(range);
+    try { _chart.timeScale().setVisibleLogicalRange(range); } catch(e){}
     _ttmSyncing = false;
   });
 }
