@@ -20,7 +20,7 @@
   "live_scanner": {
     "auto_start": true,
     "detection_interval_minutes": 5,
-    "ws_url": "wss://delayed.polygon.io/stocks",
+    "ws_url": "wss://socket.polygon.io/stocks",
     "min_notional": 500000,
     "buffer_flush_seconds": 30,
     "buffer_max_trades": 200,

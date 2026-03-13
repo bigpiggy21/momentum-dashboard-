@@ -82,9 +82,9 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 
 /* Layout */
 .main{display:flex;flex:1;overflow:hidden;}
-.left-panel{width:290px;min-width:290px;background:#0a0a12;border-right:1px solid #1e1e2e;padding:12px;overflow-y:auto;display:flex;flex-direction:column;transition:width 0.2s,min-width 0.2s,padding 0.2s;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;}
-.left-panel.collapsed{width:0;min-width:0;padding:0;overflow:hidden;border-right:none;}
-.chart-area{flex:1;position:relative;overflow:hidden;display:flex;flex-direction:column;}
+.left-panel{width:290px;min-width:290px;background:#0a0a12;border-left:1px solid #1e1e2e;padding:12px;overflow-y:auto;display:flex;flex-direction:column;transition:width 0.2s,min-width 0.2s,padding 0.2s;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;order:2;}
+.left-panel.collapsed{width:0;min-width:0;padding:0;overflow:hidden;border-left:none;}
+.chart-area{flex:1;position:relative;overflow:hidden;display:flex;flex-direction:column;order:1;}
 #chartContainer{width:100%;flex:1;position:relative;min-height:0;}
 #bubbleCanvas{position:absolute;top:0;left:0;pointer-events:none;z-index:5;}
 #tickerOverlay{position:absolute;top:12px;left:12px;z-index:6;pointer-events:none;font-family:'Inter',sans-serif;}
@@ -106,7 +106,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .ticker-list::-webkit-scrollbar-thumb{background:#333;border-radius:3px;}
 .ticker-list-item{display:flex;align-items:center;gap:0;padding:3px 6px;cursor:pointer;border-radius:4px;font-size:12.5px;}
 .ticker-list-item:hover{background:#14141e;}
-.ticker-list-item.active{background:#f59e0b15;border-left:2px solid #f59e0b;}
+.ticker-list-item.active{background:#f59e0b15;border-right:2px solid #f59e0b;}
 .ticker-list-item .tl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
 .ticker-list-item .tl-ticker{font-weight:600;min-width:40px;flex-shrink:0;}
 .ticker-list-item .tl-price{color:#ccc;margin-left:auto;width:62px;text-align:right;font-size:12px;font-weight:500;font-family:'SF Mono','Consolas',monospace;flex-shrink:0;}
@@ -117,11 +117,10 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .tl-ext.pos{color:#26a69a;}
 .tl-ext.neg{color:#ef5350;}
 body.ext-hours .tl-ext{display:inline;}
-/* Price flash animation */
-@keyframes flash-green{0%{background:#26a69a55;color:#26a69a;}50%{color:#26a69a;}100%{background:transparent;color:#ccc;}}
-@keyframes flash-red{0%{background:#ef535055;color:#ef5350;}50%{color:#ef5350;}100%{background:transparent;color:#ccc;}}
-.tl-price.flash-up{animation:flash-green 0.8s ease-out forwards;}
-.tl-price.flash-down{animation:flash-red 0.8s ease-out forwards;}
+/* TradingView-style digit color flash */
+.tl-price .d-up{color:#26a69a;transition:color 0.6s ease-out 0.4s;}
+.tl-price .d-dn{color:#ef5350;transition:color 0.6s ease-out 0.4s;}
+.tl-price .d-n{color:#ccc;}
 
 /* Overlay checkboxes section — never scrolls, always full height */
 .overlay-section{margin-top:8px;margin-bottom:8px;flex-shrink:0;}
@@ -150,7 +149,7 @@ body.ext-hours .tl-ext{display:inline;}
 .seg-ctrl button:last-child{border-right:none;}
 .seg-ctrl button:hover{color:#ccc;}
 .seg-ctrl button.active{background:#f59e0b22;color:#f59e0b;}
-.collapse-btn{position:absolute;left:0;top:50%;transform:translateY(-50%);background:#1e293b;border:1px solid #334155;border-left:none;color:#888;padding:8px 4px;cursor:pointer;border-radius:0 4px 4px 0;z-index:6;font-size:10px;}
+.collapse-btn{position:absolute;right:0;top:50%;transform:translateY(-50%);background:#1e293b;border:1px solid #334155;border-right:none;color:#888;padding:8px 4px;cursor:pointer;border-radius:4px 0 0 4px;z-index:6;font-size:10px;}
 .collapse-btn:hover{color:#f59e0b;}
 
 /* Sweep feed */
@@ -252,7 +251,7 @@ body.ext-hours .tl-ext{display:inline;}
     </div>
   </div>
   <div class="chart-area">
-    <button class="collapse-btn" id="collapseBtn" onclick="togglePanel()">&#x25C0;</button>
+    <button class="collapse-btn" id="collapseBtn" onclick="togglePanel()">&#x25B6;</button>
     <div id="chartContainer"></div>
     <canvas id="bubbleCanvas"></canvas>
     <div id="tickerOverlay"></div>
@@ -2093,24 +2092,39 @@ function _updateTickerPriceDOM(ticker){
   var priceEl = document.getElementById('price_'+ticker);
   var changeEl = document.getElementById('change_'+ticker);
   if(priceEl){
-    var oldText = priceEl.textContent;
+    var oldText = priceEl.textContent.replace(/\s/g,'');
     var newText = '$' + tp.price.toFixed(2);
-    // Flash green/red on price change
-    if(oldText !== '—' && oldText !== newText){
-      var oldVal = parseFloat(oldText.replace('$',''));
-      var cls = tp.price > oldVal ? 'flash-up' : tp.price < oldVal ? 'flash-down' : '';
-      if(cls){
-        // Clone + replace to reliably re-trigger CSS animation
-        var clone = priceEl.cloneNode(true);
-        clone.textContent = newText;
-        clone.className = 'tl-price ' + cls;
-        clone.addEventListener('animationend', function(){ clone.classList.remove('flash-up','flash-down'); });
-        priceEl.parentNode.replaceChild(clone, priceEl);
-      } else {
-        priceEl.textContent = newText;
-      }
-    } else {
+    if(oldText === '—' || oldText === newText){
+      // No change or first load — plain text
       priceEl.textContent = newText;
+    } else {
+      // Determine direction
+      var oldVal = parseFloat(oldText.replace('$',''));
+      var dir = tp.price > oldVal ? 'up' : tp.price < oldVal ? 'dn' : '';
+      if(!dir){ priceEl.textContent = newText; }
+      else {
+        // Find rightmost differing character between old and new
+        var diffIdx = newText.length; // default: all digits flash
+        for(var i = newText.length - 1; i >= 0; i--){
+          if(newText[i] !== oldText[i]){ diffIdx = i; break; }
+        }
+        // Build spans: chars at diffIdx and LEFT of it get color, rest neutral
+        var html = '';
+        for(var i = 0; i < newText.length; i++){
+          var ch = newText[i];
+          if(ch === '$' || ch === '.' || ch === ','){
+            html += '<span class="d-' + (i <= diffIdx ? dir : 'n') + '">' + ch + '</span>';
+          } else {
+            html += '<span class="d-' + (i <= diffIdx ? dir : 'n') + '">' + ch + '</span>';
+          }
+        }
+        priceEl.innerHTML = html;
+        // After color holds, fade all spans back to neutral
+        setTimeout(function(){
+          var spans = priceEl.querySelectorAll('.d-up,.d-dn');
+          for(var j = 0; j < spans.length; j++) spans[j].className = 'd-n';
+        }, 50);
+      }
     }
   }
   // Day change: during regular hours = live vs prevClose, during ext hours = regClose vs prevClose (frozen)
@@ -2980,7 +2994,7 @@ function togglePanel(){
   var panel = document.getElementById('leftPanel');
   var btn = document.getElementById('collapseBtn');
   panel.classList.toggle('collapsed');
-  btn.innerHTML = panel.classList.contains('collapsed') ? '&#x25B6;' : '&#x25C0;';
+  btn.innerHTML = panel.classList.contains('collapsed') ? '&#x25C0;' : '&#x25B6;';
   setTimeout(function(){
     var container = document.getElementById('chartContainer');
     _chart.resize(container.clientWidth, container.clientHeight);
