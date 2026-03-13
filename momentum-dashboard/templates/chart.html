@@ -603,8 +603,14 @@ function recreateEnabledIndicators(){
   Object.keys(_indicators).forEach(function(id){
     var ind = _indicators[id];
     if(ind.enabled && ind.series.length === 0){
-      ind.createSeries(_chart);
-      ind.compute(_candles, ind);
+      console.log('[IND] recreating', id, 'candles:', _candles.length);
+      try {
+        ind.createSeries(_chart);
+        ind.compute(_candles, ind);
+        console.log('[IND]', id, 'done, series:', ind.series.length);
+      } catch(e) {
+        console.error('[IND]', id, 'error:', e);
+      }
     }
   });
 }
@@ -1317,6 +1323,8 @@ function _ttmHidePane(){
 function _ttmCreateChart(){
   if(_ttmChart) return;
   var area = document.getElementById('ttmChartArea');
+  area.innerHTML = ''; // Clear leftover DOM from previous chart
+  console.log('[TTM] createChart, area dims:', area.clientWidth, area.clientHeight);
   _ttmChart = LightweightCharts.createChart(area, {
     width: area.clientWidth,
     height: area.clientHeight,
