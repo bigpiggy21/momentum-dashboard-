@@ -1587,7 +1587,7 @@ function rebuildCandleSeries(){
     } else {
       _candleSeries.setData(_candles);
     }
-    _chart.timeScale().fitContent();
+    _fitWithMargin();
   }
   drawBubbles();
   recomputeIndicators();
@@ -1690,9 +1690,23 @@ function initChart(){
       vertLine:{color:'#f59e0b33',width:1,style:3},
       horzLine:{color:'#f59e0b33',width:1,style:3},
     },
-    timeScale: {borderColor:'#1e1e2e', timeVisible:true, secondsVisible:false},
+    timeScale: {borderColor:'#1e1e2e', timeVisible:true, secondsVisible:false, rightOffset: 5},
     rightPriceScale: {borderColor:'#1e1e2e', mode: _chartScale === 'log' ? 1 : 0},
   });
+
+  // Fit content with 35% right margin (65% data, 35% empty space)
+  function _fitWithMargin(){
+    if(!_chart) return;
+    var ts = _chart.timeScale();
+    ts.fitContent();
+    // After fitContent, read visible range and expand it by 35/65 on the right
+    var range = ts.getVisibleLogicalRange();
+    if(range && range.from !== undefined && range.to !== undefined){
+      var span = range.to - range.from;
+      var gap = span * (35 / 65);
+      ts.setVisibleLogicalRange({from: range.from, to: range.to + gap});
+    }
+  }
 
   // Create price series based on saved style
   var _cs = _getColorScheme();
@@ -2191,7 +2205,7 @@ function fetchCandles(){
         _setSeriesData(_candles);
         // Reset price scale auto-fit + time scale fit for new data
         _chart.priceScale('right').applyOptions({autoScale: true});
-        _chart.timeScale().fitContent();
+        _fitWithMargin();
         _initialLoad = false;
       } else {
         var oldLast = _candles.length > 0 ? _candles[_candles.length - 1].time : 0;
@@ -2210,7 +2224,7 @@ function fetchCandles(){
         if(!updated && newCandles.length > 0 && newCandles[0].time !== (_candles[0] || {}).time){
           _candles = newCandles;
           _setSeriesData(_candles);
-          _chart.timeScale().fitContent();
+          _fitWithMargin();
         }
       }
       drawBubbles();
