@@ -1434,6 +1434,16 @@ function _ttmPopulate(candles){
     if(_ttmSubs.sqz) _ttmZeroSeries.setMarkers(sqzMarkers);
     else _ttmZeroSeries.setMarkers([]);
   }
+
+  // Force sync TTM time scale to main chart (prevents TTM auto-fitting independently)
+  if(_chart && _ttmChart){
+    var mainRange = _chart.timeScale().getVisibleLogicalRange();
+    if(mainRange){
+      _ttmSyncing = true;
+      _ttmChart.timeScale().setVisibleLogicalRange(mainRange);
+      _ttmSyncing = false;
+    }
+  }
 }
 
 function _ttmSubToggle(key, btn){
