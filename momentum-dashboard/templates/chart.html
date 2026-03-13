@@ -72,7 +72,7 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .cs-item .cs-val{color:#e0e0e8;font-weight:600;}
 
 /* TTM Squeeze sub-pane */
-#ttmContainer{position:absolute;bottom:0;left:0;right:0;display:none;border-top:1px solid #1e1e2e;z-index:2;}
+#ttmContainer{display:none;border-top:1px solid #1e1e2e;z-index:2;flex-shrink:0;}
 .ttm-header{display:flex;align-items:center;gap:6px;padding:2px 8px;background:#0a0a12;border-bottom:1px solid #1e1e2e;height:22px;}
 .ttm-header .ttm-label{font-size:10px;color:#555;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;}
 .ttm-toggle{background:#1e293b;color:#555;border:1px solid #334155;padding:1px 7px;cursor:pointer;font-size:10px;font-family:inherit;font-weight:600;border-radius:3px;height:18px;line-height:16px;}
@@ -84,8 +84,8 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .main{display:flex;flex:1;overflow:hidden;}
 .left-panel{width:290px;min-width:290px;background:#0a0a12;border-right:1px solid #1e1e2e;padding:12px;overflow-y:auto;display:flex;flex-direction:column;transition:width 0.2s,min-width 0.2s,padding 0.2s;scrollbar-width:thin;scrollbar-color:#333 #0a0a12;}
 .left-panel.collapsed{width:0;min-width:0;padding:0;overflow:hidden;border-right:none;}
-.chart-area{flex:1;position:relative;overflow:hidden;}
-#chartContainer{width:100%;height:100%;position:relative;}
+.chart-area{flex:1;position:relative;overflow:hidden;display:flex;flex-direction:column;}
+#chartContainer{width:100%;flex:1;position:relative;min-height:0;}
 #bubbleCanvas{position:absolute;top:0;left:0;pointer-events:none;z-index:5;}
 #tickerOverlay{position:absolute;top:12px;left:12px;z-index:6;pointer-events:none;font-family:'Inter',sans-serif;}
 #tickerOverlay .overlay-ticker{font-size:26px;font-weight:700;color:rgba(255,255,255,0.35);letter-spacing:1px;}
@@ -1281,23 +1281,29 @@ function _ttmShowPane(){
   var container = document.getElementById('chartContainer');
   var ttmContainer = document.getElementById('ttmContainer');
   ttmContainer.style.display = 'block';
-  ttmContainer.style.height = '18%';
-  container.style.height = '82%';
-  // Resize main chart
-  _chart.resize(container.clientWidth, container.clientHeight);
-  resizeCanvas();
-  drawBubbles();
+  ttmContainer.style.height = '25%';
+  // Let flex layout settle, then resize main chart to its new size
+  requestAnimationFrame(function(){
+    _chart.resize(container.clientWidth, container.clientHeight);
+    resizeCanvas();
+    drawBubbles();
+    if(_ttmChart){
+      var ttmArea = document.getElementById('ttmChartArea');
+      _ttmChart.resize(ttmArea.clientWidth, ttmArea.clientHeight);
+    }
+  });
 }
 
 function _ttmHidePane(){
   var container = document.getElementById('chartContainer');
   var ttmContainer = document.getElementById('ttmContainer');
   ttmContainer.style.display = 'none';
-  container.style.height = '100%';
-  // Resize main chart back
-  _chart.resize(container.clientWidth, container.clientHeight);
-  resizeCanvas();
-  drawBubbles();
+  // Let flex layout settle, then resize main chart back
+  requestAnimationFrame(function(){
+    _chart.resize(container.clientWidth, container.clientHeight);
+    resizeCanvas();
+    drawBubbles();
+  });
 }
 
 function _ttmCreateChart(){
@@ -1317,6 +1323,12 @@ function _ttmCreateChart(){
     rightPriceScale: {borderColor:'#1e1e2e', autoScale:true},
   });
 
+  // Momentum price scale — tight margins so histogram fills the pane vertically
+  _ttmChart.priceScale('ttm_mom').applyOptions({
+    scaleMargins: {top: 0.05, bottom: 0.05},
+    borderVisible: false,
+  });
+
   // Acceleration background — wide histogram behind momentum (low opacity)
   _ttmAccelSeries = _ttmChart.addHistogramSeries({
     priceScaleId: 'ttm_mom',
@@ -1331,23 +1343,13 @@ function _ttmCreateChart(){
     base: 0,
   });
 
-  // Squeeze dots — tiny histogram at zero
-  _ttmSqzSeries = _ttmChart.addHistogramSeries({
-    priceScaleId: 'ttm_sqz',
-    priceLineVisible: false, lastValueVisible: false,
-    base: 0,
-  });
-  _ttmChart.priceScale('ttm_sqz').applyOptions({
-    scaleMargins: {top: 0.45, bottom: 0.45},
-    borderVisible: false,
-  });
-
-  // Zero line
+  // Zero line — also carries squeeze dot markers
   _ttmZeroSeries = _ttmChart.addLineSeries({
     priceScaleId: 'ttm_mom',
     color: '#333', lineWidth: 1, lineStyle: 2,
     priceLineVisible: false, lastValueVisible: false,
     crosshairMarkerVisible: false,
+    pointMarkersVisible: false,
   });
 
   // Time scale sync: main → TTM
@@ -1381,8 +1383,9 @@ function _ttmPopulate(candles){
   var ttm = _computeTTM(candles);
   if(!ttm) return;
 
-  var momData = [], sqzData = [], accelData = [], zeroData = [];
-  var markers = [];
+  var momData = [], accelData = [], zeroData = [];
+  var sqzMarkers = [];  // squeeze dots as circle markers on the zero line
+  var thrustMarkers = [];
 
   for(var i = 0; i < candles.length; i++){
     var t = candles[i].time;
@@ -1390,26 +1393,28 @@ function _ttmPopulate(candles){
       momData.push({time: t, value: ttm.mom[i], color: ttm.momColor[i]});
       zeroData.push({time: t, value: 0});
     }
+    // Squeeze dots — circle markers at zero on the zero line
     if(ttm.sqzColor[i] !== null){
-      sqzData.push({time: t, value: 0, color: ttm.sqzColor[i]});
+      sqzMarkers.push({time: t, position: 'inBar', color: ttm.sqzColor[i], shape: 'circle', size: 0.5});
     }
     if(ttm.accelColor[i] !== null && !isNaN(ttm.mom[i])){
       accelData.push({time: t, value: ttm.mom[i], color: ttm.accelColor[i]});
     }
   }
 
-  // Build thrust/dump markers
+  // Build thrust/dump markers (on momentum series)
   ttm.thrustSignals.forEach(function(sig){
     var t = candles[sig.idx].time;
     var momVal = ttm.mom[sig.idx];
     if(isNaN(momVal)) return;
     if(sig.type === 'thrust'){
-      markers.push({time: t, position: 'belowBar', color: '#00c853', shape: 'arrowUp', text: ''});
+      thrustMarkers.push({time: t, position: 'belowBar', color: '#00c853', shape: 'arrowUp', text: ''});
     } else {
-      markers.push({time: t, position: 'aboveBar', color: '#ff1744', shape: 'arrowDown', text: ''});
+      thrustMarkers.push({time: t, position: 'aboveBar', color: '#ff1744', shape: 'arrowDown', text: ''});
     }
   });
-  markers.sort(function(a,b){ return a.time - b.time; });
+  thrustMarkers.sort(function(a,b){ return a.time - b.time; });
+  sqzMarkers.sort(function(a,b){ return a.time - b.time; });
 
   // Set data based on sub-toggle visibility
   if(_ttmSubs.accel && _ttmAccelSeries) _ttmAccelSeries.setData(accelData);
@@ -1417,17 +1422,19 @@ function _ttmPopulate(candles){
 
   if(_ttmSubs.hist && _ttmMomSeries){
     _ttmMomSeries.setData(momData);
-    if(_ttmSubs.thrust) _ttmMomSeries.setMarkers(markers);
+    if(_ttmSubs.thrust) _ttmMomSeries.setMarkers(thrustMarkers);
     else _ttmMomSeries.setMarkers([]);
   } else if(_ttmMomSeries){
     _ttmMomSeries.setData([]);
     _ttmMomSeries.setMarkers([]);
   }
 
-  if(_ttmSubs.sqz && _ttmSqzSeries) _ttmSqzSeries.setData(sqzData);
-  else if(_ttmSqzSeries) _ttmSqzSeries.setData([]);
-
-  if(_ttmZeroSeries) _ttmZeroSeries.setData(zeroData);
+  // Zero line + squeeze dot markers
+  if(_ttmZeroSeries){
+    _ttmZeroSeries.setData(zeroData);
+    if(_ttmSubs.sqz) _ttmZeroSeries.setMarkers(sqzMarkers);
+    else _ttmZeroSeries.setMarkers([]);
+  }
 }
 
 function _ttmSubToggle(key, btn){
