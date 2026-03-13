@@ -111,6 +111,11 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .ticker-list-item .tl-change{font-size:14px;font-weight:600;min-width:62px;text-align:right;font-family:'SF Mono','Consolas',monospace;}
 .tl-change.pos{color:#26a69a;}
 .tl-change.neg{color:#ef5350;}
+.ticker-list-item .tl-ext{font-size:12px;font-weight:600;min-width:54px;text-align:right;font-family:'SF Mono','Consolas',monospace;padding-right:8px;display:none;}
+.tl-ext.pos{color:#26a69a88;}
+.tl-ext.neg{color:#ef535088;}
+body.ext-hours .tl-ext{display:inline;}
+body.ext-hours .tl-ticker{min-width:42px;}
 /* Price flash animation */
 @keyframes flash-green{0%{background:#26a69a55;color:#26a69a;}50%{color:#26a69a;}100%{background:transparent;color:#ccc;}}
 @keyframes flash-red{0%{background:#ef535055;color:#ef5350;}50%{color:#ef5350;}100%{background:transparent;color:#ccc;}}
@@ -1825,6 +1830,7 @@ function buildWatchlistView(){
     item.onclick = function(){ setActiveTicker(t.ticker, 'watchlist-click'); };
     item.innerHTML = '<span class="tl-ticker">'+t.label+'</span>'
       + '<span class="tl-price" id="price_'+t.ticker+'">—</span>'
+      + '<span class="tl-ext" id="ext_'+t.ticker+'"></span>'
       + '<span class="tl-change" id="change_'+t.ticker+'">—</span>';
     listBox.appendChild(item);
   });
@@ -1858,6 +1864,34 @@ function onWatchlistChange(){
 }
 
 // ====================================================================
+// MARKET SESSION DETECTION (EST/EDT)
+// ====================================================================
+function _getMarketSession(){
+  // Returns 'pre' (4:00-9:30), 'regular' (9:30-16:00), 'after' (16:00-20:00), 'closed' (outside)
+  var now = new Date();
+  // Convert to ET: use America/New_York
+  var et = new Date(now.toLocaleString('en-US', {timeZone: 'America/New_York'}));
+  var h = et.getHours(), m = et.getMinutes(), mins = h * 60 + m;
+  var day = et.getDay(); // 0=Sun, 6=Sat
+  if(day === 0 || day === 6) return 'closed';
+  if(mins >= 240 && mins < 570) return 'pre';      // 4:00 - 9:30
+  if(mins >= 570 && mins < 960) return 'regular';   // 9:30 - 16:00
+  if(mins >= 960 && mins < 1200) return 'after';    // 16:00 - 20:00
+  return 'closed';
+}
+
+var _currentSession = 'closed';
+function _updateSessionClass(){
+  var session = _getMarketSession();
+  _currentSession = session;
+  var isExt = (session === 'pre' || session === 'after');
+  document.body.classList.toggle('ext-hours', isExt);
+}
+// Check session every 30s
+_updateSessionClass();
+setInterval(_updateSessionClass, 30000);
+
+// ====================================================================
 // TICKER PRICES (for left panel list)
 // ====================================================================
 function fetchTickerPrices(tickers){
@@ -1871,7 +1905,7 @@ function fetchTickerPrices(tickers){
         var last = candles[candles.length - 1];
         var prev = candles.length > 1 ? candles[candles.length - 2] : null;
         var prevClose = prev ? prev.close : last.open;
-        _tickerPrices[ticker] = {price: last.close, prevClose: prevClose};
+        _tickerPrices[ticker] = {price: last.close, prevClose: prevClose, regClose: last.close};
         _updateTickerPriceDOM(ticker);
       })
       .catch(function(){});
@@ -1904,11 +1938,30 @@ function _updateTickerPriceDOM(ticker){
       priceEl.textContent = newText;
     }
   }
+  // Day change: during regular hours = live vs prevClose, during ext hours = regClose vs prevClose (frozen)
   if(changeEl){
-    var changePct = tp.prevClose ? ((tp.price - tp.prevClose) / tp.prevClose * 100) : 0;
+    var isExt = (_currentSession === 'pre' || _currentSession === 'after');
+    var dayRef = isExt ? tp.regClose : tp.price;
+    var changePct = tp.prevClose ? ((dayRef - tp.prevClose) / tp.prevClose * 100) : 0;
     var sign = changePct >= 0 ? '+' : '';
     changeEl.textContent = sign + changePct.toFixed(2) + '%';
     changeEl.className = 'tl-change ' + (changePct >= 0 ? 'pos' : 'neg');
+  }
+  // Ext-hours column: live price vs last regular close
+  var extEl = document.getElementById('ext_'+ticker);
+  if(extEl){
+    var isExt2 = (_currentSession === 'pre' || _currentSession === 'after');
+    if(isExt2 && tp.regClose && tp.price !== tp.regClose){
+      var extPct = ((tp.price - tp.regClose) / tp.regClose * 100);
+      var extSign = extPct >= 0 ? '+' : '';
+      extEl.textContent = extSign + extPct.toFixed(2) + '%';
+      extEl.className = 'tl-ext ' + (extPct >= 0 ? 'pos' : 'neg');
+    } else if(isExt2){
+      extEl.textContent = '0.00%';
+      extEl.className = 'tl-ext';
+    } else {
+      extEl.textContent = '';
+    }
   }
 }
 
