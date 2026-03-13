@@ -603,14 +603,8 @@ function recreateEnabledIndicators(){
   Object.keys(_indicators).forEach(function(id){
     var ind = _indicators[id];
     if(ind.enabled && ind.series.length === 0){
-      console.log('[IND] recreating', id, 'candles:', _candles.length);
-      try {
-        ind.createSeries(_chart);
-        ind.compute(_candles, ind);
-        console.log('[IND]', id, 'done, series:', ind.series.length);
-      } catch(e) {
-        console.error('[IND]', id, 'error:', e);
-      }
+      ind.createSeries(_chart);
+      ind.compute(_candles, ind);
     }
   });
 }
@@ -1324,7 +1318,6 @@ function _ttmCreateChart(){
   if(_ttmChart) return;
   var area = document.getElementById('ttmChartArea');
   area.innerHTML = ''; // Clear leftover DOM from previous chart
-  console.log('[TTM] createChart, area dims:', area.clientWidth, area.clientHeight);
   _ttmChart = LightweightCharts.createChart(area, {
     width: area.clientWidth,
     height: area.clientHeight,
@@ -1716,6 +1709,19 @@ document.addEventListener('click', function(e){
   _startLiveTimers();
 })();
 
+// Fit content with 35% right margin (65% data, 35% empty space)
+function _fitWithMargin(){
+  if(!_chart) return;
+  var ts = _chart.timeScale();
+  ts.fitContent();
+  var range = ts.getVisibleLogicalRange();
+  if(range && range.from !== undefined && range.to !== undefined){
+    var span = range.to - range.from;
+    var gap = span * (35 / 65);
+    ts.setVisibleLogicalRange({from: range.from, to: range.to + gap});
+  }
+}
+
 function updateTickerOverlay(){
   var el = document.getElementById('tickerOverlay');
   if(!el) return;
@@ -1745,20 +1751,6 @@ function initChart(){
     timeScale: {borderColor:'#1e1e2e', timeVisible:true, secondsVisible:false, rightOffset: 5},
     rightPriceScale: {borderColor:'#1e1e2e', mode: _chartScale === 'log' ? 1 : 0, minimumWidth: 65},
   });
-
-// Fit content with 35% right margin (65% data, 35% empty space)
-function _fitWithMargin(){
-  if(!_chart) return;
-  var ts = _chart.timeScale();
-  ts.fitContent();
-  // After fitContent, read visible range and expand it by 35/65 on the right
-  var range = ts.getVisibleLogicalRange();
-  if(range && range.from !== undefined && range.to !== undefined){
-    var span = range.to - range.from;
-    var gap = span * (35 / 65);
-    ts.setVisibleLogicalRange({from: range.from, to: range.to + gap});
-  }
-}
 
   // Create price series based on saved style
   var _cs = _getColorScheme();
