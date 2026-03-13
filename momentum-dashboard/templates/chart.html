@@ -91,6 +91,12 @@ body{background:#0c0c14;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 #tickerOverlay .overlay-ticker{font-size:26px;font-weight:700;color:rgba(255,255,255,0.35);letter-spacing:1px;}
 #tickerOverlay .overlay-name{font-size:13px;font-weight:400;color:rgba(255,255,255,0.2);margin-top:1px;}
 #tooltipDiv{position:absolute;display:none;background:rgba(0,0,0,0.92);border:1px solid #334155;border-radius:4px;padding:5px 8px;font-size:11px;color:#c8c8d4;pointer-events:none;z-index:10;white-space:nowrap;line-height:1.5;}
+/* MTF Indicator Table overlay */
+#mtfOverlay{position:absolute;top:60px;left:12px;z-index:7;pointer-events:none;display:none;}
+#mtfOverlay table{border-collapse:collapse;background:rgba(10,10,18,0.88);border:1px solid #334155;border-radius:4px;font-family:'SF Mono','Consolas',monospace;font-size:11px;}
+#mtfOverlay th{color:#888;font-weight:400;padding:2px 7px;border:1px solid #1e1e2e;white-space:nowrap;}
+#mtfOverlay td{padding:2px 7px;border:1px solid #1e1e2e;text-align:center;color:#fff;white-space:nowrap;min-width:26px;}
+#mtfOverlay .mtf-hdr{color:#999;background:rgba(30,30,46,0.9);font-weight:600;text-align:left;}
 
 /* Left panel sections */
 .panel-section{margin-bottom:12px;}
@@ -248,6 +254,7 @@ body.ext-hours .tl-ext{display:inline;}
     <div id="chartContainer"></div>
     <canvas id="bubbleCanvas"></canvas>
     <div id="tickerOverlay"></div>
+    <div id="mtfOverlay"></div>
     <div id="tooltipDiv"></div>
     <div id="ttmContainer">
       <div class="ttm-header">
@@ -899,7 +906,7 @@ registerIndicator({
   id: 'ma',
   name: 'Moving Averages',
   color: '#FF9800',
-  hotkey: 'm',
+  hotkey: 'a',
   createSeries: function(chart){
     var ind = _indicators['ma'];
     var series = [];
@@ -946,6 +953,109 @@ registerIndicator({
     var ind = _indicators['ma'];
     ind.series.forEach(function(entry){ _chart.removeSeries(entry.s); });
     ind.series = [];
+  }
+});
+
+// ====================================================================
+// MTF INDICATOR TABLE — Multi-Timeframe MOM/SQZ/BAND/DEV overlay
+// ====================================================================
+var _MTF_TFS = ['1H','4H','8H','1D','2D','3D','5D','1W','3M'];
+var _MTF_TF_LABELS = {'1H':'1H','4H':'4H','8H':'8H','1D':'D','2D':'2D','3D':'3D','5D':'5D','1W':'W','3M':'3M'};
+var _mtfData = null;
+
+var _MOM_COLORS = {
+  'aqua':'#00BCD4','blue':'#2962FF','red':'#FF0000','yellow':'#FFEB3B'
+};
+var _SQZ_COLORS = {
+  'green':'#26a69a','black':'#000000','red':'#ef5350','orange':'#ff9800'
+};
+
+function _fetchMTFData(ticker){
+  if(!ticker) return;
+  fetch('/api/state?ticker=' + encodeURIComponent(ticker))
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      _mtfData = data[ticker] || data[Object.keys(data)[0]] || null;
+      _renderMTFTable();
+    })
+    .catch(function(){ _mtfData = null; });
+}
+
+function _renderMTFTable(){
+  var el = document.getElementById('mtfOverlay');
+  if(!el || el.style.display === 'none') return;
+  if(!_mtfData){ el.innerHTML = ''; return; }
+
+  var html = '<table><tr><th></th>';
+  _MTF_TFS.forEach(function(tf){ html += '<th>' + (_MTF_TF_LABELS[tf]||tf) + '</th>'; });
+  html += '</tr>';
+
+  // MOM row
+  html += '<tr><td class="mtf-hdr">MOM</td>';
+  _MTF_TFS.forEach(function(tf){
+    var d = _mtfData[tf];
+    if(!d || !d.mom_color){ html += '<td style="background:#111;">—</td>'; return; }
+    var bg = _MOM_COLORS[d.mom_color] || '#333';
+    var arrow = d.mom_rising ? '↗' : '↘';
+    html += '<td style="background:'+bg+';">'+arrow+'</td>';
+  });
+  html += '</tr>';
+
+  // SQZ row
+  html += '<tr><td class="mtf-hdr">SQZ</td>';
+  _MTF_TFS.forEach(function(tf){
+    var d = _mtfData[tf];
+    if(!d || !d.sqz_state){ html += '<td style="background:#111;">—</td>'; return; }
+    var bg = _SQZ_COLORS[d.sqz_state] || '#333';
+    html += '<td style="background:'+bg+';"> </td>';
+  });
+  html += '</tr>';
+
+  // BAND row
+  html += '<tr><td class="mtf-hdr">BAND</td>';
+  _MTF_TFS.forEach(function(tf){
+    var d = _mtfData[tf];
+    if(!d || !d.band_pos){ html += '<td style="background:#111;">—</td>'; return; }
+    var bg = d.band_flip ? '#2962FF' : '#000';
+    html += '<td style="background:'+bg+';">'+d.band_pos+'</td>';
+  });
+  html += '</tr>';
+
+  // DEV row
+  html += '<tr><td class="mtf-hdr">DEV</td>';
+  _MTF_TFS.forEach(function(tf){
+    var d = _mtfData[tf];
+    if(!d || !d.dev_signal){ html += '<td style="background:#111;"> </td>'; return; }
+    if(d.dev_signal === 'buy') html += '<td style="background:#26a69a;">B</td>';
+    else if(d.dev_signal === 'sell') html += '<td style="background:#ef5350;">S</td>';
+    else html += '<td style="background:#111;"> </td>';
+  });
+  html += '</tr>';
+
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+registerIndicator({
+  id: 'mtf',
+  name: 'MTF Table',
+  color: '#00BCD4',
+  hotkey: 'm',
+  createSeries: function(chart){
+    var ind = _indicators['mtf'];
+    ind.series = ['_mtf_placeholder'];
+    document.getElementById('mtfOverlay').style.display = '';
+    _fetchMTFData(_activeTicker);
+  },
+  compute: function(candles, ind){
+    // Re-fetch on ticker change / recompute
+    _fetchMTFData(_activeTicker);
+  },
+  remove: function(){
+    var ind = _indicators['mtf'];
+    ind.series = [];
+    var el = document.getElementById('mtfOverlay');
+    if(el){ el.style.display = 'none'; el.innerHTML = ''; }
   }
 });
 
