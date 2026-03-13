@@ -1385,19 +1385,19 @@ function _ttmPopulate(candles){
   var momData = [], accelData = [], zeroData = [];
   var sqzMarkers = [];  // squeeze dots as circle markers on the zero line
   var thrustMarkers = [];
+  var TRANSPARENT = 'rgba(0,0,0,0)';
 
   for(var i = 0; i < candles.length; i++){
     var t = candles[i].time;
-    if(ttm.momColor[i] !== null && !isNaN(ttm.mom[i])){
-      momData.push({time: t, value: ttm.mom[i], color: ttm.momColor[i]});
-      zeroData.push({time: t, value: 0});
-    }
+    // Always add every candle time so TTM chart has same bar count as main chart
+    var hasMom = ttm.momColor[i] !== null && !isNaN(ttm.mom[i]);
+    momData.push({time: t, value: hasMom ? ttm.mom[i] : 0, color: hasMom ? ttm.momColor[i] : TRANSPARENT});
+    zeroData.push({time: t, value: 0});
+    accelData.push({time: t, value: hasMom && ttm.accelColor[i] !== null ? ttm.mom[i] : 0,
+                    color: ttm.accelColor[i] !== null && hasMom ? ttm.accelColor[i] : TRANSPARENT});
     // Squeeze dots — circle markers at zero on the zero line
     if(ttm.sqzColor[i] !== null){
       sqzMarkers.push({time: t, position: 'inBar', color: ttm.sqzColor[i], shape: 'circle', size: 0.5});
-    }
-    if(ttm.accelColor[i] !== null && !isNaN(ttm.mom[i])){
-      accelData.push({time: t, value: ttm.mom[i], color: ttm.accelColor[i]});
     }
   }
 
