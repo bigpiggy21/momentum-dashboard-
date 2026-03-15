@@ -2498,7 +2498,7 @@ function buildOverlayForTicker(ticker){
   var firstCat = categories.length > 0 && categories[0].name === 'Underlying' ? categories[0] : null;
   var uGroup = {name: 'Underlying', on: true, tickers: []};
   // Active ticker is always first with amber color
-  uGroup.tickers.push({ticker: ticker, label: ticker, color: 'rgba(196,133,64,0.45)', stroke: '#c48540', on: true, group: 'Underlying'});
+  uGroup.tickers.push({ticker: ticker, label: ticker, color: 'rgba(224,112,80,0.45)', stroke: '#e07050', on: true, group: 'Underlying'});
   // Add parent ticker if different from active
   if(parentTicker !== ticker){
     uGroup.tickers.push({ticker: parentTicker, label: parentTicker, color: _COLORS[0].c, stroke: _COLORS[0].s, on: true, group: 'Underlying'});
