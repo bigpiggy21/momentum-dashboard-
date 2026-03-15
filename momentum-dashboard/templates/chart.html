@@ -71,6 +71,8 @@ body{background:#08080e;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .ind-item.active .ind-check{border-color:#60a5fa;background:#60a5fa22;color:#60a5fa;}
 .ind-item .ind-swatch{width:12px;height:3px;border-radius:1px;flex-shrink:0;}
 .ind-item .ind-label{flex:1;}
+.ind-gear{font-size:11px;color:#444;cursor:pointer;margin-left:2px;padding:2px;}
+.ind-gear:hover{color:#f59e0b;}
 /* Chart settings dropdown (same pattern as indicators) */
 /* Settings gear button */
 .settings-gear-btn{background:#1e293b;color:#888;border:1px solid #334155;padding:5px 10px;cursor:pointer;font-size:16px;height:32px;border-radius:4px;line-height:1;}
@@ -569,6 +571,7 @@ function registerIndicator(cfg){
     id: cfg.id, name: cfg.name, enabled: false,
     color: cfg.color || '#888',        // swatch color for menu
     hotkey: cfg.hotkey || null,        // keyboard shortcut (e.g. 'b', 'd')
+    settings: cfg.settings || null,    // optional settings config {key, defaults, build}
     series: [],                        // LightweightCharts series (created on enable)
     createSeries: cfg.createSeries,    // fn(chart) → creates series objects, stores in .series
     compute: cfg.compute,              // fn(candles, ind) → sets data on series
@@ -676,10 +679,11 @@ function buildIndMenu(){
     else if(id === 'volume' && _volumeMode === 4) label = 'Vol + MA';
     if(id === 'ma') label = 'MA: ' + _MA_LABELS[_maMode];
     var isActive = ind.enabled || (id === 'volume' && _volumeMode > 0);
+    var gearHtml = ind.settings ? '<span class="ind-gear" onclick="event.stopPropagation();openIndSettings(\''+id+'\')">&#x2699;</span>' : '';
     html += '<div class="ind-item' + (isActive ? ' active' : '') + '" onclick="event.stopPropagation();toggleIndicator(\'' + id + '\')">'
       + '<span class="ind-check">' + (isActive ? '&#x2713;' : '') + '</span>'
       + '<span class="ind-swatch" style="background:' + ind.color + ';"></span>'
-      + '<span class="ind-label">' + label + '</span>' + hkHint + '</div>';
+      + '<span class="ind-label">' + label + '</span>' + gearHtml + hkHint + '</div>';
   });
   menu.innerHTML = html;
 }
@@ -712,7 +716,11 @@ document.addEventListener('keyup', function(e){
 document.addEventListener('keydown', function(e){
   // Skip if typing in an input
   if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
-  // Escape closes settings modal
+  // Escape closes settings modals
+  if(e.key === 'Escape'){
+    var indStgOv = document.getElementById('indStgOverlay');
+    if(indStgOv && indStgOv.classList.contains('open')){ closeIndSettings(); return; }
+  }
   var stgOv = document.getElementById('stgOverlay');
   if(stgOv && stgOv.classList.contains('open')){ if(e.key === 'Escape') closeSettingsModal(); return; }
   var key = e.key.toLowerCase();
@@ -2014,22 +2022,111 @@ registerIndicator({
 // TTM PIVOTS — Multi-timeframe momentum zero-cross pivot lines
 // ====================================================================
 var _PIVOT_TFS = [
-  {id:'1H', label:'1H', color:'#00bcd4', on:true,  base:'hour', mult:1  },
-  {id:'4H', label:'4H', color:'#2962ff', on:true,  base:'hour', mult:4  },
-  {id:'8H', label:'8H', color:'#9c27b0', on:false, base:'hour', mult:8  },
-  {id:'D',  label:'D',  color:'#e6c619', on:true,  base:'day',  mult:1  },
-  {id:'2D', label:'2D', color:'#ff9800', on:false, base:'day',  mult:2  },
-  {id:'3D', label:'3D', color:'#8bc34a', on:false, base:'day',  mult:3  },
-  {id:'5D', label:'5D', color:'#800000', on:false, base:'day',  mult:5  },
-  {id:'W',  label:'W',  color:'#e040fb', on:true,  base:'day',  mult:'W' },
-  {id:'M',  label:'M',  color:'#ef5350', on:true,  base:'day',  mult:'M' },
-  {id:'6W', label:'6W', color:'#009688', on:false, base:'day',  mult:'6W'},
-  {id:'3M', label:'3M', color:'#ffffff', on:false, base:'day',  mult:'3M'},
+  {id:'1H', label:'1H', color:'#00bcd4', base:'hour', mult:1  },
+  {id:'4H', label:'4H', color:'#2962ff', base:'hour', mult:4  },
+  {id:'8H', label:'8H', color:'#9c27b0', base:'hour', mult:8  },
+  {id:'D',  label:'D',  color:'#e6c619', base:'day',  mult:1  },
+  {id:'2D', label:'2D', color:'#ff9800', base:'day',  mult:2  },
+  {id:'3D', label:'3D', color:'#8bc34a', base:'day',  mult:3  },
+  {id:'5D', label:'5D', color:'#800000', base:'day',  mult:5  },
+  {id:'W',  label:'W',  color:'#e040fb', base:'day',  mult:'W' },
+  {id:'M',  label:'M',  color:'#ef5350', base:'day',  mult:'M' },
+  {id:'6W', label:'6W', color:'#009688', base:'day',  mult:'6W'},
+  {id:'3M', label:'3M', color:'#ffffff', base:'day',  mult:'3M'},
 ];
 var _pivotHourlyCache = null;
 var _pivotHourlyTicker = null;
 var _pivotDailyCache = null;
 var _pivotDailyTicker = null;
+var _pivotDisplayMode = 'lines'; // 'lines' or 'dashes'
+
+var _PIVOT_DEFAULTS = {
+  mode: 'lines',
+  tf_1H: true, tf_4H: false, tf_8H: false,
+  tf_D: true, tf_2D: false, tf_3D: false, tf_5D: false,
+  tf_W: true, tf_M: true, tf_6W: false, tf_3M: false,
+};
+
+function _applyPivotConfig(){
+  var ind = _indicators['ttmpivot'];
+  var cfg;
+  if(ind && ind.settings){
+    cfg = _loadIndConfig('ttmpivot');
+  } else {
+    cfg = JSON.parse(JSON.stringify(_PIVOT_DEFAULTS));
+    try {
+      var raw = localStorage.getItem('ind_ttmpivot_config');
+      if(raw){ var saved = JSON.parse(raw); Object.keys(cfg).forEach(function(k){ if(saved[k] !== undefined) cfg[k] = saved[k]; }); }
+    } catch(e){}
+  }
+  _PIVOT_TFS.forEach(function(tf){
+    tf.on = !!cfg['tf_' + tf.id];
+  });
+  _pivotDisplayMode = cfg.mode || 'lines';
+}
+
+function _buildPivotSettings(container, cfg, onChange){
+  // Display mode row
+  var modeHtml = '<div style="margin-bottom:10px;">'
+    + '<div class="stg-label" style="margin-bottom:6px;">Display Mode</div>'
+    + '<div style="display:flex;gap:4px;">'
+    + '<button class="stg-cycle" id="pivotModeLines" style="flex:1;" onclick="_pivotSetMode(\'lines\')">Lines</button>'
+    + '<button class="stg-cycle" id="pivotModeDashes" style="flex:1;" onclick="_pivotSetMode(\'dashes\')">Dashes</button>'
+    + '</div></div>';
+
+  // Timeframes section
+  var tfHtml = '<div class="stg-divider"></div>'
+    + '<div class="stg-label" style="margin-bottom:6px;">Timeframes</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:6px 12px;">';
+
+  _PIVOT_TFS.forEach(function(tf){
+    var isOn = cfg['tf_' + tf.id];
+    tfHtml += '<div style="display:flex;align-items:center;gap:5px;width:70px;">'
+      + '<div class="stg-toggle' + (isOn ? ' on' : '') + '" id="pivotTf_'+tf.id+'" '
+      + 'onclick="_pivotToggleTf(\''+tf.id+'\')"></div>'
+      + '<span style="width:8px;height:8px;border-radius:50%;background:'+tf.color+';flex-shrink:0;"></span>'
+      + '<span style="color:#e0e0e8;font-size:10px;">'+tf.label+'</span>'
+      + '</div>';
+  });
+  tfHtml += '</div>';
+
+  container.innerHTML = modeHtml + tfHtml;
+  _pivotSyncModeButtons(cfg.mode);
+}
+
+function _pivotSyncModeButtons(mode){
+  var linesBtn = document.getElementById('pivotModeLines');
+  var dashesBtn = document.getElementById('pivotModeDashes');
+  if(linesBtn) linesBtn.style.cssText += (mode === 'lines' ? 'color:#60a5fa;border-color:#60a5fa44;background:#1e3a5f;' : 'color:#888;border-color:#334155;background:#1e293b;');
+  if(dashesBtn) dashesBtn.style.cssText += (mode === 'dashes' ? 'color:#60a5fa;border-color:#60a5fa44;background:#1e3a5f;' : 'color:#888;border-color:#334155;background:#1e293b;');
+}
+
+function _pivotSetMode(mode){
+  var cfg = _loadIndConfig('ttmpivot');
+  cfg.mode = mode;
+  _saveIndConfig('ttmpivot', cfg);
+  _pivotSyncModeButtons(mode);
+  var ind = _indicators['ttmpivot'];
+  if(ind && ind.enabled){
+    ind.remove();
+    ind.createSeries(_chart);
+    ind.compute(_candles, ind);
+  }
+}
+
+function _pivotToggleTf(tfId){
+  var cfg = _loadIndConfig('ttmpivot');
+  cfg['tf_' + tfId] = !cfg['tf_' + tfId];
+  _saveIndConfig('ttmpivot', cfg);
+  var el = document.getElementById('pivotTf_' + tfId);
+  if(el) el.classList.toggle('on');
+  var ind = _indicators['ttmpivot'];
+  if(ind && ind.enabled){
+    ind.remove();
+    ind.createSeries(_chart);
+    ind.compute(_candles, ind);
+  }
+}
 
 function _fetchPivotBars(callback){
   var ticker = _activeTicker;
@@ -2270,19 +2367,33 @@ registerIndicator({
   name: 'TTM Pivots',
   color: '#e040fb',
   hotkey: 'p',
+  settings: {
+    key: 'ind_ttmpivot_config',
+    defaults: _PIVOT_DEFAULTS,
+    build: _buildPivotSettings,
+  },
   createSeries: function(chart){
+    _applyPivotConfig();
     var ind = _indicators['ttmpivot'];
     var series = [];
-    _PIVOT_TFS.forEach(function(tf){
-      if(!tf.on) return;
-      var s = chart.addLineSeries({
-        color: tf.color, lineWidth: 2, lineStyle: 0,
-        priceLineVisible: false, lastValueVisible: false,
-        crosshairMarkerVisible: false,
-        autoscaleInfoProvider: function(){ return null; },
+    if(_pivotDisplayMode === 'lines'){
+      _PIVOT_TFS.forEach(function(tf){
+        if(!tf.on) return;
+        var s = chart.addLineSeries({
+          color: tf.color, lineWidth: 2, lineStyle: 0,
+          priceLineVisible: false, lastValueVisible: false,
+          crosshairMarkerVisible: false,
+          autoscaleInfoProvider: function(){ return null; },
+        });
+        series.push({tf: tf.id, type: 'line', s: s});
       });
-      series.push({tf: tf.id, s: s});
-    });
+    } else {
+      // Dashes mode — create placeholder entries, price lines added in compute()
+      _PIVOT_TFS.forEach(function(tf){
+        if(!tf.on) return;
+        series.push({tf: tf.id, type: 'dash', priceLine: null});
+      });
+    }
     ind.series = series;
   },
   compute: function(candles, ind){
@@ -2297,20 +2408,46 @@ registerIndicator({
         if(!baseBars || baseBars.length === 0) return;
         var agg = (typeof tfCfg.mult === 'number' && tfCfg.mult === 1) ? baseBars : _aggregateToTF(baseBars, tfCfg.mult);
         var pivots = _computeTTMPivots(agg, 20, 1.0, 60);
-        var data = _mapPivotsToChart(agg, pivots, candles);
-        entry.s.setData(data);
+
+        if(entry.type === 'line'){
+          var data = _mapPivotsToChart(agg, pivots, candles);
+          entry.s.setData(data);
+        } else if(entry.type === 'dash'){
+          // Find latest valid pivot value
+          var lastPivot = NaN;
+          for(var k = pivots.length - 1; k >= 0; k--){
+            if(!isNaN(pivots[k])){ lastPivot = pivots[k]; break; }
+          }
+          if(!isNaN(lastPivot) && _candleSeries){
+            if(entry.priceLine){
+              try{ _candleSeries.removePriceLine(entry.priceLine); }catch(e){}
+            }
+            entry.priceLine = _candleSeries.createPriceLine({
+              price: lastPivot,
+              color: tfCfg.color,
+              lineWidth: 1,
+              lineStyle: 2,
+              axisLabelVisible: true,
+              title: tfCfg.label,
+              axisLabelColor: tfCfg.color,
+              axisLabelTextColor: '#fff',
+            });
+          }
+        }
       });
       console.log('TTM Pivots computed in ' + Math.round(performance.now() - t0) + 'ms');
     });
   },
   remove: function(){
     var ind = _indicators['ttmpivot'];
-    ind.series.forEach(function(entry){ _chart.removeSeries(entry.s); });
+    ind.series.forEach(function(entry){
+      if(entry.type === 'line' && entry.s){
+        try{ _chart.removeSeries(entry.s); }catch(e){}
+      } else if(entry.type === 'dash' && entry.priceLine && _candleSeries){
+        try{ _candleSeries.removePriceLine(entry.priceLine); }catch(e){}
+      }
+    });
     ind.series = [];
-    _pivotHourlyCache = null;
-    _pivotHourlyTicker = null;
-    _pivotDailyCache = null;
-    _pivotDailyTicker = null;
   }
 });
 
@@ -5456,6 +5593,62 @@ function closeSettingsModal(){
   _saveChartConfig();
 }
 
+// ====================================================================
+// UNIVERSAL INDICATOR SETTINGS — shared modal, per-indicator config
+// ====================================================================
+var _indStgActiveId = null;
+
+function openIndSettings(id){
+  _indStgActiveId = id;
+  var ind = _indicators[id];
+  if(!ind || !ind.settings) return;
+  document.getElementById('indStgTitle').textContent = ind.name + ' Settings';
+  var body = document.getElementById('indStgBody');
+  body.innerHTML = '';
+  var cfg = _loadIndConfig(id);
+  ind.settings.build(body, cfg, function(){
+    _saveIndConfig(id, cfg);
+    if(ind.enabled){
+      ind.remove();
+      ind.createSeries(_chart);
+      ind.compute(_candles, ind);
+    }
+  });
+  document.getElementById('indStgOverlay').classList.add('open');
+}
+
+function closeIndSettings(){
+  document.getElementById('indStgOverlay').classList.remove('open');
+  _indStgActiveId = null;
+}
+
+function _loadIndConfig(id){
+  var ind = _indicators[id];
+  if(!ind || !ind.settings) return {};
+  var defaults = JSON.parse(JSON.stringify(ind.settings.defaults));
+  try {
+    var raw = localStorage.getItem(ind.settings.key);
+    if(!raw) return defaults;
+    var cfg = JSON.parse(raw);
+    Object.keys(defaults).forEach(function(k){ if(cfg[k] === undefined) cfg[k] = defaults[k]; });
+    return cfg;
+  } catch(e){ return defaults; }
+}
+
+function _saveIndConfig(id, cfg){
+  var ind = _indicators[id];
+  if(!ind || !ind.settings) return;
+  localStorage.setItem(ind.settings.key, JSON.stringify(cfg));
+}
+
+function _indStgReset(){
+  if(!_indStgActiveId) return;
+  var ind = _indicators[_indStgActiveId];
+  if(!ind || !ind.settings) return;
+  localStorage.removeItem(ind.settings.key);
+  openIndSettings(_indStgActiveId);
+}
+
 function _switchSettingsTab(tab){
   document.querySelectorAll('.stg-tab').forEach(function(el){ el.classList.toggle('active', el.getAttribute('data-tab') === tab); });
   document.querySelectorAll('.stg-section').forEach(function(el){ el.classList.toggle('active', el.id === 'stgTab_' + tab); });
@@ -5743,6 +5936,21 @@ function _stgLoadProfile(){
       <button class="stg-footer-btn" onclick="_stgDeleteProfile()">Delete</button>
       <div class="stg-footer-spacer"></div>
       <button class="stg-footer-btn primary" onclick="closeSettingsModal()">Done</button>
+    </div>
+  </div>
+</div>
+<!-- Indicator Settings Modal (universal, dynamically populated) -->
+<div class="stg-overlay" id="indStgOverlay" onclick="if(event.target===this)closeIndSettings()">
+  <div class="stg-modal" style="width:360px;">
+    <div class="stg-header">
+      <h3 id="indStgTitle">Indicator Settings</h3>
+      <button class="stg-close" onclick="closeIndSettings()">&times;</button>
+    </div>
+    <div class="stg-body" id="indStgBody"></div>
+    <div class="stg-footer">
+      <button class="stg-footer-btn" onclick="_indStgReset()">Reset</button>
+      <div class="stg-footer-spacer"></div>
+      <button class="stg-footer-btn primary" onclick="closeIndSettings()">Done</button>
     </div>
   </div>
 </div>
