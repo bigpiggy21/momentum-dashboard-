@@ -369,7 +369,7 @@ body.ext-hours .tl-ext{display:inline;}
       <div class="overlay-section" id="overlaySection" style="display:flex;flex-direction:column;flex:1;min-height:0;">
         <div class="panel-label" style="display:flex;align-items:center;justify-content:space-between;">
           <span>Overlay Tickers</span>
-          <span id="overlayFilterLabel" style="font-size:10px;font-weight:bold;color:#555;cursor:pointer;letter-spacing:0.3px;" onclick="cycleOverlayFilter()" title="Cycle filter (O)">All</span>
+          <span id="overlayFilterLabel" style="font-size:10px;font-weight:bold;color:#555;cursor:pointer;letter-spacing:0.3px;" onclick="cycleOverlayFilter()" title="Cycle filter (O)">Off</span>
         </div>
         <div class="overlay-grid" id="overlayList">
           <!-- Group checkboxes populated by JS -->
@@ -4646,13 +4646,14 @@ function _syncRareHud(){
 }
 
 // Overlay filter: cycle All → Current → Underlying → Leveraged
-var _overlayFilter = 'all'; // 'all' | 'current' | 'underlying' | 'leveraged'
+var _overlayFilter = 'off'; // 'off' | 'all' | 'current' | 'underlying' | 'leveraged'
 var _overlayFetchTimer = null;
 function cycleOverlayFilter(){
-  if(_overlayFilter === 'all') _overlayFilter = 'current';
+  if(_overlayFilter === 'off') _overlayFilter = 'all';
+  else if(_overlayFilter === 'all') _overlayFilter = 'current';
   else if(_overlayFilter === 'current') _overlayFilter = 'underlying';
   else if(_overlayFilter === 'underlying') _overlayFilter = 'leveraged';
-  else _overlayFilter = 'all';
+  else _overlayFilter = 'off';
   applyOverlayFilter();
 }
 function applyOverlayFilter(){
@@ -4665,7 +4666,8 @@ function applyOverlayFilter(){
       g.on = g.tickers.some(function(t){ return t.on; });
     } else {
       var show;
-      if(_overlayFilter === 'all') show = true;
+      if(_overlayFilter === 'off') show = false;
+      else if(_overlayFilter === 'all') show = true;
       else if(_overlayFilter === 'underlying') show = (g.name === 'Underlying');
       else show = (g.name !== 'Underlying');
       g.on = show;
@@ -4695,9 +4697,9 @@ function applyOverlayFilter(){
   // Update filter label
   var lbl = document.getElementById('overlayFilterLabel');
   if(lbl){
-    var txt = {all:'All', current:'Current', underlying:'Underlying', leveraged:'Leveraged'}[_overlayFilter];
+    var txt = {off:'Off', all:'All', current:'Current', underlying:'Underlying', leveraged:'Leveraged'}[_overlayFilter];
     lbl.textContent = txt;
-    lbl.style.color = _overlayFilter === 'all' ? '#555' : '#60a5fa';
+    lbl.style.color = (_overlayFilter === 'off' || _overlayFilter === 'all') ? '#555' : '#60a5fa';
   }
   // Update HUD
   _syncOverlayHud();
