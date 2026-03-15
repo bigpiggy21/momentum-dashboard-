@@ -384,7 +384,8 @@ body.ext-hours .tl-ext{display:inline;}
     <div id="hudStack">
       <div id="overlayHud" class="hud-row" style="display:none;">
         <span class="hud-label">1 Overlay</span>
-        <span class="ohud-item active" data-filter="all" onclick="setOverlayFilter('all')">All</span>
+        <span class="ohud-item active" data-filter="off" onclick="setOverlayFilter('off')">Off</span>
+        <span class="ohud-item" data-filter="all" onclick="setOverlayFilter('all')">All</span>
         <span class="ohud-item" data-filter="current" onclick="setOverlayFilter('current')">Current</span>
         <span class="ohud-item" data-filter="underlying" onclick="setOverlayFilter('underlying')">Underlying</span>
         <span class="ohud-item" data-filter="leveraged" onclick="setOverlayFilter('leveraged')">Leveraged</span>
@@ -500,6 +501,8 @@ var _activeLayers = {sweeps:true, daily:false, single:false, rare:false, cb:fals
 var _rankMode = 'off'; // 'off' | 'topx' | 'single'
 var _topxScope = localStorage.getItem('chart_topxScope') || 'active'; // 'active' | 'each' | 'pool'
 var _eventMode = 'off'; // 'off' | 'both' | 'both_only' | 'monster' | 'cb'
+var _savedEventMode = null; // saved event mode when ETF disables events
+var _isEtf = false; // true when active ticker is an ETF (no events available)
 var _rareMode = 'off'; // 'off' | 'only' | 'on'
 var _layerCfg = {minNotional:500000, percentile:85, dailyFrom:1, dailyTo:20, singleFrom:1, singleTo:10};
 // Raw data from /api/sweeps/chart
@@ -967,6 +970,7 @@ function buildEventsMenu(){
 }
 
 function toggleLayerFromMenu(layer){
+  if(layer === 'events' && _isEtf) return; // no events for ETFs
   if(layer === 'events'){
     // 3-state hotkey cycle: off → both → both_only (monster/cb are mouse-only via HUD)
     if(_eventMode === 'off'){ _eventMode = 'both'; _activeLayers.cb = true; _activeLayers.monster = true; }
@@ -2551,7 +2555,7 @@ function buildOverlayForTicker(ticker){
 
   _syncOverlayHud();
   // Re-apply current overlay filter to new groups
-  if(_overlayFilter !== 'all') applyOverlayFilter();
+  applyOverlayFilter();
 }
 
 function buildWatchlistView(){
@@ -3316,6 +3320,20 @@ function fetchCandles(){
           _setSeriesData(_candles);
           _fitWithMargin();
         }
+      }
+      // ETF detection — disable events for ETFs, restore for stocks
+      var wasEtf = _isEtf;
+      _isEtf = !!d.is_etf;
+      if(_isEtf && !wasEtf){
+        // Switching to ETF: save current event mode and force off
+        _savedEventMode = _eventMode;
+        if(_eventMode !== 'off') setEventMode('off');
+        _disableEventsHud(true);
+      } else if(!_isEtf && wasEtf){
+        // Switching back to stock: restore saved event mode
+        _disableEventsHud(false);
+        if(_savedEventMode && _savedEventMode !== 'off') setEventMode(_savedEventMode);
+        _savedEventMode = null;
       }
       drawBubbles();
       recreateEnabledIndicators();
@@ -4621,6 +4639,16 @@ function _syncEventsHud(){
   hud.querySelectorAll('.ehud-item').forEach(function(el){
     el.classList.toggle('active', el.getAttribute('data-mode') === _eventMode);
   });
+  // Keep disabled state if ETF
+  if(_isEtf) _disableEventsHud(true);
+}
+function _disableEventsHud(disabled){
+  var hud = document.getElementById('eventsHud');
+  if(!hud) return;
+  hud.style.opacity = disabled ? '0.35' : '1';
+  hud.style.pointerEvents = disabled ? 'none' : '';
+  var lbl = hud.querySelector('.hud-label');
+  if(lbl) lbl.title = disabled ? 'Events not available for ETFs' : '';
 }
 
 function setRareMode(mode){

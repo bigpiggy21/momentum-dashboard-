@@ -5953,6 +5953,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             from datetime import date as dt_date
             date_str = dt_date.today().isoformat()
 
+        # Check if ticker is an ETF (cheap in-memory lookup)
+        self._req_is_etf = False
+        try:
+            from sweep_engine import load_etf_set
+            self._req_is_etf = ticker.upper() in load_etf_set()
+        except Exception:
+            pass
+
         # Allow ?source=api to force API path (used by fetchTickerPrices fallback)
         force_api = query.get("source", [None])[0] == "api"
 
@@ -5963,7 +5971,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 candles = self._serve_candles_from_cache(ticker, date_str, days, interval, cache_tf)
                 if candles is not None:
                     self.send_json({"candles": candles, "ticker": ticker,
-                                    "source": "cache", "live_bars": 0})
+                                    "source": "cache", "live_bars": 0,
+                                    "is_etf": self._req_is_etf})
                     return
 
         # --- Tier 2.5: SQLite minute_cache for 1m/5m ---
@@ -6244,7 +6253,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         self.send_json({"candles": compact, "ticker": ticker,
                         "source": "minute_cache", "format": "compact",
-                        "live_bars": live_appended})
+                        "live_bars": live_appended,
+                        "is_etf": getattr(self, '_req_is_etf', False)})
         return True
 
     def _store_minute_cache(self, ticker, bars):
@@ -6346,7 +6356,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     last["volume"] = max(last["volume"], lb.get("v", 0))
 
         self.send_json({"candles": all_bars, "ticker": ticker,
-                        "source": "api", "live_bars": live_appended})
+                        "source": "api", "live_bars": live_appended,
+                        "is_etf": getattr(self, '_req_is_etf', False)})
 
     def serve_chart_live_bar(self, query=None):
         """GET /api/chart/live-bar?ticker=SPY&interval=1 — lightweight live bar from daemon.
