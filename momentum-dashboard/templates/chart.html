@@ -1750,33 +1750,32 @@ function _computeTTM(candles){
 }
 
 // --- TTM pane layout management ---
-function _ttmShowPane(){
+function _ttmResizeSync(){
+  // Resize chart + canvas + redraw bubbles, with follow-up redraws
+  // to catch LightweightCharts' async coordinate update
   var container = document.getElementById('chartContainer');
+  _chart.resize(container.clientWidth, container.clientHeight);
+  resizeCanvas();
+  drawBubbles();
+  if(_ttmChart){
+    var ttmArea = document.getElementById('ttmChartArea');
+    _ttmChart.resize(ttmArea.clientWidth, ttmArea.clientHeight);
+  }
+  // Chart processes resize async — redraw bubbles again after it settles
+  setTimeout(function(){ resizeCanvas(); drawBubbles(); }, 50);
+  setTimeout(function(){ resizeCanvas(); drawBubbles(); }, 150);
+}
+function _ttmShowPane(){
   var ttmContainer = document.getElementById('ttmContainer');
   ttmContainer.style.display = 'block';
   ttmContainer.style.height = '25%';
-  // Double rAF: first frame triggers layout recalc, second frame reads final sizes
-  requestAnimationFrame(function(){ requestAnimationFrame(function(){
-    _chart.resize(container.clientWidth, container.clientHeight);
-    resizeCanvas();
-    drawBubbles();
-    if(_ttmChart){
-      var ttmArea = document.getElementById('ttmChartArea');
-      _ttmChart.resize(ttmArea.clientWidth, ttmArea.clientHeight);
-    }
-  }); });
+  requestAnimationFrame(_ttmResizeSync);
 }
 
 function _ttmHidePane(){
-  var container = document.getElementById('chartContainer');
   var ttmContainer = document.getElementById('ttmContainer');
   ttmContainer.style.display = 'none';
-  // Double rAF: first frame triggers layout recalc, second frame reads final sizes
-  requestAnimationFrame(function(){ requestAnimationFrame(function(){
-    _chart.resize(container.clientWidth, container.clientHeight);
-    resizeCanvas();
-    drawBubbles();
-  }); });
+  requestAnimationFrame(_ttmResizeSync);
 }
 
 function _ttmCreateChart(){
