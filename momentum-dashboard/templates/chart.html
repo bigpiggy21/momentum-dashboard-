@@ -1751,19 +1751,27 @@ function _computeTTM(candles){
 
 // --- TTM pane layout management ---
 function _ttmResizeSync(){
-  // Resize chart + canvas + redraw bubbles, with follow-up redraws
-  // to catch LightweightCharts' async coordinate update
   var container = document.getElementById('chartContainer');
+  // Save visible range before resize so the view doesn't jump
+  var savedRange = null;
+  try { savedRange = _chart.timeScale().getVisibleLogicalRange(); } catch(e){}
+  // Resize chart + canvas
   _chart.resize(container.clientWidth, container.clientHeight);
+  // Restore the exact same view — prevents price from shifting
+  if(savedRange) try { _chart.timeScale().setVisibleLogicalRange(savedRange); } catch(e){}
   resizeCanvas();
   drawBubbles();
   if(_ttmChart){
     var ttmArea = document.getElementById('ttmChartArea');
     _ttmChart.resize(ttmArea.clientWidth, ttmArea.clientHeight);
   }
-  // Chart processes resize async — redraw bubbles again after it settles
-  setTimeout(function(){ resizeCanvas(); drawBubbles(); }, 50);
-  setTimeout(function(){ resizeCanvas(); drawBubbles(); }, 150);
+  // Follow-up redraws to catch async coordinate updates
+  var restoreAndDraw = function(){
+    if(savedRange) try { _chart.timeScale().setVisibleLogicalRange(savedRange); } catch(e){}
+    resizeCanvas(); drawBubbles();
+  };
+  setTimeout(restoreAndDraw, 50);
+  setTimeout(restoreAndDraw, 150);
 }
 function _ttmShowPane(){
   var ttmContainer = document.getElementById('ttmContainer');
