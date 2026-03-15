@@ -78,9 +78,9 @@ body{background:#08080e;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .settings-gear-btn{background:#1e293b;color:#888;border:1px solid #334155;padding:5px 10px;cursor:pointer;font-size:16px;height:32px;border-radius:4px;line-height:1;}
 .settings-gear-btn:hover{color:#f59e0b;border-color:#f59e0b44;}
 /* Settings modal */
-.stg-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:transparent;z-index:200;align-items:flex-start;justify-content:center;padding-top:60px;}
+.stg-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:transparent;z-index:200;align-items:center;justify-content:center;}
 .stg-overlay.open{display:flex;}
-.stg-modal{background:#14141e;border:1px solid #334155;border-radius:8px;width:340px;max-height:75vh;display:flex;flex-direction:column;box-shadow:0 12px 48px rgba(0,0,0,0.8);font-family:'Inter',sans-serif;}
+.stg-modal{background:#14141e;border:1px solid #334155;border-radius:8px;width:300px;max-height:75vh;display:flex;flex-direction:column;box-shadow:0 12px 48px rgba(0,0,0,0.8);font-family:'Inter',sans-serif;}
 .stg-header{display:flex;align-items:center;padding:8px 12px 0;gap:6px;}
 .stg-header h3{color:#e0e0e8;font-size:12px;font-weight:700;letter-spacing:0.3px;flex:1;}
 .stg-close{background:none;border:none;color:#555;font-size:16px;cursor:pointer;padding:0 2px;}
@@ -601,6 +601,32 @@ function toggleIndicator(id){
     updateIndBtnState();
     return;
   }
+  // TTM Pivots: 3-state cycle (off → dashes → lines → off)
+  if(id === 'ttmpivot'){
+    var cfg = _loadIndConfig('ttmpivot');
+    if(!ind.enabled){
+      // off → dashes
+      cfg.mode = 'dashes';
+      _saveIndConfig('ttmpivot', cfg);
+      ind.enabled = true;
+      ind.createSeries(_chart);
+      ind.compute(_candles, ind);
+    } else if(_pivotDisplayMode === 'dashes'){
+      // dashes → lines
+      ind.remove();
+      cfg.mode = 'lines';
+      _saveIndConfig('ttmpivot', cfg);
+      ind.createSeries(_chart);
+      ind.compute(_candles, ind);
+    } else {
+      // lines → off
+      ind.remove();
+      ind.enabled = false;
+    }
+    buildIndMenu();
+    updateIndBtnState();
+    return;
+  }
   // Volume: 5-state cycle (off → DP → DP+Vol → DP+Vol+MA → Vol+MA → off)
   if(id === 'volume'){
     _volumeMode = (_volumeMode + 1) % 5;
@@ -678,6 +704,7 @@ function buildIndMenu(){
     else if(id === 'volume' && _volumeMode === 3) label = 'DP + Vol + MA';
     else if(id === 'volume' && _volumeMode === 4) label = 'Vol + MA';
     if(id === 'ma') label = 'MA: ' + _MA_LABELS[_maMode];
+    if(id === 'ttmpivot' && ind.enabled) label = 'Pivots: ' + (_pivotDisplayMode === 'dashes' ? 'Dashes' : 'Lines');
     var isActive = ind.enabled || (id === 'volume' && _volumeMode > 0);
     var gearHtml = ind.settings ? '<span class="ind-gear" onclick="event.stopPropagation();openIndSettings(\''+id+'\')">&#x2699;</span>' : '';
     html += '<div class="ind-item' + (isActive ? ' active' : '') + '" onclick="event.stopPropagation();toggleIndicator(\'' + id + '\')">'
@@ -2067,24 +2094,24 @@ function _applyPivotConfig(){
 
 function _buildPivotSettings(container, cfg, onChange){
   // Display mode row
-  var modeHtml = '<div style="margin-bottom:10px;">'
-    + '<div class="stg-label" style="margin-bottom:6px;">Display Mode</div>'
+  var modeHtml = '<div style="margin-bottom:8px;">'
+    + '<div class="stg-label" style="margin-bottom:4px;">Mode</div>'
     + '<div style="display:flex;gap:4px;">'
-    + '<button class="stg-cycle" id="pivotModeLines" style="flex:1;" onclick="_pivotSetMode(\'lines\')">Lines</button>'
-    + '<button class="stg-cycle" id="pivotModeDashes" style="flex:1;" onclick="_pivotSetMode(\'dashes\')">Dashes</button>'
+    + '<button class="stg-cycle" id="pivotModeLines" style="flex:1;padding:3px 6px;" onclick="_pivotSetMode(\'lines\')">Lines</button>'
+    + '<button class="stg-cycle" id="pivotModeDashes" style="flex:1;padding:3px 6px;" onclick="_pivotSetMode(\'dashes\')">Dashes</button>'
     + '</div></div>';
 
-  // Timeframes section
+  // Timeframes section — compact grid
   var tfHtml = '<div class="stg-divider"></div>'
-    + '<div class="stg-label" style="margin-bottom:6px;">Timeframes</div>'
-    + '<div style="display:flex;flex-wrap:wrap;gap:6px 12px;">';
+    + '<div class="stg-label" style="margin-bottom:4px;">Timeframes</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 2px;">';
 
   _PIVOT_TFS.forEach(function(tf){
     var isOn = cfg['tf_' + tf.id];
-    tfHtml += '<div style="display:flex;align-items:center;gap:5px;width:70px;">'
+    tfHtml += '<div style="display:flex;align-items:center;gap:4px;">'
       + '<div class="stg-toggle' + (isOn ? ' on' : '') + '" id="pivotTf_'+tf.id+'" '
       + 'onclick="_pivotToggleTf(\''+tf.id+'\')"></div>'
-      + '<span style="width:8px;height:8px;border-radius:50%;background:'+tf.color+';flex-shrink:0;"></span>'
+      + '<span style="width:6px;height:6px;border-radius:50%;background:'+tf.color+';flex-shrink:0;"></span>'
       + '<span style="color:#e0e0e8;font-size:10px;">'+tf.label+'</span>'
       + '</div>';
   });
@@ -2388,10 +2415,21 @@ registerIndicator({
         series.push({tf: tf.id, type: 'line', s: s});
       });
     } else {
-      // Dashes mode — create placeholder entries, price lines added in compute()
+      // Dashes mode — use LineSeries with single data point + visible price line
       _PIVOT_TFS.forEach(function(tf){
         if(!tf.on) return;
-        series.push({tf: tf.id, type: 'dash', priceLine: null});
+        var s = chart.addLineSeries({
+          color: tf.color, lineWidth: 0, lineStyle: 2,
+          priceLineVisible: true,
+          priceLineStyle: 2,
+          priceLineColor: tf.color,
+          priceLineWidth: 1,
+          lastValueVisible: true,
+          title: tf.label,
+          crosshairMarkerVisible: false,
+          autoscaleInfoProvider: function(){ return null; },
+        });
+        series.push({tf: tf.id, type: 'dash', s: s});
       });
     }
     ind.series = series;
@@ -2413,25 +2451,14 @@ registerIndicator({
           var data = _mapPivotsToChart(agg, pivots, candles);
           entry.s.setData(data);
         } else if(entry.type === 'dash'){
-          // Find latest valid pivot value
+          // Find latest valid pivot value and set single data point
           var lastPivot = NaN;
           for(var k = pivots.length - 1; k >= 0; k--){
             if(!isNaN(pivots[k])){ lastPivot = pivots[k]; break; }
           }
-          if(!isNaN(lastPivot) && _candleSeries){
-            if(entry.priceLine){
-              try{ _candleSeries.removePriceLine(entry.priceLine); }catch(e){}
-            }
-            entry.priceLine = _candleSeries.createPriceLine({
-              price: lastPivot,
-              color: tfCfg.color,
-              lineWidth: 1,
-              lineStyle: 2,
-              axisLabelVisible: true,
-              title: tfCfg.label,
-              axisLabelColor: tfCfg.color,
-              axisLabelTextColor: '#fff',
-            });
+          if(!isNaN(lastPivot) && candles.length > 0){
+            var lastTime = candles[candles.length - 1].time;
+            entry.s.setData([{time: lastTime, value: lastPivot}]);
           }
         }
       });
@@ -2441,10 +2468,8 @@ registerIndicator({
   remove: function(){
     var ind = _indicators['ttmpivot'];
     ind.series.forEach(function(entry){
-      if(entry.type === 'line' && entry.s){
+      if(entry.s){
         try{ _chart.removeSeries(entry.s); }catch(e){}
-      } else if(entry.type === 'dash' && entry.priceLine && _candleSeries){
-        try{ _candleSeries.removePriceLine(entry.priceLine); }catch(e){}
       }
     });
     ind.series = [];
@@ -5941,7 +5966,7 @@ function _stgLoadProfile(){
 </div>
 <!-- Indicator Settings Modal (universal, dynamically populated) -->
 <div class="stg-overlay" id="indStgOverlay" onclick="if(event.target===this)closeIndSettings()">
-  <div class="stg-modal" style="width:360px;">
+  <div class="stg-modal" style="width:260px;">
     <div class="stg-header">
       <h3 id="indStgTitle">Indicator Settings</h3>
       <button class="stg-close" onclick="closeIndSettings()">&times;</button>
