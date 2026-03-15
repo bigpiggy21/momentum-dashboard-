@@ -118,7 +118,7 @@ body{background:#08080e;color:#e0e0e8;font-family:-apple-system,BlinkMacSystemFo
 .stg-footer-spacer{flex:1;}
 
 /* TTM Squeeze sub-pane */
-#ttmContainer{display:none;border-top:1px solid #1e1e2e;z-index:2;flex-shrink:0;position:relative;}
+#ttmContainer{display:none;border-top:1px solid #1e1e2e;z-index:6;position:absolute;bottom:0;left:0;right:0;background:#0e1118;}
 #ttmChartArea{width:100%;height:100%;position:relative;}
 #ttmAccelCanvas{position:absolute;top:0;left:0;pointer-events:none;z-index:5;}
 .ttm-controls{position:absolute;top:3px;left:6px;z-index:10;display:flex;gap:3px;}
@@ -1750,40 +1750,22 @@ function _computeTTM(candles){
 }
 
 // --- TTM pane layout management ---
-function _ttmResizeSync(){
-  var container = document.getElementById('chartContainer');
-  // Save visible range before resize so the view doesn't jump
-  var savedRange = null;
-  try { savedRange = _chart.timeScale().getVisibleLogicalRange(); } catch(e){}
-  // Resize chart + canvas
-  _chart.resize(container.clientWidth, container.clientHeight);
-  // Restore the exact same view — prevents price from shifting
-  if(savedRange) try { _chart.timeScale().setVisibleLogicalRange(savedRange); } catch(e){}
-  resizeCanvas();
-  drawBubbles();
-  if(_ttmChart){
-    var ttmArea = document.getElementById('ttmChartArea');
-    _ttmChart.resize(ttmArea.clientWidth, ttmArea.clientHeight);
-  }
-  // Follow-up redraws to catch async coordinate updates
-  var restoreAndDraw = function(){
-    if(savedRange) try { _chart.timeScale().setVisibleLogicalRange(savedRange); } catch(e){}
-    resizeCanvas(); drawBubbles();
-  };
-  setTimeout(restoreAndDraw, 50);
-  setTimeout(restoreAndDraw, 150);
-}
 function _ttmShowPane(){
   var ttmContainer = document.getElementById('ttmContainer');
+  var chartArea = document.querySelector('.chart-area');
   ttmContainer.style.display = 'block';
-  ttmContainer.style.height = '25%';
-  requestAnimationFrame(_ttmResizeSync);
+  ttmContainer.style.height = Math.round(chartArea.clientHeight * 0.25) + 'px';
+  // Price chart stays full size — just size the TTM chart inside its container
+  requestAnimationFrame(function(){
+    if(_ttmChart){
+      var ttmArea = document.getElementById('ttmChartArea');
+      _ttmChart.resize(ttmArea.clientWidth, ttmArea.clientHeight);
+    }
+  });
 }
 
 function _ttmHidePane(){
-  var ttmContainer = document.getElementById('ttmContainer');
-  ttmContainer.style.display = 'none';
-  requestAnimationFrame(_ttmResizeSync);
+  document.getElementById('ttmContainer').style.display = 'none';
 }
 
 function _ttmCreateChart(){
@@ -2422,7 +2404,12 @@ function initChart(){
     _chart.resize(container.clientWidth, container.clientHeight);
     resizeCanvas();
     drawBubbles();
-    // Resize TTM chart if active
+    // Resize TTM pane + chart if active
+    var ttmC = document.getElementById('ttmContainer');
+    if(ttmC && ttmC.style.display !== 'none'){
+      var chartArea = document.querySelector('.chart-area');
+      ttmC.style.height = Math.round(chartArea.clientHeight * 0.25) + 'px';
+    }
     if(_ttmChart){
       var ttmArea = document.getElementById('ttmChartArea');
       _ttmChart.resize(ttmArea.clientWidth, ttmArea.clientHeight);
