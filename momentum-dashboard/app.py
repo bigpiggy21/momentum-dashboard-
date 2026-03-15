@@ -19,6 +19,9 @@ import sys
 import threading
 import time
 
+# Persistent SQLite connection for minute_cache reads (set in __main__ startup)
+_mc_read_conn = None
+
 # Fix Unicode output on Windows
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -1078,6 +1081,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_groups(query)
         elif path == "/api/watchlists":
             self.serve_watchlists()
+        elif path == "/api/overlays":
+            self.serve_overlays()
         elif path == "/api/searches":
             self.serve_saved_searches()
         elif path == "/api/log-filters":
@@ -1096,6 +1101,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_clusterbombs(query)
         elif path == "/api/sweeps/chart":
             self.serve_sweep_chart(query)
+        elif path == "/api/sweeps/topx":
+            self.serve_sweep_topx(query)
+        elif path == "/api/sweeps/topx-pool":
+            self.serve_sweep_topx_pool(query)
         elif path == "/api/sweeps/tracker":
             self.serve_sweep_tracker(query)
         elif path == "/api/sweeps/detection-config":
@@ -1124,6 +1133,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.serve_chart_live_bar(query)
         elif path == "/api/chart/live-prices":
             self.serve_chart_live_prices(query)
+        elif path == "/api/chart/batch-prices":
+            self.serve_chart_batch_prices(query)
         elif path == "/api/chart/bb-signals":
             self.serve_bb_signals(query)
         elif path == "/api/chart/sweeps" or path == "/api/0dte/sweeps":
@@ -1188,6 +1199,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.save_watchlists()
         elif path == "/api/watchlists/refresh":
             self.refresh_watchlists()
+        elif path == "/api/overlays/save":
+            self.save_overlays()
         elif path == "/api/search":
             self.serve_search()
         elif path == "/api/searches/save":
@@ -3644,6 +3657,58 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_json({"events": [], "count": 0, "error": str(e)})
 
+    def serve_sweep_topx(self, query=None):
+        """GET /api/sweeps/topx — top N sweeps by notional for a ticker, all-time.
+        Returns [{date, time, notional, rank}, ...] sorted by notional desc.
+        """
+        try:
+            query = query or {}
+            ticker = query.get("ticker", [None])[0]
+            n = int(query.get("n", ["50"])[0])
+            if not ticker:
+                self.send_json({"sweeps": [], "error": "ticker required"})
+                return
+            n = min(n, 200)  # cap at 200
+            from sweep_engine import _get_db
+            conn = _get_db()
+            rows = conn.execute(
+                "SELECT trade_date, trade_time, notional FROM sweep_trades "
+                "WHERE ticker=? AND is_sweep=1 ORDER BY notional DESC LIMIT ?",
+                (ticker, n)
+            ).fetchall()
+            sweeps = []
+            for rank, row in enumerate(rows, 1):
+                sweeps.append({"date": row[0], "time": row[1], "notional": row[2], "rank": rank})
+            self.send_json({"sweeps": sweeps, "ticker": ticker})
+        except Exception as e:
+            self.send_json({"sweeps": [], "error": str(e)})
+
+    def serve_sweep_topx_pool(self, query=None):
+        """GET /api/sweeps/topx-pool — top N sweeps by notional across multiple tickers."""
+        try:
+            query = query or {}
+            tickers_str = query.get("tickers", [""])[0]
+            n = min(int(query.get("n", ["50"])[0]), 200)
+            tickers = [t.strip() for t in tickers_str.split(",") if t.strip()]
+            if not tickers:
+                self.send_json({"sweeps": [], "error": "tickers required"})
+                return
+            from sweep_engine import _get_db
+            conn = _get_db()
+            placeholders = ",".join(["?"] * len(tickers))
+            rows = conn.execute(
+                f"SELECT ticker, trade_date, trade_time, notional FROM sweep_trades "
+                f"WHERE ticker IN ({placeholders}) AND is_sweep=1 "
+                f"ORDER BY notional DESC LIMIT ?",
+                (*tickers, n)
+            ).fetchall()
+            sweeps = []
+            for rank, row in enumerate(rows, 1):
+                sweeps.append({"ticker": row[0], "date": row[1], "time": row[2], "notional": row[3], "rank": rank})
+            self.send_json({"sweeps": sweeps, "tickers": tickers})
+        except Exception as e:
+            self.send_json({"sweeps": [], "error": str(e)})
+
     def serve_sweep_chart(self, query=None):
         """GET /api/sweeps/chart — sweep markers + clusterbomb highlights for chart overlay.
         Optional: min_total to filter which clusterbombs appear on chart.
@@ -5452,6 +5517,34 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             import traceback; traceback.print_exc()
             self.send_json({"ok": False, "error": str(e)})
     
+    def serve_overlays(self):
+        """GET /api/overlays — return overlay map from overlays.json."""
+        try:
+            fpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "overlays.json")
+            if os.path.exists(fpath):
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            else:
+                data = {}
+            self.send_json(data)
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            self.send_json({})
+
+    def save_overlays(self):
+        """POST /api/overlays/save — write overlay map to overlays.json."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length).decode('utf-8')
+            data = json.loads(body)
+            fpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "overlays.json")
+            with open(fpath, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            self.send_json({"ok": True})
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            self.send_json({"ok": False, "error": str(e)})
+
     def serve_search(self):
         """Handle POST /api/search — multi-criteria screener.
 
@@ -5873,6 +5966,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                                     "source": "cache", "live_bars": 0})
                     return
 
+        # --- Tier 2.5: SQLite minute_cache for 1m/5m ---
+        if not force_api and interval in (1, 5):
+            cached = self._serve_candles_from_minute_cache(ticker, date_str, days, interval)
+            if cached is not None:
+                return
+
         # --- Tier 3: API fallback (1m, 5m, 2D, or cache miss) ---
         self._serve_candles_from_api(ticker, date_str, days, interval)
 
@@ -5935,6 +6034,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 pass  # gap fill is best-effort — stale cache still better than nothing
 
         # Append live daemon bars (for today's intraday updates)
+        # NOTE: daemon daily bars can have bad wicks from WebSocket glitches.
+        # For same-bar merges, only update close+volume (live price) — keep
+        # high/low from cache/API which are authoritative.
         global _live_daemon
         if _live_daemon is not None and cache_tf in ("1D",):
             last_ts = candles[-1]["time"] if candles else 0
@@ -5949,8 +6051,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     })
                 elif lb["t"] == last_ts and candles:
                     last = candles[-1]
-                    last["high"] = max(last["high"], lb["h"])
-                    last["low"] = min(last["low"], lb["l"])
+                    # Only update close + volume from daemon; preserve H/L from cache/API
                     last["close"] = lb["c"]
                     last["volume"] = max(last["volume"], lb.get("v", 0))
 
@@ -6027,6 +6128,142 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             })
         return candles
 
+    @staticmethod
+    def _bg_refresh_minute_cache(ticker, fresh_cutoff_ts, date_str):
+        """Background thread: fetch today's 1-min bars from API and overwrite cache to fix bad wicks."""
+        try:
+            import sqlite3
+            from datetime import datetime
+            # Use today's date for both from/to — we want the full current trading day
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            url = (f"{MASSIVE_BASE_URL}/aggs/ticker/{ticker}/range/1/minute/"
+                   f"{today_str}/{today_str}")
+            headers = {"Authorization": f"Bearer {MASSIVE_API_KEY}"}
+            params = {"adjusted": "true", "sort": "asc", "limit": 5000}
+            resp = requests.get(url, params=params, headers=headers, timeout=10)
+            if resp.status_code != 200:
+                print(f"[CACHE-REFRESH] {ticker}: API returned {resp.status_code}", flush=True)
+                return
+            results = resp.json().get("results", [])
+            if not results:
+                print(f"[CACHE-REFRESH] {ticker}: API returned 0 bars for {today_str}", flush=True)
+                return
+            store_rows = []
+            for r in results:
+                ts = r.get("t", 0) // 1000
+                store_rows.append((ticker, ts, r.get("o", 0), r.get("h", 0),
+                                   r.get("l", 0), r.get("c", 0), r.get("v", 0)))
+            if store_rows:
+                wconn = sqlite3.connect(DB_PATH, timeout=5)
+                wconn.execute("PRAGMA journal_mode=WAL")
+                wconn.executemany(
+                    "INSERT OR REPLACE INTO minute_cache (ticker, ts, o, h, l, c, v) VALUES (?,?,?,?,?,?,?)",
+                    store_rows)
+                wconn.commit()
+                wconn.close()
+                print(f"[CACHE-REFRESH] {ticker}: overwrote {len(store_rows)} bars for {today_str}", flush=True)
+        except Exception as e:
+            print(f"[CACHE-REFRESH] {ticker}: ERROR {e}", flush=True)
+
+    def _serve_candles_from_minute_cache(self, ticker, date_str, days, interval):
+        """Try serving 1m/5m candles from SQLite minute_cache. Returns None on miss."""
+        import time as _t
+        from datetime import datetime, timedelta
+
+        end_date = datetime.strptime(date_str, "%Y-%m-%d")
+        weekend_pad = 2 if days <= 10 else int(days * 0.45)
+        start_date = end_date - timedelta(days=max(0, days - 1) + weekend_pad)
+        start_ts = int(start_date.timestamp())
+        end_ts = int((end_date + timedelta(days=1)).timestamp())
+
+        # Use persistent read connection (global _mc_read_conn)
+        conn = _mc_read_conn
+        if conn is None:
+            return None
+        try:
+            rows = conn.execute(
+                "SELECT ts, o, h, l, c, v FROM minute_cache WHERE ticker=? AND ts>=? AND ts<? ORDER BY ts",
+                (ticker, start_ts, end_ts)
+            ).fetchall()
+        except Exception:
+            return None
+
+        if not rows:
+            return None
+
+        # Minimum coverage check: cache must have a reasonable number of bars
+        min_bars = max(100, days * 200)
+        if len(rows) < min_bars:
+            return None
+
+        # --- Background cache refresh: fire-and-forget API fetch of today's bars to fix bad WebSocket wicks ---
+        # Cached data is served instantly; background thread overwrites today's bars in SQLite.
+        # Next load for this ticker will have clean API data.
+        t = threading.Thread(target=self._bg_refresh_minute_cache,
+                             args=(ticker, 0, date_str), daemon=True)
+        t.start()
+
+        # Aggregate to 5-min if needed — work directly with tuples (skip dict overhead)
+        if interval == 5:
+            agg = []  # list of [t, o, h, l, c, v]
+            cur = None
+            for t, o, h, l, c, v in rows:
+                bucket = (t // 300) * 300
+                if cur is None or cur[0] != bucket:
+                    if cur:
+                        agg.append(cur)
+                    cur = [bucket, o, h, l, c, v or 0]
+                else:
+                    if h > cur[2]: cur[2] = h
+                    if l < cur[3]: cur[3] = l
+                    cur[4] = c
+                    cur[5] += (v or 0)
+            if cur:
+                agg.append(cur)
+            compact = agg
+        else:
+            # Convert tuples to lists, coerce null volume
+            compact = [[t, o, h, l, c, v or 0] for t, o, h, l, c, v in rows]
+
+        # Append live daemon bars on top (as compact arrays)
+        live_appended = 0
+        if _live_daemon is not None:
+            last_hist_ts = compact[-1][0] if compact else 0
+            live_bars = _live_daemon.get_live_bars(ticker, interval)
+            for lb in live_bars:
+                lt = lb["t"]
+                if lt > last_hist_ts:
+                    compact.append([lt, lb["o"], lb["h"], lb["l"], lb["c"], lb.get("v", 0)])
+                    live_appended += 1
+                elif lt == last_hist_ts and compact:
+                    last = compact[-1]
+                    if lb["h"] > last[2]: last[2] = lb["h"]
+                    if lb["l"] < last[3]: last[3] = lb["l"]
+                    last[4] = lb["c"]
+                    last[5] = max(last[5], lb.get("v", 0))
+
+        self.send_json({"candles": compact, "ticker": ticker,
+                        "source": "minute_cache", "format": "compact",
+                        "live_bars": live_appended})
+        return True
+
+    def _store_minute_cache(self, ticker, bars):
+        """Store 1-minute bars into SQLite minute_cache. Idempotent (INSERT OR REPLACE)."""
+        if not bars:
+            return
+        try:
+            import sqlite3
+            conn = sqlite3.connect(DB_PATH, timeout=5)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.executemany(
+                "INSERT OR REPLACE INTO minute_cache (ticker, ts, o, h, l, c, v) VALUES (?,?,?,?,?,?,?)",
+                [(ticker, b["time"], b["open"], b["high"], b["low"], b["close"], b["volume"]) for b in bars]
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"[CACHE] minute_cache store failed for {ticker}: {e}", flush=True)
+
     def _serve_candles_from_api(self, ticker, date_str, days, interval):
         """Original Polygon API path — used for 1m, 5m, 2D, or cache misses."""
         VALID_INTERVALS = {
@@ -6079,6 +6316,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_json({"error": str(e), "candles": []})
             return
+
+        # Store 1-minute bars in SQLite cache (before live bar merge)
+        if interval in (1, 5) and all_bars:
+            # Always store as 1-min bars. For 5-min API fetch, bars are already 5-min
+            # so only cache if interval==1 (raw minute bars).
+            if interval == 1:
+                self._store_minute_cache(ticker, all_bars)
 
         # Append today's live bars from daemon (if available)
         live_appended = 0
@@ -6159,6 +6403,102 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     prices[ticker] = bars[-1]["c"]
 
         self.send_json({"prices": prices})
+
+    def serve_chart_batch_prices(self, query=None):
+        """GET /api/chart/batch-prices?tickers=SPY,QQQ,...
+        Returns {ticker: [price, regClose, prevClose]} for all tickers in one shot.
+        - price: live from daemon (or latest CSV close)
+        - regClose: today's 4pm regular session close (close line + ext-hours % base)
+        - prevClose: yesterday's close (day % change base)
+
+        regClose sourced from minute_cache (last bar at or before 16:00 ET today).
+        prevClose from CSV tail (yesterday's daily bar).
+        """
+        from datetime import datetime, timezone, timedelta
+        import sqlite3 as _sql
+        query = query or {}
+        tickers_str = (query.get("tickers") or [""])[0]
+        tickers = [t.strip().upper() for t in tickers_str.split(",") if t.strip()]
+        if not tickers:
+            self.send_json({"p": {}})
+            return
+
+        # Today in ET
+        _ET = timezone(timedelta(hours=-4))  # EDT
+        now_et = datetime.now(_ET)
+        today_et = now_et.strftime("%Y-%m-%d")
+        # 4pm ET today as unix timestamp
+        close_4pm = now_et.replace(hour=16, minute=0, second=0, microsecond=0)
+        close_4pm_ts = int(close_4pm.timestamp())
+        # Today's market open (4am ET pre-market) as unix ts for range query
+        open_4am = now_et.replace(hour=4, minute=0, second=0, microsecond=0)
+        open_4am_ts = int(open_4am.timestamp())
+
+        # 1. Get live prices from daemon (all at once under one lock)
+        live = {}
+        if _live_daemon is not None:
+            live = _live_daemon.get_live_prices(tickers)
+
+        # 2. Batch query minute_cache for 4pm close (today's regular session close)
+        reg_close_map = {}
+        if _mc_read_conn is not None:
+            try:
+                for ticker in tickers:
+                    row = _mc_read_conn.execute(
+                        "SELECT c FROM minute_cache WHERE ticker=? AND ts>=? AND ts<=? ORDER BY ts DESC LIMIT 1",
+                        (ticker, open_4am_ts, close_4pm_ts)
+                    ).fetchone()
+                    if row:
+                        reg_close_map[ticker] = row[0]
+            except Exception:
+                pass
+
+        # 3. For each ticker, read CSV tail for prevClose (yesterday's close)
+        result = {}
+        for ticker in tickers:
+            safe = ticker.replace(":", "_").replace("/", "_")
+            csv_path = os.path.join("cache", f"{safe}_day.csv")
+            prev_close = None
+            csv_today_close = None
+            try:
+                with open(csv_path, "rb") as f:
+                    f.seek(0, 2)
+                    fsize = f.tell()
+                    f.seek(max(0, fsize - 1024))
+                    tail = f.read().decode("utf-8", errors="replace")
+                    lines = [l for l in tail.strip().split("\n") if l and not l.startswith("timestamp")]
+                    if len(lines) >= 2:
+                        last_date = lines[-1].split(",")[0][:10]
+                        if last_date == today_et:
+                            # CSV has today → yesterday is second-to-last
+                            prev_close = float(lines[-2].split(",")[4])
+                            csv_today_close = float(lines[-1].split(",")[4])
+                        else:
+                            # CSV last bar is yesterday or older
+                            prev_close = float(lines[-2].split(",")[4])
+                            csv_today_close = float(lines[-1].split(",")[4])
+                    elif len(lines) == 1:
+                        prev_close = float(lines[-1].split(",")[4])
+                        csv_today_close = prev_close
+            except Exception:
+                pass
+
+            # regClose: prefer minute_cache 4pm bar, fallback to CSV today's close
+            reg_close = reg_close_map.get(ticker) or csv_today_close
+
+            # Live price from daemon, fallback to regClose
+            lp = live.get(ticker)
+            price = round(lp["price"], 4) if lp else reg_close
+
+            if price is not None:
+                # Compact: [price, regClose, prevClose]
+                result[ticker] = [
+                    price,
+                    round(reg_close, 4) if reg_close else price,
+                    round(prev_close, 4) if prev_close else (reg_close or price),
+                ]
+
+        self.send_json({"p": result})
 
     def serve_bb_signals(self, query=None):
         """GET /api/chart/bb-signals?ticker=SPY — BB deviation signals from CSV cache.
@@ -6593,6 +6933,37 @@ def main():
     except Exception as _e:
         print(f"[SERVER] init_sweep_db() failed (DB likely locked by another process): {_e}", flush=True)
         print("[SERVER] Continuing anyway — tables already exist if backfill is running.", flush=True)
+
+    # Initialize minute bar cache table + persistent read connection
+    global _mc_read_conn
+    try:
+        import sqlite3
+        _mc_init = sqlite3.connect(DB_PATH, timeout=5)
+        _mc_init.execute("PRAGMA journal_mode=WAL")
+        _mc_init.execute("""
+            CREATE TABLE IF NOT EXISTS minute_cache (
+                ticker TEXT NOT NULL,
+                ts INTEGER NOT NULL,
+                o REAL, h REAL, l REAL, c REAL,
+                v INTEGER,
+                PRIMARY KEY (ticker, ts)
+            ) WITHOUT ROWID
+        """)
+        # Trim bars older than 15 days on startup
+        import time as _time_mod
+        _cutoff = int(_time_mod.time()) - 15 * 86400
+        _deleted = _mc_init.execute("DELETE FROM minute_cache WHERE ts < ?", (_cutoff,)).rowcount
+        _mc_init.commit()
+        if _deleted:
+            print(f"[SERVER] minute_cache: trimmed {_deleted} bars older than 15 days", flush=True)
+        _mc_init.close()
+        # Create persistent read connection (check_same_thread=False for HTTP handler threads)
+        _mc_read_conn = sqlite3.connect(DB_PATH, timeout=5, check_same_thread=False)
+        _mc_read_conn.execute("PRAGMA journal_mode=WAL")
+        _mc_read_conn.execute("PRAGMA query_only=ON")
+        print("[SERVER] minute_cache: persistent read connection ready", flush=True)
+    except Exception as _e:
+        print(f"[SERVER] minute_cache init failed: {_e}", flush=True)
 
     # Refresh ETF ticker cache (skips if < 7 days old)
     # Note: purge_etf_events() removed — ETF events now shown on ETF sweeps page
