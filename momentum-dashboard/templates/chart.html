@@ -2011,6 +2011,310 @@ registerIndicator({
 });
 
 // ====================================================================
+// TTM PIVOTS — Multi-timeframe momentum zero-cross pivot lines
+// ====================================================================
+var _PIVOT_TFS = [
+  {id:'1H', label:'1H', color:'#00bcd4', on:true,  base:'hour', mult:1  },
+  {id:'4H', label:'4H', color:'#2962ff', on:true,  base:'hour', mult:4  },
+  {id:'8H', label:'8H', color:'#9c27b0', on:false, base:'hour', mult:8  },
+  {id:'D',  label:'D',  color:'#e6c619', on:true,  base:'day',  mult:1  },
+  {id:'2D', label:'2D', color:'#ff9800', on:false, base:'day',  mult:2  },
+  {id:'3D', label:'3D', color:'#8bc34a', on:false, base:'day',  mult:3  },
+  {id:'5D', label:'5D', color:'#800000', on:false, base:'day',  mult:5  },
+  {id:'W',  label:'W',  color:'#e040fb', on:true,  base:'day',  mult:'W' },
+  {id:'M',  label:'M',  color:'#ef5350', on:true,  base:'day',  mult:'M' },
+  {id:'6W', label:'6W', color:'#009688', on:false, base:'day',  mult:'6W'},
+  {id:'3M', label:'3M', color:'#ffffff', on:false, base:'day',  mult:'3M'},
+];
+var _pivotHourlyCache = null;
+var _pivotHourlyTicker = null;
+var _pivotDailyCache = null;
+var _pivotDailyTicker = null;
+
+function _fetchPivotBars(callback){
+  var ticker = _activeTicker;
+  var date = getDate();
+  var needHourly = _PIVOT_TFS.some(function(tf){ return tf.on && tf.base === 'hour'; });
+  var needDaily  = _PIVOT_TFS.some(function(tf){ return tf.on && tf.base === 'day'; });
+  var pending = 0;
+  var hourlyBars = null, dailyBars = null;
+
+  function checkDone(){
+    if(--pending <= 0) callback(hourlyBars || [], dailyBars || []);
+  }
+
+  // Hourly bars
+  if(needHourly){
+    if(_pivotHourlyTicker === ticker && _pivotHourlyCache){
+      hourlyBars = _pivotHourlyCache;
+    } else {
+      pending++;
+      var hDays = Math.max(getDays(), 500) + 100;
+      fetch('/api/chart/candles?ticker='+ticker+'&date='+date+'&days='+hDays+'&interval=60')
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          var raw = d.candles || [];
+          hourlyBars = d.format === 'compact'
+            ? raw.map(function(a){ return {time:a[0],open:a[1],high:a[2],low:a[3],close:a[4]}; })
+            : raw.map(function(b){ return {time:b.time,open:b.open,high:b.high,low:b.low,close:b.close}; });
+          hourlyBars.sort(function(a,b){ return a.time - b.time; });
+          _pivotHourlyCache = hourlyBars;
+          _pivotHourlyTicker = ticker;
+          checkDone();
+        })
+        .catch(function(e){ console.error('Pivot hourly fetch error:', e); hourlyBars = []; checkDone(); });
+    }
+  }
+
+  // Daily bars — reuse loaded candles if chart is on daily interval
+  if(needDaily){
+    if(_pivotDailyTicker === ticker && _pivotDailyCache){
+      dailyBars = _pivotDailyCache;
+    } else if(_candleInterval === 1440 && _candles && _candles.length > 0){
+      dailyBars = _candles.map(function(c){ return {time:c.time,open:c.open,high:c.high,low:c.low,close:c.close}; });
+      _pivotDailyCache = dailyBars;
+      _pivotDailyTicker = ticker;
+    } else {
+      pending++;
+      var dDays = Math.max(getDays(), 730) + 300;
+      fetch('/api/chart/candles?ticker='+ticker+'&date='+date+'&days='+dDays+'&interval=1440')
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          var raw = d.candles || [];
+          dailyBars = d.format === 'compact'
+            ? raw.map(function(a){ return {time:a[0],open:a[1],high:a[2],low:a[3],close:a[4]}; })
+            : raw.map(function(b){ return {time:b.time,open:b.open,high:b.high,low:b.low,close:b.close}; });
+          dailyBars.sort(function(a,b){ return a.time - b.time; });
+          _pivotDailyCache = dailyBars;
+          _pivotDailyTicker = ticker;
+          checkDone();
+        })
+        .catch(function(e){ console.error('Pivot daily fetch error:', e); dailyBars = []; checkDone(); });
+    }
+  }
+
+  // If everything was cached, call immediately
+  if(pending === 0) callback(hourlyBars || [], dailyBars || []);
+}
+
+function _aggregateToTF(bars, mult){
+  if(!bars || bars.length === 0) return [];
+  // Numeric N-bar grouping (2,3,4,5,8)
+  if(typeof mult === 'number'){
+    var out = [];
+    for(var i = 0; i < bars.length; i += mult){
+      var end = Math.min(i + mult, bars.length);
+      var o = bars[i].open, h = bars[i].high, l = bars[i].low, c = bars[end-1].close;
+      for(var j = i+1; j < end; j++){
+        if(bars[j].high > h) h = bars[j].high;
+        if(bars[j].low < l) l = bars[j].low;
+      }
+      out.push({time: bars[end-1].time, open:o, high:h, low:l, close:c});
+    }
+    return out;
+  }
+  // Calendar-based grouping
+  var groups = [], curGroup = null;
+  for(var i = 0; i < bars.length; i++){
+    var d = new Date(bars[i].time * 1000);
+    var key;
+    if(mult === 'W'){
+      // ISO week: year + week number
+      var thu = new Date(d); thu.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+      var yearStart = new Date(thu.getFullYear(), 0, 1);
+      var wn = Math.ceil((((thu - yearStart) / 86400000) + 1) / 7);
+      key = thu.getFullYear() + '-W' + wn;
+    } else if(mult === 'M'){
+      key = d.getFullYear() + '-' + d.getMonth();
+    } else if(mult === '6W'){
+      // 6-week periods anchored to epoch
+      var epochWeek = Math.floor(bars[i].time / (7 * 86400));
+      key = Math.floor(epochWeek / 6);
+    } else if(mult === '3M'){
+      key = d.getFullYear() + '-Q' + Math.floor(d.getMonth() / 3);
+    }
+    if(!curGroup || curGroup.key !== key){
+      if(curGroup) groups.push(curGroup);
+      curGroup = {key: key, open: bars[i].open, high: bars[i].high, low: bars[i].low, close: bars[i].close, time: bars[i].time};
+    } else {
+      if(bars[i].high > curGroup.high) curGroup.high = bars[i].high;
+      if(bars[i].low < curGroup.low) curGroup.low = bars[i].low;
+      curGroup.close = bars[i].close;
+      curGroup.time = bars[i].time; // last bar's time
+    }
+  }
+  if(curGroup) groups.push(curGroup);
+  return groups.map(function(g){ return {time:g.time, open:g.open, high:g.high, low:g.low, close:g.close}; });
+}
+
+function _computeTTMPivots(aggBars, length, searchMult, searchIter){
+  var n = aggBars.length;
+  var pivots = new Array(n);
+  for(var i = 0; i < n; i++) pivots[i] = NaN;
+  if(n < length) return pivots;
+
+  // Pre-extract OHLC arrays
+  var closes = new Array(n), highs = new Array(n), lows = new Array(n);
+  for(var i = 0; i < n; i++){
+    closes[i] = aggBars[i].close;
+    highs[i] = aggBars[i].high;
+    lows[i] = aggBars[i].low;
+  }
+
+  // Compute TTM source and momentum for the full series
+  var hh = _ttm_highest(highs, length);
+  var ll = _ttm_lowest(lows, length);
+  var smaC = _ttm_sma(closes, length);
+  var sources = new Array(n);
+  for(var i = 0; i < n; i++){
+    if(isNaN(hh[i]) || isNaN(ll[i]) || isNaN(smaC[i])){ sources[i] = NaN; continue; }
+    sources[i] = closes[i] - (((hh[i] + ll[i]) / 2) + smaC[i]) / 2;
+  }
+  var mom = _ttm_linreg(sources, length, 0);
+
+  // For each bar with a valid previous momentum, binary search for pivot
+  for(var i = length; i < n; i++){
+    var prevMom = mom[i-1];
+    if(isNaN(prevMom)) continue;
+
+    var currClose = closes[i];
+    var lo = currClose * (1 - searchMult);
+    var hi = currClose * (1 + searchMult);
+
+    // Build rolling window arrays for the hypothetical computation
+    // Window = bars [i-length+1 .. i]
+    var wStart = i - length + 1;
+    var wCloses = new Array(length), wHighs = new Array(length), wLows = new Array(length), wSources = new Array(length);
+    for(var k = 0; k < length; k++){
+      wCloses[k] = closes[wStart + k];
+      wHighs[k] = highs[wStart + k];
+      wLows[k] = lows[wStart + k];
+      wSources[k] = sources[wStart + k];
+    }
+
+    for(var j = 0; j < searchIter; j++){
+      var md = (lo + hi) / 2;
+      // Hypothetical: replace last close with md, adjust high/low
+      var hClose = md;
+      var hHigh = Math.max(wHighs[length-1], md);
+      var hLow = Math.min(wLows[length-1], md);
+
+      // Recompute SMA with hypothetical close
+      var sumC = 0;
+      for(var k = 0; k < length-1; k++) sumC += wCloses[k];
+      sumC += hClose;
+      var hSma = sumC / length;
+
+      // Recompute highest/lowest with hypothetical
+      var hHH = -Infinity, hLL = Infinity;
+      for(var k = 0; k < length-1; k++){
+        if(wHighs[k] > hHH) hHH = wHighs[k];
+        if(wLows[k] < hLL) hLL = wLows[k];
+      }
+      if(hHigh > hHH) hHH = hHigh;
+      if(hLow < hLL) hLL = hLow;
+
+      // Hypothetical source for last bar
+      var hMidline = ((hHH + hLL) / 2 + hSma) / 2;
+      var hSource = hClose - hMidline;
+
+      // Linreg endpoint on modified source array
+      var sumX = 0, sumXX = 0, sumY = 0, sumXY = 0;
+      for(var k = 0; k < length-1; k++){
+        sumX += k; sumXX += k*k;
+        sumY += wSources[k]; sumXY += k * wSources[k];
+      }
+      var lastK = length - 1;
+      sumX += lastK; sumXX += lastK * lastK;
+      sumY += hSource; sumXY += lastK * hSource;
+      var denom = length * sumXX - sumX * sumX;
+      if(denom === 0) break;
+      var slope = (length * sumXY - sumX * sumY) / denom;
+      var intercept = (sumY - slope * sumX) / length;
+      var hypoMom = intercept + slope * (length - 1);
+
+      if(hypoMom > prevMom) hi = md;
+      else lo = md;
+    }
+    pivots[i] = (lo + hi) / 2;
+  }
+  return pivots;
+}
+
+function _mapPivotsToChart(aggBars, pivotValues, chartCandles){
+  if(!aggBars || aggBars.length === 0 || !chartCandles || chartCandles.length === 0) return [];
+  // Build sorted time→value map from aggregated bars
+  var aggTimes = [];
+  var aggMap = {};
+  for(var i = 0; i < aggBars.length; i++){
+    if(isNaN(pivotValues[i])) continue;
+    aggTimes.push(aggBars[i].time);
+    aggMap[aggBars[i].time] = pivotValues[i];
+  }
+  if(aggTimes.length === 0) return [];
+  aggTimes.sort(function(a,b){ return a - b; });
+
+  var data = [];
+  var aIdx = 0, lastVal = null;
+  for(var i = 0; i < chartCandles.length; i++){
+    var ct = chartCandles[i].time;
+    while(aIdx < aggTimes.length - 1 && aggTimes[aIdx + 1] <= ct) aIdx++;
+    if(aggTimes[aIdx] <= ct) lastVal = aggMap[aggTimes[aIdx]];
+    if(lastVal != null) data.push({time: ct, value: lastVal});
+  }
+  return data;
+}
+
+registerIndicator({
+  id: 'ttmpivot',
+  name: 'TTM Pivots',
+  color: '#e040fb',
+  hotkey: 'p',
+  createSeries: function(chart){
+    var ind = _indicators['ttmpivot'];
+    var series = [];
+    _PIVOT_TFS.forEach(function(tf){
+      if(!tf.on) return;
+      var s = chart.addLineSeries({
+        color: tf.color, lineWidth: 2, lineStyle: 0,
+        priceLineVisible: false, lastValueVisible: false,
+        crosshairMarkerVisible: false,
+        autoscaleInfoProvider: function(){ return null; },
+      });
+      series.push({tf: tf.id, s: s});
+    });
+    ind.series = series;
+  },
+  compute: function(candles, ind){
+    if(!candles || candles.length === 0) return;
+    _fetchPivotBars(function(hourlyBars, dailyBars){
+      var t0 = performance.now();
+      ind.series.forEach(function(entry){
+        var tfCfg = null;
+        for(var i = 0; i < _PIVOT_TFS.length; i++){ if(_PIVOT_TFS[i].id === entry.tf){ tfCfg = _PIVOT_TFS[i]; break; } }
+        if(!tfCfg) return;
+        var baseBars = tfCfg.base === 'hour' ? hourlyBars : dailyBars;
+        if(!baseBars || baseBars.length === 0) return;
+        var agg = (typeof tfCfg.mult === 'number' && tfCfg.mult === 1) ? baseBars : _aggregateToTF(baseBars, tfCfg.mult);
+        var pivots = _computeTTMPivots(agg, 20, 1.0, 60);
+        var data = _mapPivotsToChart(agg, pivots, candles);
+        entry.s.setData(data);
+      });
+      console.log('TTM Pivots computed in ' + Math.round(performance.now() - t0) + 'ms');
+    });
+  },
+  remove: function(){
+    var ind = _indicators['ttmpivot'];
+    ind.series.forEach(function(entry){ _chart.removeSeries(entry.s); });
+    ind.series = [];
+    _pivotHourlyCache = null;
+    _pivotHourlyTicker = null;
+    _pivotDailyCache = null;
+    _pivotDailyTicker = null;
+  }
+});
+
+// ====================================================================
 // CHART SETTINGS — managed by settings modal (see bottom of file)
 // _COLOR_SCHEMES kept here for preset palette reference
 // ====================================================================
@@ -3258,6 +3562,8 @@ function loadAll(resetView){
   _topxPerTicker = {}; _topxPool = null; _topxPoolKey = null;
   // Clear MA daily cache on ticker change
   if(_maDailyTicker !== _activeTicker){ _maDailyCache = null; _maDailyTicker = null; }
+  if(_pivotHourlyTicker !== _activeTicker){ _pivotHourlyCache = null; _pivotHourlyTicker = null; }
+  if(_pivotDailyTicker !== _activeTicker){ _pivotDailyCache = null; _pivotDailyTicker = null; }
   if(resetView) _initialLoad = true;
   fetchCandles();
   // Only fetch sweep data if any sweep layer is toggled on
