@@ -1755,8 +1755,8 @@ function _ttmShowPane(){
   var ttmContainer = document.getElementById('ttmContainer');
   ttmContainer.style.display = 'block';
   ttmContainer.style.height = '25%';
-  // Let flex layout settle, then resize main chart to its new size
-  requestAnimationFrame(function(){
+  // Double rAF: first frame triggers layout recalc, second frame reads final sizes
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){
     _chart.resize(container.clientWidth, container.clientHeight);
     resizeCanvas();
     drawBubbles();
@@ -1764,19 +1764,19 @@ function _ttmShowPane(){
       var ttmArea = document.getElementById('ttmChartArea');
       _ttmChart.resize(ttmArea.clientWidth, ttmArea.clientHeight);
     }
-  });
+  }); });
 }
 
 function _ttmHidePane(){
   var container = document.getElementById('chartContainer');
   var ttmContainer = document.getElementById('ttmContainer');
   ttmContainer.style.display = 'none';
-  // Let flex layout settle, then resize main chart back
-  requestAnimationFrame(function(){
+  // Double rAF: first frame triggers layout recalc, second frame reads final sizes
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){
     _chart.resize(container.clientWidth, container.clientHeight);
     resizeCanvas();
     drawBubbles();
-  });
+  }); });
 }
 
 function _ttmCreateChart(){
